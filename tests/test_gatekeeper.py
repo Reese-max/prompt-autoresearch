@@ -74,6 +74,26 @@ SEMANTIC_EQUIVALENT_CASES = (
 )
 
 
+def test_semantic_check_hits_equivalent_expression(gatekeeper_module):
+    # 命中同義語意詞時，應回傳 True（降級前提成立）。
+    assert gatekeeper_module._semantic_check(
+        "R04_NO_ANTI_FABRICATION",
+        "禁止出現捏造，請嚴禁捏造與憑空推測。",
+    ) is True
+
+
+def test_semantic_check_fails_without_equivalent_or_context_mismatch(gatekeeper_module):
+    # 未命中關鍵詞，或命中的是其他規則語意，皆應回傳 False（不降級）。
+    assert gatekeeper_module._semantic_check(
+        "R04_NO_ANTI_FABRICATION",
+        "你是專家，請先建立比較基準。",
+    ) is False
+    assert gatekeeper_module._semantic_check(
+        "R05_NO_EXPERT_ROLE",
+        "答案不得捏造與杜絕捏造，否則將影響題目品質。",
+    ) is False
+
+
 @pytest.fixture
 def gatekeeper_module(monkeypatch, tmp_path: Path):
     """以隔離的臨時目錄載入 scripts.gatekeeper，避免 import 時的 os.chdir 汙染。"""
