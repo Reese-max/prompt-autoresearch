@@ -170,3 +170,44 @@ def test_call_minimax_exception_is_propagated(_mock_api_runtime, mock_urlopen):
 
     assert mock_urlopen.call_count == 1
     assert mock_urlopen.call_args.args[0].full_url == "https://api.example.local/v1/chat"
+
+
+def test_call_minimax_retry_gt_1_once_then_success(_mock_api_runtime, mock_urlopen, monkeypatch):
+    def fake_get(section, key=None, default=None):
+        defaults = {
+            "url": "https://api.example.local/v1/chat",
+            "model": "MiniMax-M2.7",
+            "timeout": 1,
+            "retry": 2,
+            "rate_limit": {
+                "max_concurrent": 1,
+                "min_interval_ms": 0,
+            },
+        }
+        if section != "api":
+            return default
+        if key is None:
+            return defaults
+        return defaults.get(key, default)
+
+    monkeypatch.setattr(api, "get", fake_get)
+    assert fake_get("api", "retry") > 1
+
+    mock_urlopen.side_effect = [
+        RuntimeError("temporary failure"),
+        FakeHTTPResponse(
+            json.dumps(
+                {
+                    "choices": [
+                        {"message": {"content": "  最終回應  "}},
+                    ]
+                },
+                ensure_ascii=False,
+            ).encode("utf-8")
+        ),
+    ]
+
+    ans = api.call_minimax("system", "user")
+
+    assert ans == "最終回應"
+    assert mock_urlopen.call_count == 2
