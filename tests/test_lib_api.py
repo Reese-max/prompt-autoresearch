@@ -162,6 +162,18 @@ def test_call_minimax_invalid_json_raises(_mock_api_runtime, mock_urlopen):
     assert mock_urlopen.call_args.args[0].full_url == "https://api.example.local/v1/chat"
 
 
+def test_call_minimax_missing_choices_field_raises_key_error(_mock_api_runtime, mock_urlopen):
+    mock_urlopen.return_value = FakeHTTPResponse(
+        json.dumps({"result": "ok"}, ensure_ascii=False).encode("utf-8")
+    )
+
+    with pytest.raises(KeyError):
+        api.call_minimax("system", "user")
+
+    assert mock_urlopen.call_count == 1
+    assert mock_urlopen.call_args.args[0].full_url == "https://api.example.local/v1/chat"
+
+
 def test_call_minimax_exception_is_propagated(_mock_api_runtime, mock_urlopen):
     mock_urlopen.side_effect = RuntimeError("boom")
 
