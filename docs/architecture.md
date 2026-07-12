@@ -1,5 +1,8 @@
 # Prompt AutoResearch v3 架構總覽
 
+> 建議先閱讀 [架構總覽（新進版）](./architecture-overview.md)，再回來接上完整模組與資料流細節。  
+> 如需文件入口總覽，請先看 [docs 文件索引](./README.md)。
+
 ## 目標
 
 Prompt AutoResearch 是一個本機優先的提示詞演化實驗室，用來優化 `prompts/current.md` 的臺灣國考申論題提示詞。系統的正確性來自固定題庫、固定 rubric、固定評估腳本與可回溯的 `runs/*/decision.md`，而不是修改評分器或題庫來換分數。

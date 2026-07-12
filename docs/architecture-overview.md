@@ -1,5 +1,8 @@
 # 專案架構總覽（新進開發者版）
 
+> 新進先看這篇；若要接著看完整 v3 架構與 API 詳細對位，請接著閱讀 [architecture.md](./architecture.md)。  
+> 也可先回到 [docs 文件索引](./README.md) 了解全部文件入口。
+
 ## 一句話版
 
 Prompt AutoResearch（本 repo）是一個本機優先的提示詞演化引擎：
