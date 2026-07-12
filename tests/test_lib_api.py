@@ -75,7 +75,8 @@ def test_call_minimax_success_parses_and_returns_trimmed_content(
     ans = api.call_minimax("system prompt", "user prompt")
 
     assert ans == "這是一段回應"
-    mock_urlopen.assert_called_once()
+    assert mock_urlopen.call_count == 1
+    assert mock_urlopen.call_args.args[0].full_url == "https://api.example.local/v1/chat"
 
 
 def test_call_minimax_non_200_raises_http_error(_mock_api_runtime, mock_urlopen):
@@ -90,7 +91,8 @@ def test_call_minimax_non_200_raises_http_error(_mock_api_runtime, mock_urlopen)
     with pytest.raises(HTTPError):
         api.call_minimax("system", "user")
 
-    mock_urlopen.assert_called_once()
+    assert mock_urlopen.call_count == 1
+    assert mock_urlopen.call_args.args[0].full_url == "https://api.example.local/v1/chat"
 
 
 def test_call_minimax_timeout_raises(_mock_api_runtime, mock_urlopen):
@@ -99,7 +101,8 @@ def test_call_minimax_timeout_raises(_mock_api_runtime, mock_urlopen):
     with pytest.raises(socket.timeout):
         api.call_minimax("system", "user")
 
-    mock_urlopen.assert_called_once()
+    assert mock_urlopen.call_count == 1
+    assert mock_urlopen.call_args.args[0].full_url == "https://api.example.local/v1/chat"
 
 
 def test_call_minimax_invalid_json_raises(_mock_api_runtime, mock_urlopen):
@@ -108,7 +111,8 @@ def test_call_minimax_invalid_json_raises(_mock_api_runtime, mock_urlopen):
     with pytest.raises(json.JSONDecodeError):
         api.call_minimax("system", "user")
 
-    mock_urlopen.assert_called_once()
+    assert mock_urlopen.call_count == 1
+    assert mock_urlopen.call_args.args[0].full_url == "https://api.example.local/v1/chat"
 
 
 def test_call_minimax_exception_is_propagated(_mock_api_runtime, mock_urlopen):
@@ -117,4 +121,5 @@ def test_call_minimax_exception_is_propagated(_mock_api_runtime, mock_urlopen):
     with pytest.raises(RuntimeError, match="boom"):
         api.call_minimax("system", "user")
 
-    mock_urlopen.assert_called_once()
+    assert mock_urlopen.call_count == 1
+    assert mock_urlopen.call_args.args[0].full_url == "https://api.example.local/v1/chat"
