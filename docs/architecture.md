@@ -102,34 +102,79 @@ v3 前端分頁順序：
 
 演化 agent 原則上只應修改 `prompts/current.md`，或產生 `prompts/candidates/*` 作為候選。前端/API 維護可以修改 `index.html`、`app.js`、`styles.css`、`run_app.py` 與測試，但不得把 evaluator、題庫或 rubric 改成配合候選提示詞。
 
-## docs 文件缺口盤點（依目前 scan）
+## api / lib / scripts 責任邊界與資料流
 
-目前 `docs/` 內可用文件僅有：
+這一段補足三個模組的「輸入→處理→輸出」與跨模組接點，避免把運行邏輯與對外服務邊界混淆。
 
-- `architecture.md`（本文件）
-- `codex-round-1.md`～`codex-round-5.md`（僅為回合標題，無架構職責內容）
+### 一、`api/`：跨系統介面與回饋回路
 
-### 已確認的缺口
+| 檔案 | 輸入（Input） | 處理 | 輸出（Output） |
+|---|---|---|---|
+| `api/server.py` | `prompts/current.md`、`prompts/baseline.md`、`prompts/baseline.meta.json`、`prompts/champions/*.md`、`prompts/routes/type_champions.json`、`feedback.jsonl`、`optimization_log.jsonl`、`runs/latest/*` | 依照路由做只讀查詢或 `POST /api/feedback` 寫入；每個路由將欄位轉為可供外部消費的 JSON 結構 | 對外 REST 回應：prompt hash/長度、`route`、champion 清單、feedback 摘要、health、回饋建立結果；不直接觸發 `run_opt.py` |
+| `api/feedback.py` | `feedback.jsonl`、`prompts/baseline.meta.json` | 依 `prompt_hash` 匯總 `scores`，計算平均分、弱點維度、弱點題型，輸出優化建議草案 | `summary`、`weak_areas`、`hints` 三類結果供 `api/server.py` 的 GET 回應使用 |
+| `api/continuous_optimizer.py` | `feedback.jsonl`、lib 共用函式、外部可用 CLI（`run_opt.py`） | 檢查回饋數量門檻；可選擇只分析不優化；有建議時組裝參數後啟動 `run_opt.py` | `optimization_log.jsonl` 中寫入 `analysis`/`optimization`/`optimization_error`，並在命令列輸出輪次結果 |
 
-1. **`api/` 套件責任未文件化**
-   - `api/server.py`（外部 REST API）與 `run_app.py`（本機 UI 服務）的責任邊界未在文件中明確區隔。
-   - `api/feedback.py` 的回饋分析流程（`feedback.jsonl` → summary/weak-areas/hints）未有獨立頁面。
-   - `api/continuous_optimizer.py` 的連續優化迴圈啟發條件、日誌與錯誤模式未被覆蓋。
+### 二、`lib/`：共用核心工具（所有主流程共同依賴）
 
-2. **`lib/` 套件職責未細拆**
-   - `lib/api.py` 的重試、逾時、速率限制行為目前只在腳本層面零散可見。
-   - `lib/config.py` 的預設值與環境變數覆蓋規則沒有文件。
-   - `lib/io.py` / `lib/metrics.py` 的輸入輸出格式、欄位意義、錯誤回退機制無單頁說明。
+| 檔案 | 輸入（Input） | 處理 | 輸出（Output） | 注意事項 |
+|---|---|---|---|---|
+| `lib/config.py` | `config.json`、環境變數（`AUTORESEARCH_*`） | 先載入預設值、再覆寫 config.json、最後套用 env 轉型規則 | 統一的設定字典；`get()` / `get_section()` / `get_all()` | 不要直接改 `config.json` 作為 run 時策略，除非你要改治理邊界 |
+| `lib/api.py` | system prompt、user prompt、`lib.config` 內的 `api.*` 參數、`MINIMAX_API_KEY` | 建立 HTTP 請求；依序受限流（semaphore）與最小間隔，最多重試 `retry` 次，超時 `timeout` 後回傳錯誤 | LLM 回應文字；上層可直接當作答案或 rubric 驗證輸入 | 失敗會直接拋例外由上層處理，適合放在 `run_opt.py` / `scripts/evaluate.py` 的 call site |
+| `lib/io.py` | 路徑、JSON/JSONL payload、字串內容 | 提供 `load_file`、`load_json`、`read_jsonl`、`write_file`、`write_json`、`append_jsonl`、`normalize_path` | 統一檔案 I/O 行為，包含不存在時預設值與目錄自動建立 | 這是**所有模組共用**的基礎 I/O 抽象，不保證 schema 驗證 |
+| `lib/metrics.py` | 事件欄位（round / event / error / score...） | 將事件拼成結構化 dict 並追加到 `metrics.jsonl` | `metrics.jsonl` 的時間戳事件列：`record_round`、`record_event` | `run_opt.py` 是主要寫入者 |
 
-3. **`scripts/` 只列舉部分腳本，缺少全域職責圖**
-   - 除 `gatekeeper.py`、`evaluate.py`、`evaluate_routed.py` 以外，`analyze_runs.py`、`leaderboard.py`、`compare_runs.py`、`experiment_report.py`、`preflight.py`、`generate_questions.py`、`backfill_candidate_scorecards.py` 等未被逐一描述。
-   - 缺少「輸入／輸出檔名」、「關鍵參數」與「誰在什麼流程呼叫」的對照表。
+### 三、`scripts/`：固定評估與治理腳本（不改核心評分器）
 
-### 建議新增／補強頁面
+#### 核心 Pipeline 腳本
 
-| 類別 | 建議動作 | 優先順序 |
-|---|---|---|
-| `api/` | 新增 `docs/api.md`，補齊外部 API 與回饋分析責任、錯誤回傳、資料檔位。 | 高 |
-| `lib/` | 新增 `docs/lib.md`，補齊設定載入鏈、`lib/api.py` 呼叫規範、`lib/metrics.py` 事件欄位。 | 高 |
-| `scripts/` | 新增 `docs/scripts.md`，補齊腳本責任、輸入輸出與 CLI 參數對照。 | 高 |
-| `architecture.md` | 補上 `api/`、`lib/`、`scripts/` 的責任邊界與相依關係區塊（`run_app` vs `api/server`）。 | 中 |
+| 檔案 | 輸入（Input） | 處理 | 輸出（Output） |
+|---|---|---|---|
+| `scripts/gatekeeper.py` | `prompts/*.md`（主要為 `current.md`） | 執行硬規則與語意驗證，回傳 pass/fail 與 violations | 退出碼（0/1）與可選 JSON 片段 |
+| `scripts/evaluate.py` | `prompt_file`、`question_file`、`rubrics/*`、cache、`parallel` 參數 | 並行呼叫 LLM 審題、彙總題目分數/缺陷，建立 `summary` 統計 | `runs/<timestamp>/details.jsonl`、`runs/<timestamp>/summary.json`、`runs/<timestamp>/summary.md`，並同步複製到 `runs/latest/` |
+| `scripts/evaluate_routed.py` | `route.json`、題庫、rubrics、`evaluate` 模組 | 按題型選擇 prompt，逐題評分 | 路由專用的 `details/summary`（走 `evaluate` 的輸出格式）與路由使用率報告 |
+| `scripts/compare_runs.py` | 新 run 的 `details.jsonl`、基準 run 的 `details.jsonl`、`lib.config` 門檻 | 逐維度比較分數、缺陷與風險，回填接受條件 | CLI 報表列印 + 回傳 `passed/avg_new/score_diff` |
+
+#### 輔助治理/回溯腳本
+
+| 檔案 | 輸入（Input） | 處理 | 輸出（Output） |
+|---|---|---|---|
+| `scripts/preflight.py` | env、題庫、`prompts/baseline.md`、`prompts/current.md`、`prompts/baseline.meta.json` | 執行啟動前健康檢查，區分 `error/warn` | JSON 結果（或 CLI 文字）供 CI/手動判斷是否可跑 |
+| `scripts/analyze_runs.py` | `runs/*/summary.json`、`runs/*/details.jsonl` | 依時間窗彙整失敗碼與題型均分趨勢 | 控制台報告/JSON |
+| `scripts/leaderboard.py` | `runs/*/summary.json` | 根據 dev 資料整理分數/風險排行榜 | `limit` 限定的排行榜輸出 |
+| `scripts/experiment_report.py` | `runs/*`、`prompts/baseline.meta.json`、`decision.md` | 匯總決策歷史、失敗碼熱點、題型弱勢 | Markdown 報告 `output/experiment_report.md`（預設列印） |
+| `scripts/backfill_candidate_scorecards.py` | `prompts/candidates/*.md` 與 `.meta.*` | 補齊候選 scorecard JSON | `*.scorecard.json`（預設新建、`--force` 可覆蓋） |
+| `scripts/generate_questions.py` | 內建模板與題目 schema | 生成 `questions/*.jsonl`（包含 dev/holdout/final） | 啟動題庫檔 |
+
+### 四、跨模組資料流（端到端）
+
+```text
+prompts / questions / rubrics / config.json
+   |
+   ├─ run_opt.py / auto_evolve.py / route_loop.py
+   │      ├─ lib.config 取得閾值與並行設定
+   │      ├─ lib.api 呼叫 LLM 生成候選
+   │      ├─ scripts.gatekeeper 做硬性規則
+   │      ├─ scripts.evaluate 與 scripts.evaluate_routed 做 smoke/dev/holdout
+   │      ├─ scripts.compare_runs 進行接受判斷
+   │      └─ scripts.* 寫入 runs/*、results.tsv、prompts/baseline.meta.json（必要時）
+   │
+   ├─ run_app.py（本機 UI）
+   │      ├─ 讀 runs/latest、questions、prompts、output 快照
+   │      └─ 回傳前端資料（architecture/experiment-report/questions/summary）
+   │
+   ├─ api/server.py（外部服務）
+   │      ├─ 提供 prompts/champions/routes 與 health
+   │      ├─ 提供 feedback 入口 `/api/feedback`
+   │      └─ 透過 api.feedback 回傳 summary/weak-areas/hints
+   │
+   └─ api.continuous_optimizer
+          ├─ 讀 feedback.jsonl
+          ├─ 分析弱點並決定方向
+          └─ 觸發 run_opt.py（二次優化）
+```
+
+`run_app.py` 與 `api/server.py` 都可讀到同一批基礎資產，但責任邊界如下：
+
+- `run_app.py`：本機 UI + 本地流程啟動器；只服務 `127.0.0.1` 前端控制需求，不承擔跨系統 API 的對外契約。
+- `api/server.py`：外部整合點；關注 prompt/token、feedback 與優化狀態輸出，不負責啟動演化流程。
+
