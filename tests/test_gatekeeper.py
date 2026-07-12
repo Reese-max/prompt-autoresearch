@@ -3,6 +3,7 @@ import json
 import re
 import subprocess
 import sys
+import runpy
 from pathlib import Path
 
 import pytest
@@ -74,6 +75,40 @@ SEMANTIC_EQUIVALENT_CASES = (
 )
 
 
+def _extract_gatekeeper_json_output(stdout: str):
+    match = re.search(r"^\{\s*\"passed\"\s*:", stdout, flags=re.MULTILINE)
+    if not match:
+        return None
+    return json.loads(stdout[match.start():])
+
+
+def _run_gatekeeper_cli(prompt: str, tmp_path: Path, extra_args=None):
+    project_root = Path(__file__).resolve().parents[1]
+    prompt_file = tmp_path / "prompt.md"
+    prompt_file.write_text(prompt, encoding="utf-8")
+
+    cmd = [
+        sys.executable,
+        str(project_root / "scripts" / "gatekeeper.py"),
+        str(prompt_file),
+    ]
+    if extra_args is None:
+        extra_args = ["--json"]
+    if extra_args:
+        cmd.extend(extra_args)
+
+    result = subprocess.run(
+        cmd,
+        cwd=str(project_root),
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+    )
+
+    return result.returncode, _extract_gatekeeper_json_output(result.stdout), result.stdout
+
+
 def test_semantic_check_hits_equivalent_expression(gatekeeper_module):
     # 命中同義語意詞時，應回傳 True（降級前提成立）。
     assert gatekeeper_module._semantic_check(
@@ -112,33 +147,6 @@ def gatekeeper_module(monkeypatch, tmp_path: Path):
     yield gatekeeper
 
     assert Path.cwd() == tmp_path
-
-
-def _run_gatekeeper_cli(prompt: str, tmp_path: Path):
-    project_root = Path(__file__).resolve().parents[1]
-    prompt_file = tmp_path / "prompt.md"
-    prompt_file.write_text(prompt, encoding="utf-8")
-
-    result = subprocess.run(
-        [
-            sys.executable,
-            str(project_root / "scripts" / "gatekeeper.py"),
-            str(prompt_file),
-            "--json",
-        ],
-        cwd=str(project_root),
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-    )
-
-    payload = None
-    if result.returncode in (0, 1):
-        match = re.search(r"^\{\s*\"passed\"\s*:", result.stdout, flags=re.MULTILINE)
-        if match:
-            payload = json.loads(result.stdout[match.start():])
-
-    return result.returncode, payload, result.stdout
 
 
 def _assert_violation(violations, rule, expected_present=True, *, expected_severity=None, expect_fragment=None):
@@ -261,3 +269,229 @@ def test_gatekeeper_semantic_equivalent_matrix(
 
     # case_label 僅用於錯誤訊息可讀性（避免未使用參數警告）
     assert isinstance(case_label, str)
+
+
+def test_gatekeeper_direct_runs_clean_prompt_without_violations(gatekeeper_module):
+    passed, violations = gatekeeper_module.run_gatekeeper(BASE_PROMPT)
+    assert passed is True
+    assert violations == []
+
+
+def test_gatekeeper_direct_checks_length_bands(gatekeeper_module):
+    short_prompt = "你是閱卷委員兼考官，先建立比較基準與法理區分，處理法律題時使用三段論，大前提為核心，不要反問，不要編造，直接輸出答案。"
+    assert gatekeeper_module.run_gatekeeper(short_prompt)[0] is False
+
+    warning_prompt = BASE_PROMPT + (" 比較基準、法條對照與大前提；" * 38)
+    passed, violations = gatekeeper_module.run_gatekeeper(warning_prompt)
+    assert passed is True
+    _assert_violation(violations, "R01_LENGTH_WARNING", expected_present=True, expected_severity="warning")
+
+    reject_prompt = BASE_PROMPT + (" 比較基準、法條對照與大前提；" * 39)
+    passed, violations = gatekeeper_module.run_gatekeeper(reject_prompt)
+    assert passed is False
+    _assert_violation(violations, "R01_LENGTH_REJECT", expected_present=True, expected_severity="reject")
+
+
+def test_gatekeeper_direct_blocks_unknown_rule_in_semantic_checker(gatekeeper_module):
+    assert gatekeeper_module._semantic_check("R99_NO_SUCH_RULE", "只含一般字詞即可") is False
+
+
+def test_run_gatekeeper_direct_allows_semantic_equivalent_for_expert_role(gatekeeper_module):
+    prompt = BASE_PROMPT.replace("你是閱卷委員兼考官", "你是國考顧問")
+    passed, violations = gatekeeper_module.run_gatekeeper(prompt)
+
+    assert passed is True
+    matched = _assert_violation(
+        violations,
+        "R05_NO_EXPERT_ROLE",
+        expected_present=True,
+        expected_severity="warning",
+    )
+    assert any("語意驗證通過：包含等價表達" in v["detail"] for v in matched)
+
+
+def test_run_gatekeeper_direct_no_semantic_downgrade_when_not_equivalent(gatekeeper_module):
+    prompt = (
+        "你是題目顧問，"
+        "這是完整規則示範文字：比較基準、比對、法理與三段論，"
+        "請用大前提與小前提完成推論並直接輸出。"
+    )
+    passed, violations = gatekeeper_module.run_gatekeeper(prompt)
+    assert passed is False
+
+    _assert_violation(
+        violations,
+        "R05_NO_EXPERT_ROLE",
+        expected_present=True,
+        expected_severity="reject",
+    )
+
+
+def test_gatekeeper_direct_allows_semantic_suppressed_analysis_leak(gatekeeper_module):
+    prompt = (
+        "你是閱卷委員兼考官，具備法學判斷能力。"
+        "先建立比較基準：法條適用、事實比對與要件對照。"
+        "先分析題型後再回答，請先判斷題目類型。"
+        "不得輸出審題，避免輸出題型分析步驟。"
+        "答案需以法理與法律案例題清楚區分。不得反問、不得編造，並要直接輸出正文，無需輸出冗長前言與分析過程。"
+        "本題以簡明語句回應。"
+    )
+
+    passed, violations = gatekeeper_module.run_gatekeeper(prompt)
+    assert passed is True
+    _assert_violation(violations, "R02_ANALYSIS_LEAK", expected_present=False)
+
+
+def test_gatekeeper_direct_reports_rule6_to8_violations(gatekeeper_module):
+    compare_prompt = (
+        "你是閱卷委員兼考官，具備法學判斷能力。答案需清楚區分並直接輸出結論。"
+        "請依序說明前提、論證與結論，不要反問、不做廢話延伸，"
+        "並要直接輸出正文，不要輸出冗長前言與分析過程，需包含大前提與小前提，並不得編造。"
+        "本題以簡明語句回應。"
+    )
+    passed, compare_violations = gatekeeper_module.run_gatekeeper(compare_prompt)
+    assert passed is True
+    _assert_violation(compare_violations, "R06_NO_COMPARE_CRITERIA", expected_present=True, expected_severity="warning")
+
+    legal_prompt = (
+        "你是閱卷委員兼考官，具備法學判斷能力。先建立比較基準：法條適用與要件對照。"
+        "請條列解題步驟，聚焦條件與程序，避免提及理論與案例術語。"
+        "不得反問、不得編造，並要直接輸出正文，不要輸出冗長前言與分析過程。"
+        "本題以簡明語句回應。"
+    )
+    passed, legal_violations = gatekeeper_module.run_gatekeeper(legal_prompt)
+    assert passed is True
+    _assert_violation(legal_violations, "R07_NO_LEGAL_DIFFERENTIATION", expected_present=True, expected_severity="warning")
+
+    output_prompt = BASE_PROMPT.replace("並要直接輸出正文，不要輸出冗長前言與分析過程。", "請補充簡短前言與分析，說明處理過程。")
+    passed, output_violations = gatekeeper_module.run_gatekeeper(output_prompt)
+    assert passed is True
+    _assert_violation(output_violations, "R08_NO_DIRECT_OUTPUT", expected_present=True, expected_severity="warning")
+
+
+def test_gatekeeper_direct_analysis_leak_violation(gatekeeper_module):
+    prompt = BASE_PROMPT.replace("並要直接輸出正文，不要輸出冗長前言與分析過程。", "")
+    prompt += "先分析題型後再進行回答。"
+    passed, violations = gatekeeper_module.run_gatekeeper(prompt)
+    assert passed is False
+    _assert_violation(violations, "R02_ANALYSIS_LEAK", expected_present=True, expected_severity="reject")
+
+
+def test_gatekeeper_entrypoint_success_run_with_json_in_process(monkeypatch, tmp_path):
+    prompt_file = tmp_path / "prompt.md"
+    prompt_file.write_text(BASE_PROMPT, encoding="utf-8")
+
+    monkeypatch.setattr(sys, "argv", ["scripts/gatekeeper.py", str(prompt_file), "--json"])
+    with pytest.raises(SystemExit) as exc_info:
+        runpy.run_path(str(Path(__file__).resolve().parents[1] / "scripts" / "gatekeeper.py"), run_name="__main__")
+
+    assert exc_info.value.code == 0
+
+
+def test_gatekeeper_entrypoint_reject_without_json_in_process(monkeypatch, tmp_path):
+    prompt = BASE_PROMPT.replace("你是閱卷委員兼考官，", "")
+    prompt_file = tmp_path / "prompt.md"
+    prompt_file.write_text(prompt, encoding="utf-8")
+
+    monkeypatch.setattr(sys, "argv", ["scripts/gatekeeper.py", str(prompt_file)])
+    with pytest.raises(SystemExit) as exc_info:
+        runpy.run_path(str(Path(__file__).resolve().parents[1] / "scripts" / "gatekeeper.py"), run_name="__main__")
+
+    assert exc_info.value.code == 1
+
+
+def test_gatekeeper_entrypoint_invalid_args_in_process(monkeypatch, capsys):
+    monkeypatch.setattr(sys, "argv", ["scripts/gatekeeper.py"])
+    with pytest.raises(SystemExit) as exc_info:
+        runpy.run_path(str(Path(__file__).resolve().parents[1] / "scripts" / "gatekeeper.py"), run_name="__main__")
+
+    captured = capsys.readouterr()
+    assert exc_info.value.code == 1
+    assert "用法: python3 scripts/gatekeeper.py <prompt_file>" in captured.out
+
+
+def test_gatekeeper_entrypoint_missing_file_in_process(monkeypatch, tmp_path, capsys):
+    missing_file = tmp_path / "missing_prompt.md"
+    monkeypatch.setattr(sys, "argv", ["scripts/gatekeeper.py", str(missing_file)])
+    with pytest.raises(SystemExit) as exc_info:
+        runpy.run_path(str(Path(__file__).resolve().parents[1] / "scripts" / "gatekeeper.py"), run_name="__main__")
+
+    captured = capsys.readouterr()
+    assert exc_info.value.code == 1
+    assert f"[錯誤] 找不到檔案: {missing_file}" in captured.out
+
+
+def test_gatekeeper_cli_output_contract_and_human_readable_summary(tmp_path):
+    code, payload, stdout = _run_gatekeeper_cli(BASE_PROMPT, tmp_path, extra_args=["--json"])
+
+    assert code == 0
+    assert payload is not None
+    assert payload["passed"] is True
+    assert set(payload.keys()) == {"passed", "violations", "char_count"}
+    assert payload["char_count"] == len(BASE_PROMPT)
+    assert payload["violations"] == []
+    assert "結果: ✅ 通過" in stdout
+    assert "全部通過！無任何違規" in stdout
+
+
+def test_gatekeeper_cli_reports_json_on_reject_with_warning_mix(tmp_path):
+    prompt = (
+        BASE_PROMPT.replace("你是閱卷委員兼考官，", "")
+        + "先分析題型，先判斷題目類型後再回答。"
+    )
+    code, payload, stdout = _run_gatekeeper_cli(prompt, tmp_path, extra_args=["--json"])
+
+    assert code == 1
+    assert payload is not None
+    assert payload["passed"] is False
+
+    matched = _assert_violation(payload["violations"], "R02_ANALYSIS_LEAK", expected_present=True, expect_fragment="先分析題型")
+    assert not payload["passed"]
+    assert any("❌ [R02_ANALYSIS_LEAK]" in line for line in stdout.splitlines())
+    assert any(v["rule"] == "R05_NO_EXPERT_ROLE" and v["severity"] == "reject" for v in payload["violations"])
+    assert any("缺乏國考專家角色設定宣告。" in v["detail"] for v in payload["violations"])
+
+
+def test_gatekeeper_cli_accepts_warning_only_output(tmp_path):
+    warning_prompt = BASE_PROMPT + (" 比較基準、法條對照與大前提；" * 38)
+    code, payload, stdout = _run_gatekeeper_cli(warning_prompt, tmp_path, extra_args=["--json"])
+
+    assert code == 0
+    assert payload["passed"] is True
+    _assert_violation(
+        payload["violations"],
+        "R01_LENGTH_WARNING",
+        expected_present=True,
+        expected_severity="warning",
+        expect_fragment="超過 550 字警告線",
+    )
+    assert "⚠️ [R01_LENGTH_WARNING]" in stdout
+
+
+def test_gatekeeper_cli_invalid_argument_errored(tmp_path):
+    project_root = Path(__file__).resolve().parents[1]
+    result = subprocess.run(
+        [sys.executable, str(project_root / "scripts" / "gatekeeper.py")],
+        cwd=str(project_root),
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+    )
+    assert result.returncode == 1
+    assert "用法: python3 scripts/gatekeeper.py <prompt_file>" in result.stdout
+
+
+def test_gatekeeper_cli_missing_prompt_file_prints_error(tmp_path):
+    project_root = Path(__file__).resolve().parents[1]
+    missing_file = tmp_path / "not_exists.md"
+    result = subprocess.run(
+        [sys.executable, str(project_root / "scripts" / "gatekeeper.py"), str(missing_file)],
+        cwd=str(project_root),
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+    )
+    assert result.returncode == 1
+    assert f"[錯誤] 找不到檔案: {missing_file}" in result.stdout
