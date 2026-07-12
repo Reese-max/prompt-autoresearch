@@ -76,7 +76,48 @@ def test_call_minimax_success_parses_and_returns_trimmed_content(
 
     assert ans == "這是一段回應"
     assert mock_urlopen.call_count == 1
-    assert mock_urlopen.call_args.args[0].full_url == "https://api.example.local/v1/chat"
+
+    request = mock_urlopen.call_args.args[0]
+    assert request.full_url == "https://api.example.local/v1/chat"
+    assert request.get_header("Authorization") == "Bearer test-key"
+
+    sent_payload = json.loads(request.data.decode("utf-8"))
+    assert sent_payload["model"] == "MiniMax-M2.7"
+    assert sent_payload["temperature"] == 0.7
+    assert sent_payload["messages"] == [
+        {"role": "system", "content": "system prompt"},
+        {"role": "user", "content": "user prompt"},
+    ]
+
+
+def test_call_minimax_request_headers_and_payload_match_expectations(
+    _mock_api_runtime,
+    mock_urlopen,
+):
+    mock_urlopen.return_value = FakeHTTPResponse(
+        json.dumps(
+            {
+                "choices": [
+                    {"message": {"content": "回應"}},
+                ]
+            },
+            ensure_ascii=False,
+        ).encode("utf-8")
+    )
+
+    api.call_minimax("s", "u", temperature=0.4)
+
+    request = mock_urlopen.call_args.args[0]
+    assert request.get_header("Authorization") == "Bearer test-key"
+    assert request.get_header("Content-type") == "application/json"
+
+    sent_payload = json.loads(request.data.decode("utf-8"))
+    assert sent_payload["model"] == "MiniMax-M2.7"
+    assert sent_payload["temperature"] == 0.4
+    assert sent_payload["messages"] == [
+        {"role": "system", "content": "s"},
+        {"role": "user", "content": "u"},
+    ]
 
 
 def test_call_minimax_non_200_raises_http_error(_mock_api_runtime, mock_urlopen):
