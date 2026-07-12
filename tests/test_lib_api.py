@@ -146,6 +146,12 @@ def test_call_minimax_timeout_raises(_mock_api_runtime, mock_urlopen):
     assert mock_urlopen.call_args.args[0].full_url == "https://api.example.local/v1/chat"
 
 
+def test_call_minimax_missing_api_key(monkeypatch):
+    monkeypatch.delenv("MINIMAX_API_KEY", raising=False)
+    with pytest.raises(RuntimeError, match="缺少 MINIMAX_API_KEY 環境變數"):
+        api.call_minimax("system", "user")
+
+
 def test_call_minimax_invalid_json_raises(_mock_api_runtime, mock_urlopen):
     mock_urlopen.return_value = FakeHTTPResponse(b"not json")
 
