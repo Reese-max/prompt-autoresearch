@@ -1,0 +1,17 @@
+{
+  "candidate_path": "prompts/candidates/practical_champion_candidate_1779692020.md",
+  "candidate_hash": "c4ad8084d3cf8009bd5bced386efa61e73cefb000abe9fafe143c62636007936",
+  "candidate_length": 445,
+  "status": "backfilled_existing",
+  "backfilled_at": "2026-07-07 16:36:19",
+  "direction": "",
+  "target_failures": "",
+  "hypothesis": "",
+  "temperature": "",
+  "candidate_index": "",
+  "source_meta": {
+    "meta_md": "",
+    "meta_json": ""
+  },
+  "note": "Backfilled from existing candidate files; historical gatekeeper/smoke/dev results may be unavailable."
+}

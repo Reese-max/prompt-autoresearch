@@ -1,0 +1,53 @@
+{
+  "updated_at": "2026-05-25 13:04:09",
+  "kind": "type_champion",
+  "type": "實務應用題",
+  "type_slug": "practical",
+  "champion_prompt_path": "prompts/champions/practical.md",
+  "candidate_path": "prompts/candidates/practical_champion_candidate_1779685228.md",
+  "candidate_hash": "bfb98e351d3fc5af28e7b235a7ebcb148f874283e69b134d746ca22c0961c656",
+  "dev_run": "runs\\20260525_130222",
+  "holdout_run": "runs\\20260525_130409",
+  "dev_comparison": {
+    "score_diff": 6.666666666666671,
+    "risk_rate": 100.0,
+    "base_risk_rate": 66.66666666666666,
+    "failure_new": {
+      "F03": 2,
+      "F04": 2
+    },
+    "failure_base": {
+      "F03": 3,
+      "F04": 3,
+      "F12": 1,
+      "F02": 1
+    },
+    "type_diffs": {
+      "實務應用題": {
+        "baseline_avg": 83.83333333333333,
+        "candidate_avg": 90.5,
+        "diff": 6.666666666666671
+      }
+    }
+  },
+  "holdout_comparison": {
+    "score_diff": 4.666666666666671,
+    "risk_rate": 100.0,
+    "base_risk_rate": 66.66666666666666,
+    "failure_new": {
+      "F03": 1,
+      "F04": 1
+    },
+    "failure_base": {
+      "F04": 2,
+      "F03": 2
+    },
+    "type_diffs": {
+      "實務應用題": {
+        "baseline_avg": 86.0,
+        "candidate_avg": 90.66666666666667,
+        "diff": 4.666666666666671
+      }
+    }
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "timestamp": "2026-05-25 14:36:55",
+  "prompt_file": "prompts/candidates\\compare_champion_candidate_1779690883.md",
+  "question_file": ".cache/type_questions/dev_compare.jsonl",
+  "prompt_hash": "85d4857a655c71ca4de0a40e9fe21c378d931cf59a9e604d640903ac9c41ac42",
+  "elapsed_seconds": 131.90298795700073,
+  "total_questions": 6,
+  "average_score": 94.83333333333333,
+  "type_averages": {
+    "比較題": 94.83333333333333
+  },
+  "failure_counts": {
+    "F12": 1
+  },
+  "word_count_pass_rate": 0.0,
+  "risk_perfect_rate": 83.33333333333334,
+  "char_count": 400,
+  "cache_hit_count": 0,
+  "error_count": 0,
+  "estimated_api_calls": 12
+}

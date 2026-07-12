@@ -1,0 +1,22 @@
+{
+  "timestamp": "2026-05-26 00:38:23",
+  "prompt_file": "prompts/baseline.md",
+  "question_file": ".cache/type_questions/holdout_explain.jsonl",
+  "prompt_hash": "00db51fc1a418ef904ad4398b1d1eb04ac7eb3f57344ac325da28df227dfe74d",
+  "elapsed_seconds": 0.041199684143066406,
+  "total_questions": 3,
+  "average_score": 82.0,
+  "type_averages": {
+    "說明題": 82.0
+  },
+  "failure_counts": {
+    "F03": 2,
+    "F04": 2
+  },
+  "word_count_pass_rate": 0.0,
+  "risk_perfect_rate": 100.0,
+  "char_count": 442,
+  "cache_hit_count": 3,
+  "error_count": 0,
+  "estimated_api_calls": 0
+}

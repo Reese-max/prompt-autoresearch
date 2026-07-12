@@ -1,0 +1,43 @@
+{
+  "timestamp": "2026-05-26 00:38:12",
+  "prompt_file": "prompts/routes/candidates\\20260526_003806_route_compare.json",
+  "question_file": "questions/dev.jsonl",
+  "prompt_hash": "1ae3491eb8237bc061371068a65db6824df1019d9ee7a394483ff80a53ffe66c",
+  "elapsed_seconds": 0.03322744369506836,
+  "total_questions": 36,
+  "average_score": 88.72222222222223,
+  "type_averages": {
+    "法律案例題": 85.0,
+    "法律法理題": 91.0,
+    "實務應用題": 86.83333333333333,
+    "比較題": 92.83333333333333,
+    "評析題": 89.33333333333333,
+    "說明題": 87.33333333333333
+  },
+  "failure_counts": {
+    "F03": 10,
+    "F04": 12,
+    "F14": 1,
+    "F08": 1,
+    "F06": 1
+  },
+  "word_count_pass_rate": 0.0,
+  "risk_perfect_rate": 97.22222222222221,
+  "char_count": 134,
+  "cache_hit_count": 36,
+  "error_count": 0,
+  "estimated_api_calls": 0,
+  "route_file": "prompts/routes/candidates/20260526_003806_route_compare.json",
+  "route_name": "route_compare",
+  "route": {
+    "name": "route_compare",
+    "default_prompt": "prompts/baseline.md",
+    "by_type": {
+      "比較題": "prompts/champions/compare.md"
+    }
+  },
+  "prompt_usage": {
+    "prompts/baseline.md": 30,
+    "prompts/champions/compare.md": 6
+  }
+}

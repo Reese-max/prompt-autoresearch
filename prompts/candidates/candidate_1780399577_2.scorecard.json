@@ -1,0 +1,17 @@
+{
+  "candidate_path": "prompts/candidates/candidate_1780399577_2.md",
+  "candidate_hash": "46289355227884f65587f09e9934a98c0f433e7191183bfa544705e20f3ff7c1",
+  "candidate_length": 464,
+  "status": "backfilled_existing",
+  "backfilled_at": "2026-07-07 16:36:15",
+  "direction": "D03【採分點外露】",
+  "target_failures": "F03",
+  "hypothesis": "本輪方向：D03【採分點外露】。假設：針對 F03 做單點微調，可改善對應低分題型，同時不犧牲其他題型、風險控制與每日懶人版精簡度。",
+  "temperature": "0.9",
+  "candidate_index": "2",
+  "source_meta": {
+    "meta_md": "prompts/candidates/candidate_1780399577_2.meta.md",
+    "meta_json": ""
+  },
+  "note": "Backfilled from existing candidate files; historical gatekeeper/smoke/dev results may be unavailable."
+}

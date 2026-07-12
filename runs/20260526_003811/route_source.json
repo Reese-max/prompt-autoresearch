@@ -1,0 +1,7 @@
+{
+  "name": "route_practical",
+  "default_prompt": "prompts/baseline.md",
+  "by_type": {
+    "實務應用題": "prompts/champions/practical.md"
+  }
+}

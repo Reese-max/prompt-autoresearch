@@ -1,0 +1,25 @@
+{
+  "timestamp": "2026-06-02 22:05:14",
+  "prompt_file": "prompts/champions\\legal_case.md",
+  "question_file": ".cache/type_questions/dev_legal_case.jsonl",
+  "prompt_hash": "7506de3d763e74afb05d2ee6b43e14d13efabb877068c3eba0706bb9d6dcf03d",
+  "elapsed_seconds": 181.62029600143433,
+  "total_questions": 8,
+  "average_score": 78.75,
+  "type_averages": {
+    "法律案例題": 78.75
+  },
+  "failure_counts": {
+    "F04": 5,
+    "F03": 6,
+    "F01": 1,
+    "F08": 3,
+    "F10": 1
+  },
+  "word_count_pass_rate": 12.5,
+  "risk_perfect_rate": 75.0,
+  "char_count": 356,
+  "cache_hit_count": 0,
+  "error_count": 0,
+  "estimated_api_calls": 16
+}

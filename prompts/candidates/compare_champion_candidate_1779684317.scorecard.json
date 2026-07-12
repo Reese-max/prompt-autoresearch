@@ -1,0 +1,17 @@
+{
+  "candidate_path": "prompts/candidates/compare_champion_candidate_1779684317.md",
+  "candidate_hash": "2254f7cdc8e549c5d124afa1edbafa256bb6b918242a657c02db8699fe9f391b",
+  "candidate_length": 410,
+  "status": "backfilled_existing",
+  "backfilled_at": "2026-07-07 16:36:17",
+  "direction": "",
+  "target_failures": "",
+  "hypothesis": "",
+  "temperature": "",
+  "candidate_index": "",
+  "source_meta": {
+    "meta_md": "",
+    "meta_json": ""
+  },
+  "note": "Backfilled from existing candidate files; historical gatekeeper/smoke/dev results may be unavailable."
+}

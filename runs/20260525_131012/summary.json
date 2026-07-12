@@ -1,0 +1,23 @@
+{
+  "timestamp": "2026-05-25 13:10:12",
+  "prompt_file": "prompts/candidates\\practical_champion_candidate_1779685602.md",
+  "question_file": ".cache/type_questions/holdout_practical.jsonl",
+  "prompt_hash": "575fb064fb780c13544313b7897accfb06a970760c85a807267f6bae6cdf6368",
+  "elapsed_seconds": 113.22247385978699,
+  "total_questions": 3,
+  "average_score": 84.33333333333333,
+  "type_averages": {
+    "實務應用題": 84.33333333333333
+  },
+  "failure_counts": {
+    "F03": 2,
+    "F04": 2,
+    "F12": 1
+  },
+  "word_count_pass_rate": 0.0,
+  "risk_perfect_rate": 66.66666666666666,
+  "char_count": 449,
+  "cache_hit_count": 0,
+  "error_count": 0,
+  "estimated_api_calls": 6
+}

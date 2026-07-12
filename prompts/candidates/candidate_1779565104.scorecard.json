@@ -1,0 +1,17 @@
+{
+  "candidate_path": "prompts/candidates/candidate_1779565104.md",
+  "candidate_hash": "7086c1fa6326f963b288b1b647081a809e5025561a151c3aa490c00b7f4febda",
+  "candidate_length": 717,
+  "status": "backfilled_existing",
+  "backfilled_at": "2026-07-07 16:36:07",
+  "direction": "",
+  "target_failures": "",
+  "hypothesis": "",
+  "temperature": "",
+  "candidate_index": "",
+  "source_meta": {
+    "meta_md": "",
+    "meta_json": ""
+  },
+  "note": "Backfilled from existing candidate files; historical gatekeeper/smoke/dev results may be unavailable."
+}

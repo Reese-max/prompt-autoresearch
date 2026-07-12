@@ -1,0 +1,17 @@
+{
+  "candidate_path": "prompts/candidates/candidate_1780427146_0.md",
+  "candidate_hash": "d05fae823bd55c6f7b5a289b49aefa80f518dc9845b51500129efe2e540aabc9",
+  "candidate_length": 500,
+  "status": "backfilled_existing",
+  "backfilled_at": "2026-07-07 16:36:17",
+  "direction": "D04【具體化與佐證】",
+  "target_failures": "F04",
+  "hypothesis": "本輪方向：D04【具體化與佐證】。假設：針對 F04 做單點微調，可改善對應低分題型，同時不犧牲其他題型、風險控制與每日懶人版精簡度。",
+  "temperature": "0.5",
+  "candidate_index": "0",
+  "source_meta": {
+    "meta_md": "prompts/candidates/candidate_1780427146_0.meta.md",
+    "meta_json": ""
+  },
+  "note": "Backfilled from existing candidate files; historical gatekeeper/smoke/dev results may be unavailable."
+}

@@ -1,0 +1,17 @@
+{
+  "candidate_path": "prompts/candidates/candidate_1779646345_risk_repair.md",
+  "candidate_hash": "9cd2a619429b6fcdf60e211df6edd19d65e08e5ca7913a3fe651d245a127b4d3",
+  "candidate_length": 545,
+  "status": "backfilled_existing",
+  "backfilled_at": "2026-07-07 16:36:09",
+  "direction": "",
+  "target_failures": "",
+  "hypothesis": "",
+  "temperature": "",
+  "candidate_index": "",
+  "source_meta": {
+    "meta_md": "",
+    "meta_json": ""
+  },
+  "note": "Backfilled from existing candidate files; historical gatekeeper/smoke/dev results may be unavailable."
+}

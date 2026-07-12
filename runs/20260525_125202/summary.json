@@ -1,0 +1,22 @@
+{
+  "timestamp": "2026-05-25 12:52:02",
+  "prompt_file": "prompts/candidates\\commentary_champion_candidate_1779684629.md",
+  "question_file": ".cache/type_questions/dev_commentary.jsonl",
+  "prompt_hash": "de24dcc0bc5641bd293dcc0f9b5155325f65f0924e9dc37fee03817c25bc4fbd",
+  "elapsed_seconds": 92.66054844856262,
+  "total_questions": 6,
+  "average_score": 91.16666666666667,
+  "type_averages": {
+    "評析題": 91.16666666666667
+  },
+  "failure_counts": {
+    "F03": 1,
+    "F04": 1
+  },
+  "word_count_pass_rate": 0.0,
+  "risk_perfect_rate": 100.0,
+  "char_count": 366,
+  "cache_hit_count": 0,
+  "error_count": 0,
+  "estimated_api_calls": 12
+}

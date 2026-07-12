@@ -1,0 +1,119 @@
+{
+  "route": "prompts/routes/type_champions.json",
+  "dev_run": "runs\\20260525_161503",
+  "holdout_run": "runs\\20260525_161504",
+  "baseline_dev_run": "runs/20260524_041843",
+  "baseline_holdout_run": "runs/20260524_162523",
+  "dev_accepted": false,
+  "holdout_accepted": false,
+  "accepted": false,
+  "decision": "REJECT_ROUTE",
+  "dev_diff": 0.5277777777777857,
+  "holdout_diff": -1.3888888888888857,
+  "dev_comparison": {
+    "score_diff": 0.5277777777777857,
+    "risk_rate": 97.22222222222221,
+    "base_risk_rate": 97.22222222222221,
+    "failure_new": {
+      "F04": 9,
+      "F03": 9,
+      "F06": 1,
+      "F01": 1,
+      "F02": 1,
+      "F08": 1,
+      "F12": 1,
+      "F14": 1
+    },
+    "failure_base": {
+      "F03": 7,
+      "F04": 9,
+      "F10": 2,
+      "F08": 1,
+      "F01": 2,
+      "F02": 1,
+      "F12": 1,
+      "F07": 1
+    },
+    "type_diffs": {
+      "實務應用題": {
+        "baseline_avg": 90.16666666666667,
+        "candidate_avg": 86.66666666666667,
+        "diff": -3.5
+      },
+      "比較題": {
+        "baseline_avg": 95.33333333333333,
+        "candidate_avg": 92.83333333333333,
+        "diff": -2.5
+      },
+      "法律案例題": {
+        "baseline_avg": 74.66666666666667,
+        "candidate_avg": 84.16666666666667,
+        "diff": 9.5
+      },
+      "法律法理題": {
+        "baseline_avg": 88.16666666666667,
+        "candidate_avg": 91.0,
+        "diff": 2.8333333333333286
+      },
+      "評析題": {
+        "baseline_avg": 91.66666666666667,
+        "candidate_avg": 89.33333333333333,
+        "diff": -2.333333333333343
+      },
+      "說明題": {
+        "baseline_avg": 88.16666666666667,
+        "candidate_avg": 87.33333333333333,
+        "diff": -0.8333333333333428
+      }
+    }
+  },
+  "holdout_comparison": {
+    "score_diff": -1.3888888888888857,
+    "risk_rate": 88.88888888888889,
+    "base_risk_rate": 94.44444444444444,
+    "failure_new": {
+      "F03": 5,
+      "F04": 5,
+      "F08": 1,
+      "F12": 1
+    },
+    "failure_base": {
+      "F04": 5,
+      "F08": 2,
+      "F03": 4,
+      "F12": 1
+    },
+    "type_diffs": {
+      "實務應用題": {
+        "baseline_avg": 87.33333333333333,
+        "candidate_avg": 84.33333333333333,
+        "diff": -3.0
+      },
+      "比較題": {
+        "baseline_avg": 95.33333333333333,
+        "candidate_avg": 94.0,
+        "diff": -1.3333333333333286
+      },
+      "法律案例題": {
+        "baseline_avg": 85.33333333333333,
+        "candidate_avg": 81.33333333333333,
+        "diff": -4.0
+      },
+      "法律法理題": {
+        "baseline_avg": 95.33333333333333,
+        "candidate_avg": 95.33333333333333,
+        "diff": 0.0
+      },
+      "評析題": {
+        "baseline_avg": 88.0,
+        "candidate_avg": 88.0,
+        "diff": 0.0
+      },
+      "說明題": {
+        "baseline_avg": 85.33333333333333,
+        "candidate_avg": 85.33333333333333,
+        "diff": 0.0
+      }
+    }
+  }
+}

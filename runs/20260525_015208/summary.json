@@ -1,0 +1,32 @@
+{
+  "timestamp": "2026-05-25 01:52:08",
+  "prompt_file": "prompts\\candidates\\user_prompt_20260525_hybrid.md",
+  "question_file": "questions/dev.jsonl",
+  "prompt_hash": "a557874b12497aee1ada0e3f2778117ba817091cee0c1004e1114f7135255c38",
+  "elapsed_seconds": 210.7073106765747,
+  "total_questions": 36,
+  "average_score": 87.41666666666667,
+  "type_averages": {
+    "說明題": 89.16666666666667,
+    "實務應用題": 89.66666666666667,
+    "比較題": 92.16666666666667,
+    "評析題": 93.83333333333333,
+    "法律法理題": 89.0,
+    "法律案例題": 70.66666666666667
+  },
+  "failure_counts": {
+    "F04": 10,
+    "F03": 9,
+    "F01": 1,
+    "F08": 4,
+    "F12": 1,
+    "F13": 1,
+    "F10": 1
+  },
+  "word_count_pass_rate": 0.0,
+  "risk_perfect_rate": 94.44444444444444,
+  "char_count": 443,
+  "cache_hit_count": 0,
+  "error_count": 0,
+  "estimated_api_calls": 72
+}

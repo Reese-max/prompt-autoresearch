@@ -1,0 +1,23 @@
+{
+  "timestamp": "2026-05-25 15:36:32",
+  "prompt_file": "prompts/candidates\\legal_case_champion_candidate_1779694419.md",
+  "question_file": ".cache/type_questions/dev_legal_case.jsonl",
+  "prompt_hash": "d5ea4590d7a4b3739e0f7c445b84466330885f2977a2d0234809cf9d8fdd6421",
+  "elapsed_seconds": 173.0162751674652,
+  "total_questions": 6,
+  "average_score": 84.0,
+  "type_averages": {
+    "法律案例題": 84.0
+  },
+  "failure_counts": {
+    "F03": 2,
+    "F04": 1,
+    "F08": 2
+  },
+  "word_count_pass_rate": 50.0,
+  "risk_perfect_rate": 83.33333333333334,
+  "char_count": 196,
+  "cache_hit_count": 0,
+  "error_count": 0,
+  "estimated_api_calls": 12
+}

@@ -1,0 +1,8 @@
+{
+  "name": "route_practical__legal_case",
+  "default_prompt": "prompts/baseline.md",
+  "by_type": {
+    "實務應用題": "prompts/champions/practical.md",
+    "法律案例題": "prompts/champions/legal_case.md"
+  }
+}

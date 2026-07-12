@@ -1,0 +1,24 @@
+{
+  "timestamp": "2026-05-25 14:31:52",
+  "prompt_file": "prompts/candidates\\explain_champion_candidate_1779690592.md",
+  "question_file": ".cache/type_questions/dev_explain.jsonl",
+  "prompt_hash": "688d1a006909ab6c6201e6c232202f10e7d864d9a1c06ecf1220b41d6b5e7ece",
+  "elapsed_seconds": 120.0343086719513,
+  "total_questions": 6,
+  "average_score": 88.5,
+  "type_averages": {
+    "說明題": 88.5
+  },
+  "failure_counts": {
+    "F01": 1,
+    "F03": 3,
+    "F14": 1,
+    "F10": 1
+  },
+  "word_count_pass_rate": 0.0,
+  "risk_perfect_rate": 100.0,
+  "char_count": 273,
+  "cache_hit_count": 0,
+  "error_count": 0,
+  "estimated_api_calls": 12
+}

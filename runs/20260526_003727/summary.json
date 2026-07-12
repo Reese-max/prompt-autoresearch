@@ -1,0 +1,42 @@
+{
+  "timestamp": "2026-05-26 00:37:27",
+  "prompt_file": "prompts/routes/candidates\\20260526_003301_route_legal_case.json",
+  "question_file": "questions/holdout.jsonl",
+  "prompt_hash": "ba2b7a0882eabf24369076b87ab84c38310b9943691c57ad49cd504a0ebb70e7",
+  "elapsed_seconds": 0.026090145111083984,
+  "total_questions": 18,
+  "average_score": 88.77777777777777,
+  "type_averages": {
+    "評析題": 88.0,
+    "說明題": 85.33333333333333,
+    "比較題": 95.33333333333333,
+    "實務應用題": 87.33333333333333,
+    "法律法理題": 95.33333333333333,
+    "法律案例題": 81.33333333333333
+  },
+  "failure_counts": {
+    "F03": 6,
+    "F04": 5,
+    "F08": 2,
+    "F12": 2
+  },
+  "word_count_pass_rate": 0.0,
+  "risk_perfect_rate": 88.88888888888889,
+  "char_count": 142,
+  "cache_hit_count": 18,
+  "error_count": 0,
+  "estimated_api_calls": 0,
+  "route_file": "prompts/routes/candidates/20260526_003301_route_legal_case.json",
+  "route_name": "route_legal_case",
+  "route": {
+    "name": "route_legal_case",
+    "default_prompt": "prompts/baseline.md",
+    "by_type": {
+      "法律案例題": "prompts/champions/legal_case.md"
+    }
+  },
+  "prompt_usage": {
+    "prompts/baseline.md": 15,
+    "prompts/champions/legal_case.md": 3
+  }
+}

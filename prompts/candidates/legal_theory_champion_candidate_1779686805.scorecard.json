@@ -1,0 +1,17 @@
+{
+  "candidate_path": "prompts/candidates/legal_theory_champion_candidate_1779686805.md",
+  "candidate_hash": "99bef7be368ad31743973d158508e73acf83acc921ae2f6496be9672f8c1159b",
+  "candidate_length": 393,
+  "status": "backfilled_existing",
+  "backfilled_at": "2026-07-07 16:36:19",
+  "direction": "",
+  "target_failures": "",
+  "hypothesis": "",
+  "temperature": "",
+  "candidate_index": "",
+  "source_meta": {
+    "meta_md": "",
+    "meta_json": ""
+  },
+  "note": "Backfilled from existing candidate files; historical gatekeeper/smoke/dev results may be unavailable."
+}

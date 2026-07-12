@@ -1,0 +1,17 @@
+{
+  "candidate_path": "prompts/candidates/legal_case_champion_candidate_1780409489.md",
+  "candidate_hash": "ff265ea219b472ece5c6ab2b6016831a98ccde09eea64585d1990ff47ffe010c",
+  "candidate_length": 393,
+  "status": "backfilled_existing",
+  "backfilled_at": "2026-07-07 16:36:19",
+  "direction": "",
+  "target_failures": "",
+  "hypothesis": "",
+  "temperature": "",
+  "candidate_index": "",
+  "source_meta": {
+    "meta_md": "",
+    "meta_json": ""
+  },
+  "note": "Backfilled from existing candidate files; historical gatekeeper/smoke/dev results may be unavailable."
+}

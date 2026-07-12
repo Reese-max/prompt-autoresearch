@@ -1,0 +1,8 @@
+{
+  "name": "route_compare__legal_case",
+  "default_prompt": "prompts/baseline.md",
+  "by_type": {
+    "比較題": "prompts/champions/compare.md",
+    "法律案例題": "prompts/champions/legal_case.md"
+  }
+}

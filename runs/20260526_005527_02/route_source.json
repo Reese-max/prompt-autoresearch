@@ -1,0 +1,7 @@
+{
+  "name": "route_compare",
+  "default_prompt": "prompts/baseline.md",
+  "by_type": {
+    "比較題": "prompts/champions/compare.md"
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "saved_at": "2026-05-25 03:32:42",
+  "kind": "elite_candidate",
+  "type": "法律案例題",
+  "type_slug": "legal_case",
+  "candidate_hash": "1c4d42275fbefc657dc6d344607508f9d1534d381cf8e9b2dd6e7ccba217bfd9",
+  "candidate_source": "prompts/candidates/candidate_1779650877.md",
+  "elite_prompt_path": "prompts/candidates/elite\\legal_case_20260525_033242_1c4d4227.md",
+  "direction": "D04【具體化與佐證】",
+  "hypothesis": "本輪方向：D04【具體化與佐證】。假設：針對 F04 做單點微調，可改善對應低分題型，同時不犧牲其他題型、風險控制與每日懶人版精簡度。",
+  "dev_run": "runs\\20260525_033242",
+  "baseline_dev_run": "runs/20260524_041843",
+  "baseline_avg": 74.66666666666667,
+  "candidate_avg": 80.83333333333333,
+  "diff": 6.166666666666657,
+  "overall_diff": -0.7777777777777715,
+  "risk_rate": 97.22222222222221,
+  "base_risk_rate": 97.22222222222221,
+  "decision": "SPECIALTY_RETAINED"
+}

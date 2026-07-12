@@ -1,0 +1,5 @@
+{
+  "name": "baseline_only",
+  "default_prompt": "prompts/baseline.md",
+  "by_type": {}
+}

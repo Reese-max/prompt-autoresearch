@@ -1,0 +1,11 @@
+{
+  "updated_at": "2026-06-02 18:45:34",
+  "prompt_path": "prompts/baseline.md",
+  "prompt_hash": "004e4d46a58fd02d7a4c112948fe7749720bb3c529c2083ec203ae1f364bd08f",
+  "smoke_run": "runs\\20260602_182243",
+  "dev_run": "runs\\20260602_184026",
+  "holdout_run": "runs\\20260602_184533",
+  "smoke_avg": 91.5,
+  "dev_avg": 89.20833333333333,
+  "holdout_avg": 90.16666666666667
+}

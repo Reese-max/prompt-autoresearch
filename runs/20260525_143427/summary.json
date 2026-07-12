@@ -1,0 +1,19 @@
+{
+  "timestamp": "2026-05-25 14:34:27",
+  "prompt_file": "prompts/champions\\compare.md",
+  "question_file": ".cache/type_questions/dev_compare.jsonl",
+  "prompt_hash": "cfb8f4adde69b5afa61fbc40260e09f4cda0fa2d733cf6519747e2a691cd88c0",
+  "elapsed_seconds": 0.03903818130493164,
+  "total_questions": 6,
+  "average_score": 96.66666666666667,
+  "type_averages": {
+    "比較題": 96.66666666666667
+  },
+  "failure_counts": {},
+  "word_count_pass_rate": 0.0,
+  "risk_perfect_rate": 100.0,
+  "char_count": 359,
+  "cache_hit_count": 6,
+  "error_count": 0,
+  "estimated_api_calls": 0
+}

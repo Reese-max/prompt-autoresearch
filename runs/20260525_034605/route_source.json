@@ -1,0 +1,7 @@
+{
+  "name": "baseline_plus_legal_case_champion",
+  "default_prompt": "prompts/baseline.md",
+  "by_type": {
+    "法律案例題": "prompts/champions/legal_case.md"
+  }
+}

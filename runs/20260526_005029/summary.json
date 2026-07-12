@@ -1,0 +1,19 @@
+{
+  "timestamp": "2026-05-26 00:50:29",
+  "prompt_file": "prompts/baseline.md",
+  "question_file": ".cache/type_questions/holdout_legal_theory.jsonl",
+  "prompt_hash": "00db51fc1a418ef904ad4398b1d1eb04ac7eb3f57344ac325da28df227dfe74d",
+  "elapsed_seconds": 0.04783487319946289,
+  "total_questions": 3,
+  "average_score": 91.0,
+  "type_averages": {
+    "法律法理題": 91.0
+  },
+  "failure_counts": {},
+  "word_count_pass_rate": 0.0,
+  "risk_perfect_rate": 100.0,
+  "char_count": 442,
+  "cache_hit_count": 3,
+  "error_count": 0,
+  "estimated_api_calls": 0
+}

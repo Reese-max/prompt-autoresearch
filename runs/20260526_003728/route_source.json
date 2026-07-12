@@ -1,0 +1,8 @@
+{
+  "name": "route_practical__compare",
+  "default_prompt": "prompts/baseline.md",
+  "by_type": {
+    "實務應用題": "prompts/champions/practical.md",
+    "比較題": "prompts/champions/compare.md"
+  }
+}

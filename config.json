@@ -1,0 +1,34 @@
+{
+  "api": {
+    "url": "https://api.minimaxi.chat/v1/text/chatcompletion_v2",
+    "model": "MiniMax-M2.7",
+    "timeout": 180,
+    "retry": 4,
+    "rate_limit": {
+      "max_concurrent": 8,
+      "min_interval_ms": 100
+    }
+  },
+  "parallel": {
+    "smoke": 6,
+    "dev": 24,
+    "holdout": 24
+  },
+  "thresholds": {
+    "max_candidate_length": 550,
+    "smoke_allowed_drop": 2.0,
+    "smoke_min_score": 75.0,
+    "dev_min_improvement": 1.0,
+    "holdout_max_drop": 1.0,
+    "type_max_regression": 3.0,
+    "word_rate_min": 85.0
+  },
+  "archive": {
+    "max_versions": 20
+  },
+  "multi_candidate": {
+    "enabled": true,
+    "count": 3,
+    "temperatures": [0.5, 0.7, 0.9]
+  }
+}

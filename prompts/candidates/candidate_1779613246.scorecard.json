@@ -1,0 +1,17 @@
+{
+  "candidate_path": "prompts/candidates/candidate_1779613246.md",
+  "candidate_hash": "0b0ed9835ec3408657bef8e76d29417aa771d478332d6144ba74d916ac03359d",
+  "candidate_length": 529,
+  "status": "backfilled_existing",
+  "backfilled_at": "2026-07-07 16:36:08",
+  "direction": "D09【起承轉合強化】",
+  "target_failures": "F09, F10",
+  "hypothesis": "本輪方向：D09【起承轉合強化】。假設：針對 F09, F10 做單點微調，可改善對應低分題型，同時不犧牲其他題型、風險控制與每日懶人版精簡度。",
+  "temperature": "",
+  "candidate_index": "",
+  "source_meta": {
+    "meta_md": "prompts/candidates/candidate_1779613246.meta.md",
+    "meta_json": ""
+  },
+  "note": "Backfilled from existing candidate files; historical gatekeeper/smoke/dev results may be unavailable."
+}

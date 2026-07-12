@@ -1,0 +1,3 @@
+# Prompt AutoResearch dependencies
+# Currently uses Python stdlib only
+# PyYAML>=6.0  # Uncomment if switching config.yaml to PyYAML parsing

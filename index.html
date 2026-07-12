@@ -1,0 +1,924 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Prompt AutoResearch v3 - 臺灣國考高分申論題提示詞優化實驗室</title>
+    <!-- Google Fonts: Outfit, Inter, and Fira Code -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="app-container">
+        <!-- 側邊導覽列 -->
+        <aside class="app-sidebar">
+            <div class="sidebar-brand">
+                <div class="brand-logo">
+                    <i data-lucide="cpu" class="logo-icon"></i>
+                </div>
+                <div class="brand-text">
+                    <h1>AutoResearch v3</h1>
+                    <span>國考申論演化室</span>
+                </div>
+            </div>
+            
+            <nav class="sidebar-nav">
+                <button class="nav-btn active" data-tab="workspace">
+                    <i data-lucide="edit-3"></i>
+                    <span>工作區 & 編輯器</span>
+                </button>
+                <button class="nav-btn" data-tab="optimizer">
+                    <i data-lucide="repeat"></i>
+                    <span>三層閉環優化器</span>
+                </button>
+                <button class="nav-btn" data-tab="architecture">
+                    <i data-lucide="network"></i>
+                    <span>架構總覽</span>
+                </button>
+                <button class="nav-btn" data-tab="questions">
+                    <i data-lucide="database"></i>
+                    <span>分組國考題庫</span>
+                </button>
+                <button class="nav-btn" data-tab="rubrics">
+                    <i data-lucide="award"></i>
+                    <span>評分規準 & 失敗碼</span>
+                </button>
+                <button class="nav-btn" data-tab="arena">
+                    <i data-lucide="swords"></i>
+                    <span>A/B 評測競技場</span>
+                </button>
+                <button class="nav-btn" data-tab="settings">
+                    <i data-lucide="settings"></i>
+                    <span>API 金鑰 & 設定</span>
+                </button>
+            </nav>
+            
+            <div class="sidebar-footer">
+                <div class="user-badge">
+                    <div class="avatar"><i data-lucide="shield-check"></i></div>
+                    <div class="user-info">
+                        <span class="user-role">三層演化模式</span>
+                        <span class="user-status">系統守護中</span>
+                    </div>
+                </div>
+            </div>
+        </aside>
+
+        <!-- 主視窗區 -->
+        <main class="app-main">
+            <!-- 頂部全域功能列 -->
+            <header class="app-header">
+                <div class="header-search">
+                    <i data-lucide="search"></i>
+                    <input type="text" placeholder="搜尋題庫、失敗代碼、優化日誌..." id="global-search">
+                </div>
+                <div class="header-actions">
+                    <div class="status-indicator">
+                        <span class="pulse-dot"></span>
+                        <span class="status-text" id="engine-status">離線模擬模式</span>
+                    </div>
+                    <button class="btn btn-primary" id="btn-quick-optimize">
+                        <i data-lucide="wand-2"></i>
+                        <span>啟動演化</span>
+                    </button>
+                </div>
+            </header>
+
+            <!-- 頁面容器 -->
+            <div class="tab-content-container">
+                
+                <!-- TAB 1: WORKSPACE -->
+                <section class="tab-panel active" id="tab-workspace">
+                    <div class="quickstart-strip">
+                        <div class="quickstart-copy">
+                            <span class="eyebrow">建議流程</span>
+                            <h2>先確認提示詞安全，再啟動三層閉環演化</h2>
+                            <p>這個頁面用來編修每日懶人提示詞；真正的演化流程會先跑 gatekeeper，再跑 smoke / dev / holdout。題庫、評分規準與測試腳本是固定評估基準，不應在優化時修改。</p>
+                        </div>
+                        <div class="quickstart-actions">
+                            <button class="btn btn-primary" data-jump-tab="optimizer">
+                                <i data-lucide="repeat"></i>
+                                <span>前往優化器</span>
+                            </button>
+                            <button class="btn btn-outline" data-jump-tab="questions">
+                                <i data-lucide="database"></i>
+                                <span>查看題庫</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="workflow-cards">
+                        <div class="workflow-card">
+                            <span class="workflow-step">1</span>
+                            <div>
+                                <h3>編輯 current.md</h3>
+                                <p>只改提示詞本身，維持 450 至 600 字、禁止反問與編造。</p>
+                            </div>
+                        </div>
+                        <div class="workflow-card">
+                            <span class="workflow-step">2</span>
+                            <div>
+                                <h3>跑防呆與 smoke</h3>
+                                <p>先擋掉過長、缺比較基準、法律題分流錯誤的候選。</p>
+                            </div>
+                        </div>
+                        <div class="workflow-card">
+                            <span class="workflow-step">3</span>
+                            <div>
+                                <h3>dev / holdout 決策</h3>
+                                <p>dev 提升、題型不崩、holdout 不退步才允許更新 baseline。</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="panel-layout">
+                        <!-- Left: Dual Editors (Current vs Baseline) -->
+                        <div class="panel-col main-editor-col">
+                            <div class="card glass-card">
+                                <div class="card-header">
+                                    <div class="card-title">
+                                        <i data-lucide="file-text" class="card-header-icon text-cyan"></i>
+                                        <h2>當前提示詞 (current.md)</h2>
+                                    </div>
+                                    <span class="badge badge-outline" id="system-prompt-tokens">0 tokens</span>
+                                </div>
+                                <div class="card-body">
+                                    <div class="code-editor-wrapper">
+                                        <div class="line-numbers" id="system-line-numbers">1</div>
+                                        <textarea id="system-prompt-input" placeholder="請定義臺灣國考高分申論題每日懶人提示詞角色與規則..." spellcheck="false">你是一位精通臺灣國家考試（高考、特考）的申論題寫作專家與閱卷委員。
+請針對使用者輸入的國考題目，產出符合高分標準的解答正文，並嚴格遵循以下架構：
+1. 前言破題：簡短定義核心概念，點出題目爭點。
+2. 採分點外露：使用清晰的一、(一)、1. 標題架構，標題即答案，內容具體且富含專業法理或技術名詞。
+3. 結論回扣：總結爭點並扣回題目。
+
+請直接輸出正文答案，不得輸出 any 「好的，以下是分析」或審題邏輯過程，也不得反問使用者。不要編造法條、判決、年份或統計數據。</textarea>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="card glass-card">
+                                <div class="card-header">
+                                    <div class="card-title">
+                                        <i data-lucide="history" class="card-header-icon text-muted"></i>
+                                        <h2>基線對照提示詞 (baseline.md)</h2>
+                                    </div>
+                                    <span class="badge badge-gray">基線提示詞</span>
+                                </div>
+                                <div class="card-body">
+                                    <div class="code-editor-wrapper" style="opacity: 0.7;">
+                                        <div class="line-numbers" id="baseline-line-numbers">1</div>
+                                        <textarea id="baseline-prompt-input" readonly spellcheck="false">你是一位國考申論題老師。
+請幫我回答以下題目，要有前言、本文和結論。
+每一段要用一、(一)等標號標示清楚，多寫一些法條與實務名詞，答案要專業，字數要夠多。</textarea>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- 測試案例即時變數編輯區 -->
+                            <div class="card glass-card">
+                                <div class="card-header">
+                                    <div class="card-title">
+                                        <i data-lucide="play" class="card-header-icon text-emerald"></i>
+                                        <h2>當前測試案例變數</h2>
+                                    </div>
+                                    <div class="card-actions">
+                                        <span class="badge badge-outline" id="active-test-case-lbl">選取題庫：smoke.jsonl (第 1 題)</span>
+                                    </div>
+                                </div>
+                                <div class="card-body no-padding">
+                                    <div class="test-case-variables-grid" id="workspace-test-variables">
+                                        <!-- 動態載入當前題目之變數 -->
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Right: Analyzer Checklist -->
+                        <div class="panel-col sidebar-col">
+                            <div class="card glass-card highlight-card">
+                                <div class="card-header">
+                                    <div class="card-title">
+                                        <i data-lucide="gauge" class="card-header-icon"></i>
+                                        <h2>即時結構評級</h2>
+                                    </div>
+                                </div>
+                                <div class="card-body flex-center flex-column">
+                                    <div class="radial-progress-container">
+                                        <svg class="radial-progress-svg" viewBox="0 0 100 100">
+                                            <circle class="bg" cx="50" cy="50" r="40"></circle>
+                                            <circle class="progress" cx="50" cy="50" r="40" id="radial-score-circle" stroke-dasharray="251.2" stroke-dashoffset="251.2"></circle>
+                                        </svg>
+                                        <div class="score-display">
+                                            <span class="score-number" id="analyzer-score-val">0</span>
+                                            <span class="score-total">/100</span>
+                                        </div>
+                                    </div>
+                                    <div class="score-label" id="analyzer-score-label">計算中...</div>
+                                </div>
+                            </div>
+
+                            <div class="card glass-card">
+                                <div class="card-header">
+                                    <div class="card-title">
+                                        <i data-lucide="shield-alert" class="card-header-icon text-cyan"></i>
+                                        <h2>防呆硬性指標</h2>
+                                    </div>
+                                </div>
+                                <div class="card-body">
+                                    <ul class="checklist-items">
+                                        <li class="checklist-item" id="chk-len">
+                                            <i data-lucide="circle" class="check-icon"></i>
+                                            <div class="chk-details">
+                                                <span class="chk-title">字數限制檢查</span>
+                                                <span class="chk-desc" id="lbl-len-chk">限制在 700 字內以保持簡潔。</span>
+                                            </div>
+                                        </li>
+                                        <li class="checklist-item" id="chk-persona">
+                                            <i data-lucide="circle" class="check-icon"></i>
+                                            <div class="chk-details">
+                                                <span class="chk-title">國考閱卷官角色</span>
+                                                <span class="chk-desc">具備專家、評分委員或寫作名師設定。</span>
+                                            </div>
+                                            <button class="btn btn-sm btn-icon-only text-cyan btn-autofix" data-fix="persona"><i data-lucide="sparkles"></i></button>
+                                        </li>
+                                        <li class="checklist-item" id="chk-anti">
+                                            <i data-lucide="circle" class="check-icon"></i>
+                                            <div class="chk-details">
+                                                <span class="chk-title">排除審題與反問</span>
+                                                <span class="chk-desc">嚴禁反問或輸出「好的，以下為您分析」等廢話。</span>
+                                            </div>
+                                            <button class="btn btn-sm btn-icon-only text-cyan btn-autofix" data-fix="anti"><i data-lucide="sparkles"></i></button>
+                                        </li>
+                                        <li class="checklist-item" id="chk-fabrication">
+                                            <i data-lucide="circle" class="check-icon"></i>
+                                            <div class="chk-details">
+                                                <span class="chk-title">嚴防法條/數據虛構</span>
+                                                <span class="chk-desc">包含「嚴禁編造法條、年份與判決」之命令。</span>
+                                            </div>
+                                            <button class="btn btn-sm btn-icon-only text-cyan btn-autofix" data-fix="fabrication"><i data-lucide="sparkles"></i></button>
+                                        </li>
+                                    </ul>
+                                </div>
+                            </div>
+
+                            <div class="card glass-card">
+                                <div class="card-header">
+                                    <div class="card-title">
+                                        <i data-lucide="lightbulb" class="card-header-icon text-amber"></i>
+                                        <h2>即時優化建議</h2>
+                                    </div>
+                                </div>
+                                <div class="card-body">
+                                    <div class="suggestions-list" id="suggestions-container">
+                                        <!-- 即時回饋內容 -->
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- TAB 2: AUTO-OPTIMIZER -->
+                <section class="tab-panel" id="tab-optimizer">
+                    <div class="panel-layout">
+                        <!-- Left: Evolution controls -->
+                        <div class="panel-col sidebar-col">
+                            <div class="card glass-card">
+                                <div class="card-header">
+                                    <div class="card-title">
+                                        <i data-lucide="sliders" class="card-header-icon text-cyan"></i>
+                                        <h2>優化與決策引導</h2>
+                                    </div>
+                                </div>
+                                <div class="card-body">
+                                    <div class="form-group">
+                                        <label for="opt-goal">本輪演化優化方向</label>
+                                        <select id="opt-goal" class="form-control">
+                                            <option value="general" selected>自動選擇最高頻失敗碼</option>
+                                            <option value="comparison">強化比較題型之比較基準 (F05)</option>
+                                            <option value="case-study">強化法律案例題之涵攝與法源 (F08)</option>
+                                            <option value="efficiency">字數與 Token 壓縮精煉 (F11)</option>
+                                            <option value="anti-fluff">徹底消除廢話與反問輸出 (F02)</option>
+                                        </select>
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="opt-iterations">演化代數 (Generations)</label>
+                                        <select id="opt-iterations" class="form-control">
+                                            <option value="3" selected>3 代演化 (快速校正)</option>
+                                            <option value="5">5 代演化 (深度調校)</option>
+                                            <option value="8">8 代演化 (完整研究)</option>
+                                        </select>
+                                    </div>
+                                    <div class="form-group">
+                                        <label>研發運算引擎</label>
+                                        <div class="toggle-switch-wrapper">
+                                            <span class="toggle-label text-cyan active" id="mode-label-simulation">離線演化模擬</span>
+                                            <label class="switch">
+                                                <input type="checkbox" id="opt-engine-toggle">
+                                                <span class="slider round"></span>
+                                            </label>
+                                            <span class="toggle-label text-purple" id="mode-label-live">真實 LLM API</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="card glass-card">
+                                <div class="card-header">
+                                    <div class="card-title">
+                                        <i data-lucide="terminal-square" class="card-header-icon text-emerald"></i>
+                                        <h2>本機執行指令</h2>
+                                    </div>
+                                </div>
+                                <div class="card-body">
+                                    <div class="command-list">
+                                        <div class="command-item">
+                                            <span>完整跑一代</span>
+                                            <code>python auto_evolve.py 1</code>
+                                        </div>
+                                        <div class="command-item">
+                                            <span>只測 dev 併緒基準</span>
+                                            <code>python scripts\evaluate.py prompts\current.md questions\dev.jsonl --parallel 24</code>
+                                        </div>
+                                        <div class="command-item">
+                                            <span>補 holdout baseline</span>
+                                            <code>python scripts\evaluate.py prompts\baseline.md questions\holdout.jsonl --parallel 24</code>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- 三層閉環流程動態看板 -->
+                            <div class="card glass-card">
+                                <div class="card-header">
+                                    <div class="card-title">
+                                        <i data-lucide="refresh-cw" class="card-header-icon text-purple"></i>
+                                        <h2>三層閉環引擎狀態</h2>
+                                    </div>
+                                </div>
+                                <div class="card-body">
+                                    <div class="loop-visualizer">
+                                        <div class="loop-step" id="step-gatekeeper">
+                                            <div class="step-num">1</div>
+                                            <div class="step-lbl">第一層：防呆過濾閘門</div>
+                                            <span class="step-status">等待中</span>
+                                        </div>
+                                        <div class="loop-step" id="step-smoke">
+                                            <div class="step-num">2</div>
+                                            <div class="step-lbl">第二層：6題 smoke 快速測試</div>
+                                            <span class="step-status">等待中</span>
+                                        </div>
+                                        <div class="loop-step" id="step-formal">
+                                            <div class="step-num">3</div>
+                                            <div class="step-lbl">第三層：36題 dev 正式評分（併緒 24）</div>
+                                            <span class="step-status">等待中</span>
+                                        </div>
+                                        <div class="loop-step" id="step-holdout">
+                                            <div class="step-num">★</div>
+                                            <div class="step-lbl">更新前：18題 holdout 防過擬合</div>
+                                            <span class="step-status">等待中</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="card glass-card">
+                                <div class="card-header">
+                                    <div class="card-title">
+                                        <i data-lucide="database" class="card-header-icon text-cyan"></i>
+                                        <h2>真實運行紀錄</h2>
+                                    </div>
+                                </div>
+                                <div class="card-body">
+                                    <div class="ops-grid">
+                                        <div class="ops-panel">
+                                            <h3>Latest Summary</h3>
+                                            <pre id="latest-summary-preview">讀取中...</pre>
+                                        </div>
+                                        <div class="ops-panel">
+                                            <h3>Latest Decision</h3>
+                                            <pre id="latest-decision-preview">讀取中...</pre>
+                                        </div>
+                                        <div class="ops-panel">
+                                            <h3>Results TSV</h3>
+                                            <pre id="results-preview">讀取中...</pre>
+                                        </div>
+                                        <div class="ops-panel">
+                                            <h3>Baseline Meta</h3>
+                                            <pre id="baseline-meta-preview">讀取中...</pre>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <button class="btn btn-primary btn-block btn-lg" id="btn-start-optimization">
+                                <i data-lucide="play"></i> 開始提示詞演化
+                            </button>
+                            <button class="btn btn-outline btn-block" id="btn-stop-optimization" disabled>
+                                <i data-lucide="square"></i> 中止執行
+                            </button>
+                            <button class="btn btn-outline btn-block" id="btn-run-final">
+                                <i data-lucide="check-circle-2"></i> 啟動 final 驗收（併緒 24）
+                            </button>
+                        </div>
+
+                        <!-- Right: Hacker Terminal Logs -->
+                        <div class="panel-col main-editor-col">
+                            <div class="card glass-card terminal-card">
+                                <div class="card-header">
+                                    <div class="card-title">
+                                        <i data-lucide="terminal" class="card-header-icon text-cyan"></i>
+                                        <h2>演化控制中心日誌</h2>
+                                    </div>
+                                    <span class="badge badge-success" id="terminal-badge">就緒</span>
+                                </div>
+                                <div class="card-body terminal-body" id="terminal-log-output">
+                                    <div class="terminal-line system-line">[系統] 提示詞演化實驗室載入完畢。</div>
+                                    <div class="terminal-line system-line">[系統] 三層閉環評估規準已載入。等待使用者下達演化命令...</div>
+                                </div>
+                                <div class="terminal-progress-bar">
+                                    <div class="progress-fill" id="optimizer-progress" style="width: 0%"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- TAB 3: ARCHITECTURE OVERVIEW -->
+                <section class="tab-panel" id="tab-architecture">
+                    <div class="quickstart-strip architecture-hero">
+                        <div class="quickstart-copy">
+                            <span class="eyebrow">目前架構</span>
+                            <h2>把前端、本機 API、演化引擎與評估資產放在同一張工作圖</h2>
+                            <p>此頁會讀取 <code>/api/architecture</code> 的即時快照，協助確認哪些檔案可改、哪些是固定評估基準，以及每輪演化如何從 gatekeeper 推進到 holdout。</p>
+                        </div>
+                        <div class="quickstart-actions">
+                            <span class="badge badge-outline" id="architecture-generated-at">等待架構快照...</span>
+                            <button class="btn btn-outline" data-jump-tab="optimizer">
+                                <i data-lucide="repeat"></i>
+                                <span>回到優化器</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="architecture-grid">
+                        <div class="card glass-card">
+                            <div class="card-header">
+                                <div class="card-title">
+                                    <i data-lucide="boxes" class="card-header-icon text-cyan"></i>
+                                    <h2>系統模組地圖</h2>
+                                </div>
+                            </div>
+                            <div class="card-body">
+                                <div class="architecture-system-map" id="architecture-system-map">
+                                    <div class="text-muted">載入架構快照中...</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="card glass-card">
+                            <div class="card-header">
+                                <div class="card-title">
+                                    <i data-lucide="database" class="card-header-icon text-purple"></i>
+                                    <h2>資料與題庫資產</h2>
+                                </div>
+                            </div>
+                            <div class="card-body">
+                                <div class="architecture-datasets" id="architecture-datasets">
+                                    <div class="text-muted">等待題庫統計...</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card glass-card">
+                        <div class="card-header">
+                            <div class="card-title">
+                                <i data-lucide="workflow" class="card-header-icon text-emerald"></i>
+                                <h2>演化與驗收管線</h2>
+                            </div>
+                        </div>
+                        <div class="card-body">
+                            <div class="architecture-pipeline" id="architecture-pipeline">
+                                <div class="text-muted">載入管線資訊中...</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card glass-card">
+                        <div class="card-header">
+                            <div class="card-title">
+                                <i data-lucide="shield-alert" class="card-header-icon text-red"></i>
+                                <h2>實驗治理紅燈</h2>
+                            </div>
+                        </div>
+                        <div class="card-body">
+                            <div class="architecture-governance-status" id="architecture-governance-status">
+                                <div class="text-muted">載入實驗治理報告中...</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="architecture-grid">
+                        <div class="card glass-card">
+                            <div class="card-header">
+                                <div class="card-title">
+                                    <i data-lucide="git-branch" class="card-header-icon text-purple"></i>
+                                    <h2>Route Promotion 狀態</h2>
+                                </div>
+                            </div>
+                            <div class="card-body">
+                                <div class="architecture-route-status" id="architecture-route-status">
+                                    <div class="text-muted">載入 route 決策中...</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="card glass-card">
+                            <div class="card-header">
+                                <div class="card-title">
+                                    <i data-lucide="trophy" class="card-header-icon text-amber"></i>
+                                    <h2>題型 Champion 狀態</h2>
+                                </div>
+                            </div>
+                            <div class="card-body">
+                                <div class="architecture-champions-status" id="architecture-champions-status">
+                                    <div class="text-muted">載入 champion 清單中...</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="architecture-grid">
+                        <div class="card glass-card">
+                            <div class="card-header">
+                                <div class="card-title">
+                                    <i data-lucide="route" class="card-header-icon text-cyan"></i>
+                                    <h2>本機 API 路由</h2>
+                                </div>
+                            </div>
+                            <div class="card-body">
+                                <div class="architecture-route-list" id="architecture-routes">
+                                    <div class="text-muted">載入 API 路由中...</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="card glass-card">
+                            <div class="card-header">
+                                <div class="card-title">
+                                    <i data-lucide="file-stack" class="card-header-icon text-amber"></i>
+                                    <h2>關鍵檔案與邊界</h2>
+                                </div>
+                            </div>
+                            <div class="card-body">
+                                <div class="architecture-files" id="architecture-files">
+                                    <div class="text-muted">載入檔案狀態中...</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- TAB 4: QUESTIONS LIBRARY -->
+                <section class="tab-panel" id="tab-questions">
+                    <div class="library-header-grid">
+                        <div class="library-info">
+                            <h2>分組國考題庫資料夾 (questions/)</h2>
+                            <p>題庫分成 smoke、dev、holdout、final 四組。平常優化只看 smoke / dev；holdout 用來防止過度擬合，final 留給最後人工驗收。點選任一題可載入工作區進行單題預覽。</p>
+                        </div>
+                        <div class="library-filter-wrapper" id="question-group-filters">
+                            <button class="btn btn-sm btn-outline filter-btn active" data-group="smoke">smoke.jsonl (6題)</button>
+                            <button class="btn btn-sm btn-outline filter-btn" data-group="dev">dev.jsonl (36題)</button>
+                            <button class="btn btn-sm btn-outline filter-btn" data-group="holdout">holdout.jsonl (18題)</button>
+                            <button class="btn btn-sm btn-outline filter-btn" data-group="final">final.jsonl (12題)</button>
+                        </div>
+                    </div>
+
+                    <div class="dataset-guide-grid">
+                        <div class="dataset-guide-card">
+                            <h3>smoke.jsonl</h3>
+                            <p>快速確認候選提示詞沒有明顯跑版；分數低於 baseline 或硬性規則失敗就直接淘汰。</p>
+                        </div>
+                        <div class="dataset-guide-card">
+                            <h3>dev.jsonl</h3>
+                            <p>主要優化題庫。每類題型 6 題，用來比較平均分、題型退步與失敗碼分布。</p>
+                        </div>
+                        <div class="dataset-guide-card">
+                            <h3>holdout.jsonl</h3>
+                            <p>只在 dev 通過後才跑，必須在更新 baseline 前完成，避免候選只對 dev 題庫有效。</p>
+                        </div>
+                        <div class="dataset-guide-card">
+                            <h3>final.jsonl</h3>
+                            <p>人工驗收用，不參與平常自動演化；用來確認每日提示詞是否真的好用。</p>
+                        </div>
+                    </div>
+
+                    <div class="card glass-card" style="margin-bottom: 24px;">
+                        <div class="card-header">
+                            <div class="card-title">
+                                <i data-lucide="list" class="card-header-icon text-cyan"></i>
+                                <h2 id="question-group-title">smoke.jsonl 題庫列表</h2>
+                            </div>
+                        </div>
+                        <div class="card-body no-padding">
+                            <div class="questions-list-table-wrapper">
+                                <table class="questions-table">
+                                    <thead>
+                                        <tr>
+                                            <th style="width: 80px;">編號</th>
+                                            <th style="width: 120px;">題型</th>
+                                            <th>題目內容</th>
+                                            <th style="width: 160px;">專項要求</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="questions-table-body">
+                                        <!-- 動態產生的題目行 -->
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- TAB 5: RUBRICS & FAILURES -->
+                <section class="tab-panel" id="tab-rubrics">
+                    <div class="panel-layout panel-vertical">
+                        
+                        <!-- Triple Scoring Card Systems -->
+                        <div class="card glass-card">
+                            <div class="card-header">
+                                <div class="card-title">
+                                    <i data-lucide="award" class="card-header-icon text-cyan"></i>
+                                    <h2>三重評分規準系統 (Triple Rubrics)</h2>
+                                </div>
+                            </div>
+                            <div class="card-body">
+                                <p class="text-muted" style="margin-bottom: 20px;">演化引擎使用嚴密的 100 分量表，對候選提示詞產出的答題正文進行全方位審查：</p>
+                                
+                                <div class="rubrics-grid-cards">
+                                    <div class="rubric-spec-card">
+                                        <div class="spec-header">一、基礎申論分 (70分)</div>
+                                        <ul class="spec-list">
+                                            <li><span>題意命中 (15分)</span>：精準鎖定並完整回答考題爭點。</li>
+                                            <li><span>架構清楚 (10分)</span>：一、(一)、1. 段落分明，結構對稱。</li>
+                                            <li><span>採分點外露 (15分)</span>：標題即答案，能吸引閱卷委員。</li>
+                                            <li><span>內容具體 (15分)</span>：包含核心法理、學理名詞與實務案例。</li>
+                                            <li><span>考場語氣 (10分)</span>：精煉客觀的學術/公務書寫語氣。</li>
+                                            <li><span>結論回扣 (5分)</span>：收尾並再次呼應考題核心。</li>
+                                        </ul>
+                                    </div>
+                                    
+                                    <div class="rubric-spec-card">
+                                        <div class="spec-header">二、題型專項分 (20分)</div>
+                                        <ul class="spec-list">
+                                            <li><span>說明題</span>：概念定義、關聯圖譜與典型實例。</li>
+                                            <li><span>比較題</span>：明確列出比較基準，進行橫向整合。</li>
+                                            <li><span>評析題</span>：正面效益、負面限制與客觀評價。</li>
+                                            <li><span>法律案例題</span>：爭點列舉、法律依據、涵攝過程與結論。</li>
+                                            <li><span>法律法理題</span>：立法本旨、核心要件與司法實務意義。</li>
+                                            <li><span>實務應用題</span>：改善方案、具體工具與執行評估。</li>
+                                        </ul>
+                                    </div>
+
+                                    <div class="rubric-spec-card">
+                                        <div class="spec-header">三、風險扣分 (10分)</div>
+                                        <ul class="spec-list">
+                                            <li><span>法條虛構 (-4分)</span>：編造法條、司法院釋字或裁判字號。</li>
+                                            <li><span>廢話反問 (-2分)</span>：詢問使用者意見或出現對話引言。</li>
+                                            <li><span>輸出審題 (-2分)</span>：輸出內心審題思路或大綱。</li>
+                                            <li><span>散文心得 (-2分)</span>：以非申論題語調抒發個人情緒。</li>
+                                        </ul>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Failure Taxonomy Explorer -->
+                        <div class="card glass-card">
+                            <div class="card-header">
+                                <div class="card-title">
+                                    <i data-lucide="tag" class="card-header-icon text-purple"></i>
+                                    <h2>國考申論失敗分類代碼 (Failure Taxonomy)</h2>
+                                </div>
+                            </div>
+                            <div class="card-body">
+                                <p class="text-muted" style="margin-bottom: 20px;">當候選提示詞評分低於 baseline 或特定題目崩潰時，評分引擎會自動標註失敗代碼，並在 Workspace 提示優化方向。點擊任何代碼可為其注入專屬改善邏輯：</p>
+                                <div class="failures-grid" id="failures-grid-container">
+                                    <!-- 動態產生 F01 - F14 -->
+                                </div>
+                            </div>
+                        </div>
+
+                    </div>
+                </section>
+
+                <!-- TAB 6: AB ARENA -->
+                <section class="tab-panel" id="tab-arena">
+                    <div class="panel-layout panel-vertical">
+                        
+                        <!-- Top Prompt A/B Configuration -->
+                        <div class="arena-split-prompts">
+                            <!-- Original -->
+                            <div class="card glass-card">
+                                <div class="card-header">
+                                    <div class="card-title">
+                                        <span class="badge badge-gray">A (對照組)</span>
+                                        <h2>基線 / 舊提示詞配置 (baseline)</h2>
+                                    </div>
+                                </div>
+                                <div class="card-body">
+                                    <pre class="prompt-preview-block" id="arena-prompt-original">載入中...</pre>
+                                </div>
+                            </div>
+
+                            <!-- Optimized -->
+                            <div class="card glass-card">
+                                <div class="card-header">
+                                    <div class="card-title">
+                                        <span class="badge badge-purple">B (演化組)</span>
+                                        <h2>演化後提示詞配置 (optimized)</h2>
+                                    </div>
+                                    <button class="btn btn-sm btn-primary" id="btn-apply-optimized">
+                                        <i data-lucide="check"></i> 套用至工作區
+                                    </button>
+                                </div>
+                                <div class="card-body">
+                                    <pre class="prompt-preview-block" id="arena-prompt-optimized">尚未進行演化。請先至優化器進行演化。</pre>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Diff analysis -->
+                        <div class="card glass-card">
+                            <div class="card-header">
+                                <div class="card-title">
+                                    <i data-lucide="split" class="card-header-icon text-cyan"></i>
+                                    <h2>演化差異細節 (紅字刪除 -，綠字新增 +)</h2>
+                                </div>
+                            </div>
+                            <div class="card-body">
+                                <div class="diff-view-output" id="arena-diff-output">
+                                    <span class="text-muted">啟動提示詞演化後，此處將輸出具體的 word-level 文字差異對照。</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Category metrics comparison -->
+                        <div class="card glass-card">
+                            <div class="card-header">
+                                <div class="card-title">
+                                    <i data-lucide="bar-chart-2" class="card-header-icon text-purple"></i>
+                                    <h2>題型演化跑分比較</h2>
+                                </div>
+                            </div>
+                            <div class="card-body">
+                                <div class="arena-metrics-grid" id="arena-metrics-compare">
+                                    <!-- 動態生成各題型的跑分對照 -->
+                                    <div class="text-muted">等待演化結果載入跑分圖表...</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Sandbox Side by Side Playgrounds -->
+                        <div class="card glass-card">
+                            <div class="card-header">
+                                <div class="card-title">
+                                    <i data-lucide="play-circle" class="card-header-icon text-emerald"></i>
+                                    <h2>國考申論沙盒測試</h2>
+                                </div>
+                                <div class="card-actions">
+                                    <button class="btn btn-outline" id="btn-arena-run-test">
+                                        <i data-lucide="play"></i> 執行申論跑跑模擬 (Simulated)
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="card-body no-padding">
+                                <div class="sandbox-comparison-grid">
+                                    <div class="sandbox-column">
+                                        <div class="sandbox-column-header">基線答案 (A組)</div>
+                                        <div class="sandbox-response-area" id="sandbox-response-original">
+                                            <span class="text-muted">請點擊上方按鈕執行模擬。</span>
+                                        </div>
+                                    </div>
+                                    <div class="sandbox-column">
+                                        <div class="sandbox-column-header">優化後答案 (B組)</div>
+                                        <div class="sandbox-response-area" id="sandbox-response-optimized">
+                                            <span class="text-muted">請點擊上方按鈕執行模擬。</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                    </div>
+                </section>
+
+                <!-- TAB 7: SETTINGS -->
+                <section class="tab-panel" id="tab-settings">
+                    <div class="panel-layout">
+                        <div class="panel-col main-editor-col">
+                            <div class="card glass-card">
+                                <div class="card-header">
+                                    <div class="card-title">
+                                        <i data-lucide="key" class="card-header-icon text-cyan"></i>
+                                        <h2>API 串接參數</h2>
+                                    </div>
+                                </div>
+                                <div class="card-body">
+                                    <div class="settings-form">
+                                        <p class="settings-desc">輸入您的 API Key 可以啟用 **真實 LLM API** 演化模式。所有演化演算都使用 Meta-prompt 重新改版系統提示詞，並使用目標金鑰直接對您的題目進行評分評估。</p>
+                                        
+                                        <div class="form-group">
+                                            <label for="settings-provider">API 供應商 (Provider)</label>
+                                            <select id="settings-provider" class="form-control">
+                                                <option value="gemini">Google Gemini API</option>
+                                                <option value="openai">OpenAI API</option>
+                                                <option value="anthropic">Anthropic Claude API</option>
+                                                <option value="minimax">MiniMax API (大模型)</option>
+                                            </select>
+                                        </div>
+
+                                        <div class="form-group">
+                                            <label for="settings-api-key">API 金鑰 (Secret Key)</label>
+                                            <div class="api-key-input-wrapper">
+                                                <input type="password" id="settings-api-key" placeholder="輸入 API 金鑰 (AIzaSy... 或 sk-...)" class="form-control">
+                                                <button class="btn btn-outline" id="btn-toggle-key-visibility"><i data-lucide="eye"></i></button>
+                                            </div>
+                                        </div>
+
+                                        <div class="form-group">
+                                            <label for="settings-model">演化評估模型 (Target Model)</label>
+                                            <select id="settings-model" class="form-control">
+                                                <!-- 動態填入 -->
+                                            </select>
+                                        </div>
+
+                                        <div class="form-group">
+                                            <label for="settings-temperature">模型溫度 (Temperature)</label>
+                                            <div class="range-slider-wrapper">
+                                                <input type="range" id="settings-temperature" min="0" max="1" step="0.1" value="0.7">
+                                                <span class="range-value" id="settings-temp-val">0.7</span>
+                                            </div>
+                                        </div>
+
+                                        <div class="settings-actions">
+                                            <button class="btn btn-primary" id="btn-save-settings">
+                                                <i data-lucide="save"></i> 儲存設定
+                                            </button>
+                                            <button class="btn btn-outline text-red" id="btn-clear-settings">
+                                                <i data-lucide="trash-2"></i> 清除金鑰
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="panel-col sidebar-col">
+                            <div class="card glass-card">
+                                <div class="card-header">
+                                    <div class="card-title">
+                                        <i data-lucide="shield-check" class="card-header-icon text-emerald"></i>
+                                        <h2>安全與架構說明</h2>
+                                    </div>
+                                </div>
+                                <div class="card-body">
+                                    <ul class="security-rules-list">
+                                        <li>
+                                            <i data-lucide="check" class="text-success"></i>
+                                            <span><strong>本機存儲</strong>：金鑰與題目完全留在您的瀏覽器 local storage 內，不經由第三方伺服器。</span>
+                                        </li>
+                                        <li>
+                                            <i data-lucide="check" class="text-success"></i>
+                                            <span><strong>硬性規則防護</strong>：在 Live API 模式中，第一層過濾器仍會攔截有編造法條嫌疑或長度超標的候選提示詞，為您節省 token 成本。</span>
+                                        </li>
+                                        <li>
+                                            <i data-lucide="check" class="text-success"></i>
+                                            <span><strong>固定評估基準</strong>：題庫、rubric 與測試腳本是 ground truth metric；演化時只允許修改 prompt，不應改評分器換分數。</span>
+                                        </li>
+                                        <li>
+                                            <i data-lucide="check" class="text-success"></i>
+                                            <span><strong>可回溯決策</strong>：每輪會留下 summary 與 decision，方便追查候選為何 ACCEPT 或 REVERT。</span>
+                                        </li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+                
+            </div>
+        </main>
+    </div>
+
+    <!-- Notification Toast -->
+    <div class="toast-container" id="toast-container"></div>
+
+    <script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,39 @@
+{
+  "updated_at": "2026-05-25 12:45:05",
+  "kind": "type_champion",
+  "type": "比較題",
+  "type_slug": "compare",
+  "champion_prompt_path": "prompts/champions/compare.md",
+  "candidate_path": "prompts/candidates/compare_champion_candidate_1779684138.md",
+  "candidate_hash": "cfb8f4adde69b5afa61fbc40260e09f4cda0fa2d733cf6519747e2a691cd88c0",
+  "dev_run": "runs\\20260525_124336",
+  "holdout_run": "runs\\20260525_124505",
+  "dev_comparison": {
+    "score_diff": 2.5,
+    "risk_rate": 100.0,
+    "base_risk_rate": 100.0,
+    "failure_new": {},
+    "failure_base": {},
+    "type_diffs": {
+      "比較題": {
+        "baseline_avg": 94.16666666666667,
+        "candidate_avg": 96.66666666666667,
+        "diff": 2.5
+      }
+    }
+  },
+  "holdout_comparison": {
+    "score_diff": 0.0,
+    "risk_rate": 100.0,
+    "base_risk_rate": 100.0,
+    "failure_new": {},
+    "failure_base": {},
+    "type_diffs": {
+      "比較題": {
+        "baseline_avg": 94.66666666666667,
+        "candidate_avg": 94.66666666666667,
+        "diff": 0.0
+      }
+    }
+  }
+}

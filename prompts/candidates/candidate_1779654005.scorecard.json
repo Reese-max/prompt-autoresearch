@@ -1,0 +1,17 @@
+{
+  "candidate_path": "prompts/candidates/candidate_1779654005.md",
+  "candidate_hash": "0eeaee36722e877b675f5aeb3b50ce587984433d4187d0f05c20df669959ae1f",
+  "candidate_length": 532,
+  "status": "backfilled_existing",
+  "backfilled_at": "2026-07-07 16:36:10",
+  "direction": "D10【風險與語氣控制】",
+  "target_failures": "F11, F12, F13",
+  "hypothesis": "本輪方向：D10【風險與語氣控制】。假設：針對 F11, F12, F13 做單點微調，可改善對應低分題型，同時不犧牲其他題型、風險控制與每日懶人版精簡度。",
+  "temperature": "",
+  "candidate_index": "",
+  "source_meta": {
+    "meta_md": "prompts/candidates/candidate_1779654005.meta.md",
+    "meta_json": ""
+  },
+  "note": "Backfilled from existing candidate files; historical gatekeeper/smoke/dev results may be unavailable."
+}

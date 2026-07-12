@@ -1,0 +1,17 @@
+{
+  "candidate_path": "prompts/candidates/elite/legal_case_20260524_170839_b986b4bb.md",
+  "candidate_hash": "b986b4bb985f1e58fbe8461d7afc6774e194b85683fd82e9baa7387d28dbf182",
+  "candidate_length": 529,
+  "status": "backfilled_existing",
+  "backfilled_at": "2026-07-07 16:36:18",
+  "direction": "D04【具體化與佐證】",
+  "target_failures": "",
+  "hypothesis": "回填 20260524_163235：法律案例題局部突破 +8.83，整體未晉升但保留為專項候選。",
+  "temperature": "",
+  "candidate_index": "",
+  "source_meta": {
+    "meta_md": "",
+    "meta_json": "prompts/candidates/elite/legal_case_20260524_170839_b986b4bb.meta.json"
+  },
+  "note": "Backfilled from existing candidate files; historical gatekeeper/smoke/dev results may be unavailable."
+}

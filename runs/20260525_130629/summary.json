@@ -1,0 +1,22 @@
+{
+  "timestamp": "2026-05-25 13:06:29",
+  "prompt_file": "prompts/candidates\\practical_champion_candidate_1779685476.md",
+  "question_file": ".cache/type_questions/dev_practical.jsonl",
+  "prompt_hash": "a895b92274117ebb9e14f9c821a3853deecdf01b1b6cd6dc691721c243a490c9",
+  "elapsed_seconds": 112.11589336395264,
+  "total_questions": 6,
+  "average_score": 86.33333333333333,
+  "type_averages": {
+    "實務應用題": 86.33333333333333
+  },
+  "failure_counts": {
+    "F03": 3,
+    "F04": 3
+  },
+  "word_count_pass_rate": 0.0,
+  "risk_perfect_rate": 83.33333333333334,
+  "char_count": 248,
+  "cache_hit_count": 0,
+  "error_count": 0,
+  "estimated_api_calls": 12
+}

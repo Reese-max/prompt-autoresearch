@@ -1,0 +1,19 @@
+{
+  "timestamp": "2026-05-26 00:38:20",
+  "prompt_file": "prompts/baseline.md",
+  "question_file": ".cache/type_questions/dev_explain.jsonl",
+  "prompt_hash": "00db51fc1a418ef904ad4398b1d1eb04ac7eb3f57344ac325da28df227dfe74d",
+  "elapsed_seconds": 0.025995969772338867,
+  "total_questions": 6,
+  "average_score": 91.5,
+  "type_averages": {
+    "說明題": 91.5
+  },
+  "failure_counts": {},
+  "word_count_pass_rate": 0.0,
+  "risk_perfect_rate": 100.0,
+  "char_count": 442,
+  "cache_hit_count": 6,
+  "error_count": 0,
+  "estimated_api_calls": 0
+}

@@ -1,0 +1,24 @@
+{
+  "timestamp": "2026-06-02 22:26:25",
+  "prompt_file": "prompts/candidates\\legal_case_champion_candidate_1780410008.md",
+  "question_file": ".cache/type_questions/holdout_legal_case.jsonl",
+  "prompt_hash": "f7c982cfcac7405adec2a2f75ba1225b6db23e749716d2d60b8215fe94986a00",
+  "elapsed_seconds": 94.71448969841003,
+  "total_questions": 3,
+  "average_score": 82.33333333333333,
+  "type_averages": {
+    "法律案例題": 82.33333333333333
+  },
+  "failure_counts": {
+    "F03": 1,
+    "F04": 1,
+    "F01": 1,
+    "F08": 1
+  },
+  "word_count_pass_rate": 0.0,
+  "risk_perfect_rate": 33.33333333333333,
+  "char_count": 354,
+  "cache_hit_count": 0,
+  "error_count": 0,
+  "estimated_api_calls": 6
+}

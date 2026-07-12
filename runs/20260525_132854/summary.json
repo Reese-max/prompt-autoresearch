@@ -1,0 +1,23 @@
+{
+  "timestamp": "2026-05-25 13:28:54",
+  "prompt_file": "prompts/candidates\\legal_theory_champion_candidate_1779686805.md",
+  "question_file": ".cache/type_questions/dev_legal_theory.jsonl",
+  "prompt_hash": "bd3ad9d56b6d5af9a05be3919d230a31ba0e8c38dc9f2cf55ff2e17577e2eb18",
+  "elapsed_seconds": 128.0407977104187,
+  "total_questions": 6,
+  "average_score": 88.66666666666667,
+  "type_averages": {
+    "法律法理題": 88.66666666666667
+  },
+  "failure_counts": {
+    "F03": 2,
+    "F04": 1,
+    "F12": 1
+  },
+  "word_count_pass_rate": 0.0,
+  "risk_perfect_rate": 83.33333333333334,
+  "char_count": 392,
+  "cache_hit_count": 0,
+  "error_count": 0,
+  "estimated_api_calls": 12
+}

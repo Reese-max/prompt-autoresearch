@@ -1,0 +1,7 @@
+{
+  "name": "route_legal_case",
+  "default_prompt": "prompts/baseline.md",
+  "by_type": {
+    "法律案例題": "prompts/champions/legal_case.md"
+  }
+}

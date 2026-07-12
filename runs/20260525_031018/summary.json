@@ -1,0 +1,33 @@
+{
+  "timestamp": "2026-05-25 03:10:18",
+  "prompt_file": "prompts\\candidates\\candidate_1779646345_risk_repair_v2.md",
+  "question_file": "questions/dev.jsonl",
+  "prompt_hash": "62ea64193384556af767842f60cd06f7deb783ccf377902f296eaee19f530021",
+  "elapsed_seconds": 272.7574875354767,
+  "total_questions": 36,
+  "average_score": 86.83333333333333,
+  "type_averages": {
+    "說明題": 91.16666666666667,
+    "比較題": 88.33333333333333,
+    "實務應用題": 85.66666666666667,
+    "評析題": 83.66666666666667,
+    "法律法理題": 87.33333333333333,
+    "法律案例題": 84.83333333333333
+  },
+  "failure_counts": {
+    "F04": 12,
+    "F01": 1,
+    "F13": 1,
+    "F06": 3,
+    "F03": 12,
+    "F10": 2,
+    "F08": 1,
+    "F12": 1
+  },
+  "word_count_pass_rate": 0.0,
+  "risk_perfect_rate": 86.11111111111111,
+  "char_count": 549,
+  "cache_hit_count": 0,
+  "error_count": 0,
+  "estimated_api_calls": 72
+}

@@ -1,0 +1,20 @@
+{
+  "saved_at": "2026-05-24 17:08:39",
+  "kind": "elite_candidate",
+  "type": "法律案例題",
+  "type_slug": "legal_case",
+  "candidate_hash": "b986b4bb985f1e58fbe8461d7afc6774e194b85683fd82e9baa7387d28dbf182",
+  "candidate_source": "prompts/candidates/candidate_1779611170.md",
+  "elite_prompt_path": "prompts/candidates/elite\\legal_case_20260524_170839_b986b4bb.md",
+  "direction": "D04【具體化與佐證】",
+  "hypothesis": "回填 20260524_163235：法律案例題局部突破 +8.83，整體未晉升但保留為專項候選。",
+  "dev_run": "runs/20260524_163235",
+  "baseline_dev_run": "runs/20260524_041843",
+  "baseline_avg": 74.67,
+  "candidate_avg": 83.5,
+  "diff": 8.83,
+  "overall_diff": 0.19,
+  "risk_rate": 100.0,
+  "base_risk_rate": 97.2,
+  "decision": "SPECIALTY_RETAINED"
+}

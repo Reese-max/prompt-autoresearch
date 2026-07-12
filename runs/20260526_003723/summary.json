@@ -1,0 +1,39 @@
+{
+  "timestamp": "2026-05-26 00:37:23",
+  "prompt_file": "prompts/routes/candidates\\20260526_003301_baseline_only.json",
+  "question_file": "questions/dev.jsonl",
+  "prompt_hash": "e40037a7864c34442971969313989d33dd8256f57e0c4cd9e5e1216ec00771e2",
+  "elapsed_seconds": 260.7775797843933,
+  "total_questions": 36,
+  "average_score": 89.16666666666667,
+  "type_averages": {
+    "評析題": 89.33333333333333,
+    "法律法理題": 91.0,
+    "實務應用題": 86.83333333333333,
+    "比較題": 95.5,
+    "說明題": 87.33333333333333,
+    "法律案例題": 85.0
+  },
+  "failure_counts": {
+    "F04": 11,
+    "F03": 10,
+    "F08": 1,
+    "F06": 1
+  },
+  "word_count_pass_rate": 0.0,
+  "risk_perfect_rate": 97.22222222222221,
+  "char_count": 89,
+  "cache_hit_count": 30,
+  "error_count": 0,
+  "estimated_api_calls": 12,
+  "route_file": "prompts/routes/candidates/20260526_003301_baseline_only.json",
+  "route_name": "baseline_only",
+  "route": {
+    "name": "baseline_only",
+    "default_prompt": "prompts/baseline.md",
+    "by_type": {}
+  },
+  "prompt_usage": {
+    "prompts/baseline.md": 36
+  }
+}
