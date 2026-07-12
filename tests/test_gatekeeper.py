@@ -3,6 +3,7 @@ import json
 import re
 import subprocess
 import sys
+import pytest
 from pathlib import Path
 
 BASE_PROMPT = (
@@ -290,3 +291,34 @@ def test_gatekeeper_hard_rule_08_direct_output_warning_and_no_trigger(tmp_path):
     assert payload is not None
     assert payload["passed"] is True
     _assert_violation(payload["violations"], "R08_NO_DIRECT_OUTPUT", expected_present=False)
+
+
+@pytest.mark.parametrize(
+    ("role_phrase", "expected_passed", "expected_severity"),
+    [
+        ("國考顧問", True, "warning"),      # 同義改寫：應正確降級
+        ("國考、顧問", False, "reject"),   # 標點插入：未命中等價關鍵詞，應保留 Reject
+        ("顧問國考", False, "reject"),     # 詞序微調：未命中等價關鍵詞，應保留 Reject
+    ],
+)
+def test_gatekeeper_semantic_equivalent_layer_covers_rewrite_punctuation_order(role_phrase, expected_passed, expected_severity, tmp_path):
+    prompt = BASE_PROMPT.replace("你是閱卷委員兼考官，", f"你是{role_phrase}，")
+
+    code, payload, _ = _run_gatekeeper_cli(prompt, tmp_path)
+    assert payload is not None
+    assert payload["passed"] is expected_passed
+    assert code == (0 if expected_passed else 1)
+
+    _assert_violation(
+        payload["violations"],
+        "R05_NO_EXPERT_ROLE",
+        expected_present=True,
+        expected_severity=expected_severity,
+    )
+
+    target = [v for v in payload["violations"] if v["rule"] == "R05_NO_EXPERT_ROLE"][0]
+    has_semantic_pass = "語意驗證通過：包含等價表達" in target["detail"]
+    if expected_passed:
+        assert has_semantic_pass is True
+    else:
+        assert has_semantic_pass is False
