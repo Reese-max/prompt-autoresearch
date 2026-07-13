@@ -1,0 +1,35 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install -r requirements-dev.txt
+      # 驗收閘門：覆蓋率只計 scripts/ 與 api/，不得混入 lib/ 拉高總覆蓋率。
+      # pytest.ini 的 addopts 含 --cov=lib，故以 -o addopts= 覆蓋後再明確指定範圍。
+      - name: Coverage gate (scripts + api only, >=80%)
+        run: >
+          pytest tests -o addopts=
+          --cov=scripts --cov=api
+          --cov-report=term-missing
+          --cov-report=xml --cov-report=html
+          --cov-fail-under=80
+      - name: Upload coverage reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-reports
+          path: |
+            coverage.xml
+            htmlcov/
