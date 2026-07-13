@@ -283,6 +283,21 @@ def test_run_evaluation_early_stop(tmp_path, monkeypatch):
     assert len(results) >= 2
 
 
+def test_run_evaluation_early_stop_not_triggered_when_score_high(tmp_path, monkeypatch, capsys):
+    """設定 early_stop_threshold 但成績在容忍範圍內（>= threshold-3）→ 不早停，全數完成。"""
+    monkeypatch.chdir(tmp_path)
+    pf, qf = _write_inputs(tmp_path, 6)
+
+    def fake_esq(q, *a, **k):
+        return make_result(id=q["id"], total_score=88)
+
+    monkeypatch.setattr(evaluate, "evaluate_single_question", fake_esq)
+    summary, results = evaluate.run_evaluation(pf, qf, max_workers=1, early_stop_threshold=90.0)
+    assert len(results) == 6
+    assert summary["total_questions"] == 6
+    assert "[Early Stop]" not in capsys.readouterr().out
+
+
 # ---------- calculate_statistics ----------
 
 def test_calculate_statistics_empty():
@@ -380,3 +395,12 @@ def test_main_defaults_and_bad_flag_values(monkeypatch):
                         ["evaluate.py", "p.md", "q.jsonl", "--parallel", "abc", "--early-stop"])
     evaluate.main()
     assert captured["workers"] == 6 and captured["threshold"] is None
+
+
+def test_main_without_flags_uses_defaults(monkeypatch):
+    """完全不帶 --parallel / --early-stop → not-in 分支，workers=6、threshold=None。"""
+    captured = {}
+    _patch_pipeline(monkeypatch, captured)
+    monkeypatch.setattr(sys, "argv", ["evaluate.py", "p.md", "q.jsonl"])
+    evaluate.main()
+    assert captured == {"pf": "p.md", "qf": "q.jsonl", "workers": 6, "threshold": None}

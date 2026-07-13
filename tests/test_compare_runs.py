@@ -204,3 +204,22 @@ def test_cli_mode_flag_without_value(tmp_path, monkeypatch, capsys):
     new = make_run(tmp_path / "new", [rec("q1", score=85.0)])
     run_cli(["compare_runs.py", new, base, "--mode"], monkeypatch)
     assert "mode=pragmatic" in capsys.readouterr().out  # IndexError → 預設
+
+
+def test_cli_without_mode_flag_uses_env_default(tmp_path, monkeypatch, capsys):
+    """CLI 不帶 --mode → cli_mode=None，acceptance_mode() 走 env 預設 pragmatic。"""
+    monkeypatch.delenv("AUTORESEARCH_ACCEPTANCE_MODE", raising=False)
+    base = make_run(tmp_path / "base", [rec("q1")])
+    new = make_run(tmp_path / "new", [rec("q1", score=85.0)])
+    run_cli(["compare_runs.py", new, base], monkeypatch)
+    assert "mode=pragmatic" in capsys.readouterr().out
+
+
+def test_compare_base_falsy_failure_not_counted(tmp_path, capsys):
+    """base 端 failures 含空字串時不得計入 failure_base（`if f:` 邊界）。"""
+    base = make_run(tmp_path / "base", [rec("q1", failures=["F03", ""])])
+    new = make_run(tmp_path / "new", [rec("q1", score=86.0)])
+    cr.compare(new, base, mode="pragmatic")
+    assert cr.LAST_COMPARISON["failure_base"] == {"F03": 1}
+    assert "" not in cr.LAST_COMPARISON["failure_base"]
+    assert cr.LAST_COMPARISON["failure_new"] == {}

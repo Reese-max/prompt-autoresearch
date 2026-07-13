@@ -220,3 +220,17 @@ def test_main_success_path(monkeypatch, tmp_path, capsys):
     out = capsys.readouterr().out
     assert "路由評估完成" in out
     assert "prompts/p_legal.md" in out
+
+
+def test_main_without_parallel_defaults_to_24(monkeypatch, tmp_path, capsys):
+    """CLI 不帶 --parallel → not-in 分支，workers 使用預設 24。"""
+    monkeypatch.chdir(tmp_path)
+    route_file, _ = make_route(tmp_path)
+    q_file = make_questions(tmp_path, [{"id": "q1", "type": "legal", "question": "Q1"}])
+    patch_evaluate(monkeypatch, tmp_path)
+
+    run_as_main(monkeypatch, ["evaluate_routed.py", str(route_file), str(q_file)])
+
+    out = capsys.readouterr().out
+    assert "並行執行緒: 24" in out
+    assert "路由評估完成" in out
