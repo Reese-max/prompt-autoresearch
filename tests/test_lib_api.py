@@ -76,6 +76,7 @@ def test_call_minimax_success_parses_and_returns_trimmed_content(
 
     assert ans == "這是一段回應"
     assert mock_urlopen.call_count == 1
+    assert mock_urlopen.call_args.kwargs["timeout"] == 1
 
     request = mock_urlopen.call_args.args[0]
     assert request.full_url == "https://api.example.local/v1/chat"

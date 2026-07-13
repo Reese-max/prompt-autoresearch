@@ -157,6 +157,42 @@ def test_esq_success(tmp_path, monkeypatch):
     assert evaluate.load_cached_result("h" * 64, "q.jsonl", 1)["total_score"] == 79
 
 
+def test_esq_call_minimax_invocation_contract(tmp_path, monkeypatch):
+    """驗證兩次 call_minimax 的呼叫方式（system/user/temperature）與回傳值處理。"""
+    monkeypatch.chdir(tmp_path)
+    judge_out = "```json\n" + json.dumps(JUDGE_JSON, ensure_ascii=False) + "\n```"
+    calls = []
+
+    def fake(system, user, temperature=0.7):
+        calls.append({"system": system, "user": user, "temperature": temperature})
+        return ["模擬答案", judge_out][len(calls) - 1]
+
+    monkeypatch.setattr(evaluate, "call_minimax", fake)
+    res = evaluate.evaluate_single_question(
+        QUESTION, "系統提示詞", "g規", "t規", "r規", "f規", "h" * 64, "q.jsonl"
+    )
+
+    # 答題呼叫：system prompt 原樣傳入、題目嵌入 user、temperature=0.3
+    answer_call = calls[0]
+    assert answer_call["system"] == "系統提示詞"
+    assert QUESTION["question"] in answer_call["user"]
+    assert answer_call["temperature"] == 0.3
+
+    # 閱卷呼叫：四份 rubric、題目、採分點與第一次回傳的答案皆嵌入 user、temperature=0.1
+    judge_call = calls[1]
+    assert "閱卷官" in judge_call["system"]
+    for rubric in ("g規", "t規", "r規", "f規"):
+        assert rubric in judge_call["user"]
+    assert QUESTION["question"] in judge_call["user"]
+    assert "定義, 要件" in judge_call["user"]
+    assert "模擬答案" in judge_call["user"]
+    assert judge_call["temperature"] == 0.1
+
+    # 回傳處理：answer/char_count 來自第一次呼叫的回傳值
+    assert res["answer"] == "模擬答案"
+    assert res["char_count"] == len("模擬答案")
+
+
 def test_esq_judge_retry_then_success(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     judge_out = "```json\n" + json.dumps(JUDGE_JSON, ensure_ascii=False) + "\n```"

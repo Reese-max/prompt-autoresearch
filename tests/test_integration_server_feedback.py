@@ -203,6 +203,33 @@ def test_optimization_round_passes_direction_and_parallel(env, monkeypatch):
     assert captured["cwd"] == str(env)
 
 
+def test_optimization_round_subprocess_kwargs_and_output_truncation(env, monkeypatch):
+    """驗證 subprocess.run 的呼叫方式（kwargs）與 stdout/stderr 回傳截斷處理。"""
+    long_stdout = "長輸出" + "x" * 2000
+    long_stderr = "錯" + "y" * 1000
+    captured = {}
+
+    def fake_run(cmd, **kwargs):
+        captured["kwargs"] = kwargs
+        return FakeCompleted(returncode=0, stdout=long_stdout, stderr=long_stderr)
+
+    monkeypatch.setattr(optimizer.subprocess, "run", fake_run)
+    assert optimizer.run_optimization_round(direction="structure") is True
+
+    kw = captured["kwargs"]
+    assert kw["capture_output"] is True
+    assert kw["text"] is True
+    assert kw["timeout"] == 3600
+
+    logs = [json.loads(line) for line in
+            (env / "optimization_log.jsonl").read_text(encoding="utf-8").splitlines()]
+    rec = logs[-1]
+    assert rec["event"] == "optimization" and rec["success"] is True
+    # log 只保留 stdout 尾 1000、stderr 尾 500 字元
+    assert rec["stdout"] == long_stdout[-1000:]
+    assert rec["stderr"] == long_stderr[-500:]
+
+
 def test_optimization_round_without_direction_omits_flag(env, monkeypatch):
     captured = {}
     monkeypatch.setattr(
