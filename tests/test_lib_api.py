@@ -121,7 +121,7 @@ def test_call_minimax_request_headers_and_payload_match_expectations(
     ]
 
 
-def test_call_minimax_non_200_raises_http_error(_mock_api_runtime, mock_urlopen):
+def test_call_minimax_non_200_raises_api_error_with_status_code(_mock_api_runtime, mock_urlopen):
     mock_urlopen.side_effect = HTTPError(
         url="https://api.example.local/v1/chat",
         code=500,
@@ -130,7 +130,7 @@ def test_call_minimax_non_200_raises_http_error(_mock_api_runtime, mock_urlopen)
         fp=None,
     )
 
-    with pytest.raises(HTTPError):
+    with pytest.raises(api.APIError, match="500"):
         api.call_minimax("system", "user")
 
     assert mock_urlopen.call_count == 1
@@ -156,19 +156,19 @@ def test_call_minimax_missing_api_key(monkeypatch):
 def test_call_minimax_invalid_json_raises(_mock_api_runtime, mock_urlopen):
     mock_urlopen.return_value = FakeHTTPResponse(b"not json")
 
-    with pytest.raises(json.JSONDecodeError):
+    with pytest.raises(api.APIError, match="JSONDecodeError"):
         api.call_minimax("system", "user")
 
     assert mock_urlopen.call_count == 1
     assert mock_urlopen.call_args.args[0].full_url == "https://api.example.local/v1/chat"
 
 
-def test_call_minimax_missing_choices_field_raises_key_error(_mock_api_runtime, mock_urlopen):
+def test_call_minimax_missing_choices_field_raises_api_error(_mock_api_runtime, mock_urlopen):
     mock_urlopen.return_value = FakeHTTPResponse(
         json.dumps({"result": "ok"}, ensure_ascii=False).encode("utf-8")
     )
 
-    with pytest.raises(KeyError):
+    with pytest.raises(api.APIError, match="choices"):
         api.call_minimax("system", "user")
 
     assert mock_urlopen.call_count == 1

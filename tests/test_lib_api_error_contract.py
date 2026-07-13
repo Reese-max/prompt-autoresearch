@@ -1,12 +1,10 @@
 # -*- coding: utf-8 -*-
-"""lib/api.py 錯誤契約 failing tests（對照 docs/lib-api-error-branch-audit.md）。
+"""lib/api.py 錯誤契約測試（對照 docs/lib-api-error-branch-audit.md）。
 
-每個測試斷言「期望的統一錯誤契約」：呼叫端應拿到統一的 RuntimeError、
-訊息含情境描述、HTTP 錯誤須含狀態碼、retry=0 不得靜默吞錯。
-目前 call_minimax()（api.py:84-88）只原樣重拋原生例外或靜默回空字串，
-與期望不一致，故全部以 xfail(strict=True) 標記：
-- 現況下穩定失敗（記為 xfail，可重現不一致處）；
-- 一旦錯誤轉譯層補上，XPASS 會炸出來，提醒移除標記轉為正式測試。
+每個測試斷言統一錯誤契約：呼叫端拿到統一的 APIError（RuntimeError 子類）、
+訊息含情境描述、HTTP 錯誤含狀態碼、逾時一律為 APITimeoutError（兼具
+TimeoutError）、retry=0 不得靜默吞錯。錯誤轉譯層已在 lib/api.py 補上，
+原 xfail(strict=True) 標記已移除、轉為正式測試。
 """
 import json
 import socket
@@ -71,11 +69,6 @@ def mock_urlopen(monkeypatch):
     return mocked
 
 
-@pytest.mark.xfail(
-    strict=True,
-    raises=HTTPError,
-    reason="稽核 #2：HTTP 5xx 原樣重拋 HTTPError，未轉譯為含狀態碼的 RuntimeError",
-)
 def test_http_error_response_should_raise_runtime_error_with_status_code(
     _mock_api_runtime, mock_urlopen
 ):
@@ -91,11 +84,6 @@ def test_http_error_response_should_raise_runtime_error_with_status_code(
         api.call_minimax("system", "user")
 
 
-@pytest.mark.xfail(
-    strict=True,
-    raises=socket.timeout,
-    reason="稽核 #3：read 階段 timeout 原樣重拋 socket.timeout，未轉譯為統一 RuntimeError",
-)
 def test_read_timeout_should_raise_runtime_error_with_timeout_message(
     _mock_api_runtime, mock_urlopen
 ):
@@ -105,12 +93,6 @@ def test_read_timeout_should_raise_runtime_error_with_timeout_message(
         api.call_minimax("system", "user")
 
 
-@pytest.mark.xfail(
-    strict=True,
-    raises=URLError,
-    reason="稽核 #4：連線階段 timeout 以 URLError(reason=timeout) 形態拋出，"
-    "與 read 階段的 socket.timeout 不同型別，呼叫端只 catch 其一會漏接",
-)
 def test_connect_timeout_urlerror_form_should_raise_same_type_as_read_timeout(
     _mock_api_runtime, mock_urlopen
 ):
@@ -120,11 +102,6 @@ def test_connect_timeout_urlerror_form_should_raise_same_type_as_read_timeout(
         api.call_minimax("system", "user")
 
 
-@pytest.mark.xfail(
-    strict=True,
-    raises=ConnectionResetError,
-    reason="稽核 #7：底層例外原樣重拋，未包裝為含 API 呼叫上下文訊息的統一錯誤",
-)
 def test_connection_exception_should_be_wrapped_with_api_context(
     _mock_api_runtime, mock_urlopen
 ):
@@ -134,11 +111,6 @@ def test_connection_exception_should_be_wrapped_with_api_context(
         api.call_minimax("system", "user")
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="稽核 #9：retry=0 時迴圈不進入，不呼叫 API、不報錯、靜默回空字串（api.py:88），"
-    "與「API 回了空內容」無法區分；期望應拋出設定錯誤",
-)
 def test_retry_zero_should_raise_instead_of_silent_empty_string(
     _mock_api_runtime, mock_urlopen, monkeypatch
 ):
