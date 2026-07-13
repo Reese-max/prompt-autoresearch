@@ -1,0 +1,10 @@
+[run]
+source =
+    lib
+    api
+    scripts
+omit =
+    */__pycache__/*
+
+[report]
+show_missing = True
