@@ -5,6 +5,7 @@
 驗證回饋查詢、聚合（同 hash 累加）、弱點分析、優化建議與空值/非法輸入邊界。
 """
 from datetime import datetime, timedelta
+from collections import defaultdict
 
 import api.feedback as feedback
 
@@ -64,6 +65,25 @@ def test_analyze_aggregates_same_hash_and_averages():
     assert entry["avg_total"] == 70.0
     assert entry["avg_scores"] == {"issueHit": 14.0, "structure": 12.0}
     assert entry["avg_by_type"] == {"申論題": 80.0, "案例題": 60.0}
+
+
+def test_analyze_skips_zero_count_bucket(monkeypatch):
+    class SeededDefaultDict(dict):
+        def __init__(self, factory):
+            super().__init__()
+            self.update(
+                {
+                    "seed": {
+                        "count": 0,
+                        "total_score": 0,
+                        "scores": defaultdict(float),
+                        "question_types": defaultdict(lambda: {"count": 0, "total": 0}),
+                    }
+                }
+            )
+
+    monkeypatch.setattr(feedback, "defaultdict", lambda factory: SeededDefaultDict(factory))
+    assert feedback.analyze_feedback_by_hash([]) == {}
 
 
 def test_analyze_separates_different_hashes():
