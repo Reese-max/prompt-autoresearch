@@ -1,9 +1,11 @@
 import importlib
 import json
 import re
-import subprocess
+import os
 import sys
 import runpy
+from contextlib import redirect_stderr, redirect_stdout
+from io import StringIO
 from pathlib import Path
 
 import pytest
@@ -15,6 +17,30 @@ BASE_PROMPT = (
     "不得反問、不得編造，並要直接輸出正文，不要輸出冗長前言與分析過程。"
     "此題以簡明語句回應。"
 )
+
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+
+
+def _run_gatekeeper_entry(argv):
+    """在 process 內執行 gatekeeper，不啟動子程序並保留輸出。"""
+    old_argv = list(sys.argv)
+    old_cwd = os.getcwd()
+    output = StringIO()
+    try:
+        sys.argv = list(argv)
+        with redirect_stdout(output), redirect_stderr(output):
+            try:
+                runpy.run_path(str(PROJECT_ROOT / "scripts" / "gatekeeper.py"), run_name="__main__")
+            except SystemExit as exc:
+                code = exc.code
+            else:
+                code = 0
+    finally:
+        sys.argv = old_argv
+        os.chdir(old_cwd)
+
+    return code, _extract_gatekeeper_json_output(output.getvalue()), output.getvalue()
 
 RULE_TRIGGER_CASES = (
     ("R01_LENGTH_REJECT", "長度超過700字上限（Reject）", BASE_PROMPT + "補充完整性說明，請保留每步判斷與推理細節；" * 50, False, 1, True, "reject", "超過 700 字硬性上限"),
@@ -83,30 +109,16 @@ def _extract_gatekeeper_json_output(stdout: str):
 
 
 def _run_gatekeeper_cli(prompt: str, tmp_path: Path, extra_args=None):
-    project_root = Path(__file__).resolve().parents[1]
     prompt_file = tmp_path / "prompt.md"
     prompt_file.write_text(prompt, encoding="utf-8")
 
-    cmd = [
-        sys.executable,
-        str(project_root / "scripts" / "gatekeeper.py"),
-        str(prompt_file),
-    ]
+    cmd = ["scripts/gatekeeper.py", str(prompt_file)]
     if extra_args is None:
         extra_args = ["--json"]
     if extra_args:
         cmd.extend(extra_args)
 
-    result = subprocess.run(
-        cmd,
-        cwd=str(project_root),
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
-    )
-
-    return result.returncode, _extract_gatekeeper_json_output(result.stdout), result.stdout
+    return _run_gatekeeper_entry(cmd)
 
 
 def test_semantic_check_hits_equivalent_expression(gatekeeper_module):
@@ -469,29 +481,16 @@ def test_gatekeeper_cli_accepts_warning_only_output(tmp_path):
 
 
 def test_gatekeeper_cli_invalid_argument_errored(tmp_path):
-    project_root = Path(__file__).resolve().parents[1]
-    result = subprocess.run(
-        [sys.executable, str(project_root / "scripts" / "gatekeeper.py")],
-        cwd=str(project_root),
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
-    )
-    assert result.returncode == 1
-    assert "用法: python3 scripts/gatekeeper.py <prompt_file>" in result.stdout
+    code, _, stdout = _run_gatekeeper_entry(["scripts/gatekeeper.py"])
+    assert code == 1
+    assert "用法: python3 scripts/gatekeeper.py <prompt_file>" in stdout
 
 
 def test_gatekeeper_cli_missing_prompt_file_prints_error(tmp_path):
-    project_root = Path(__file__).resolve().parents[1]
     missing_file = tmp_path / "not_exists.md"
-    result = subprocess.run(
-        [sys.executable, str(project_root / "scripts" / "gatekeeper.py"), str(missing_file)],
-        cwd=str(project_root),
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
-    )
-    assert result.returncode == 1
-    assert f"[錯誤] 找不到檔案: {missing_file}" in result.stdout
+    code, _, stdout = _run_gatekeeper_entry([
+        "scripts/gatekeeper.py",
+        str(missing_file),
+    ])
+    assert code == 1
+    assert f"[錯誤] 找不到檔案: {missing_file}" in stdout
