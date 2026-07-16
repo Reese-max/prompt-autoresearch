@@ -9,6 +9,7 @@ lib/api.py — 統一 API 呼叫層。
 """
 import json
 import os
+import socket
 import threading
 import time
 import urllib.error
@@ -29,12 +30,14 @@ def _translate_error(e, max_retry):
     """把外部原生例外轉譯為統一內部錯誤，保留狀態碼與原始訊息。"""
     if isinstance(e, urllib.error.HTTPError):
         return APIError(f"MiniMax API 回應錯誤 HTTP {e.code}（retry={max_retry}）：{e.reason}")
-    if isinstance(e, TimeoutError):
+    if isinstance(e, (socket.timeout, TimeoutError)):
         return APITimeoutError(f"MiniMax API 呼叫逾時（retry={max_retry}）：{e}")
     if isinstance(e, urllib.error.URLError):
-        if isinstance(e.reason, TimeoutError):
+        if isinstance(e.reason, (socket.timeout, TimeoutError)):
             return APITimeoutError(f"MiniMax API 呼叫逾時（retry={max_retry}）：{e.reason}")
         return APIError(f"MiniMax API 連線失敗（retry={max_retry}）：{e.reason}")
+    if isinstance(e, ConnectionError):
+        return APIError(f"MiniMax API 連線失敗（retry={max_retry}）：{type(e).__name__}: {e}")
     return APIError(f"MiniMax API 呼叫失敗（retry={max_retry}）：{type(e).__name__}: {e}")
 
 # --- Rate Limiter ---
