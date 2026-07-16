@@ -188,3 +188,54 @@ def test_reload_after_cache_cleared_and_error_branch_for_invalid_json(tmp_path):
     assert fallback["parallel"]["dev"] == 33
     assert fallback["api"]["url"] == config._DEFAULTS["api"]["url"]
     assert isinstance(fallback["parallel"]["smoke"], int)
+
+
+def test_get_branch_L109_L111_dict_key_shifted_to_default(tmp_path):
+    """覆蓋 lib/config.py L109-111：key 為 dict/list 時移入 default，回傳 section 或 default。"""
+    config_file = tmp_path / "config.json"
+    config_file.write_text(
+        json.dumps({"parallel": {"smoke": 5}}, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+    _set_config_path(config_file)
+    config._load_config()
+
+    # L108→L109: key={} (dict), default=None → 觸發 default = key
+    # L111: section 存在 → 回傳 section_data（dict 被當作 default 的副作用不影響結果）
+    result_existing = config.get("parallel", {})
+    assert result_existing == {"smoke": 5, "dev": 24, "holdout": 24}, (
+        "L109-111: dict key 移為 default 後，section 存在時仍回傳完整 section_data"
+    )
+
+    # L111: section 不存在 → section_data={} (falsy) → 回傳 default（即被移入的 dict）
+    result_missing = config.get("nonexistent_section", {})
+    assert result_missing == {}, (
+        "L109-111: section 不存在時，dict key 成為 default 並被回傳"
+    )
+
+    # L109: key=[] (list)、default=42 → default 非 None → 不覆寫
+    # L111: 回傳 section_data
+    result_list = config.get("parallel", [], default=42)
+    assert result_list == {"smoke": 5, "dev": 24, "holdout": 24}, (
+        "L109-111: list key + 已有 default 時不覆寫，回傳 section_data"
+    )
+
+
+def test_get_branch_L114_non_dict_section_returns_default(tmp_path):
+    """覆蓋 lib/config.py L114：section_data 非 dict 時直接回傳 default，無驗證。"""
+    config_file = tmp_path / "config.json"
+    config_file.write_text(
+        json.dumps({"api": "not_a_dict"}, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+    _set_config_path(config_file)
+    config._load_config()
+
+    # L112: isinstance("not_a_dict", dict) → False
+    # L114: 直接回傳 default，不嘗試呼叫 .get()
+    result = config.get("api", "timeout", 180)
+    assert result == 180, "L114: section_data 非 dict 時回傳 default"
+
+    # L114: 未指定 default → 回傳 None
+    result_none = config.get("api", "url")
+    assert result_none is None, "L114: section_data 非 dict 且 default=None 時回傳 None"
