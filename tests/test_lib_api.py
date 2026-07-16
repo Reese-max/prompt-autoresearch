@@ -122,16 +122,23 @@ def test_call_minimax_request_headers_and_payload_match_expectations(
 
 
 def test_call_minimax_non_200_raises_api_error_with_status_code(_mock_api_runtime, mock_urlopen):
-    mock_urlopen.side_effect = HTTPError(
+    original = HTTPError(
         url="https://api.example.local/v1/chat",
         code=500,
         msg="internal",
         hdrs=None,
         fp=None,
     )
+    mock_urlopen.side_effect = original
 
-    with pytest.raises(api.APIError, match="500"):
+    with pytest.raises(api.APIError) as excinfo:
         api.call_minimax("system", "user")
+
+    err = excinfo.value
+    assert "500" in str(err)
+    assert "retry=1" in str(err)
+    assert not isinstance(err, api.APITimeoutError)
+    assert err.__cause__ is original
 
     assert mock_urlopen.call_count == 1
     assert mock_urlopen.call_args.args[0].full_url == "https://api.example.local/v1/chat"
@@ -140,8 +147,15 @@ def test_call_minimax_non_200_raises_api_error_with_status_code(_mock_api_runtim
 def test_call_minimax_timeout_raises(_mock_api_runtime, mock_urlopen):
     mock_urlopen.side_effect = socket.timeout("request timed out")
 
-    with pytest.raises(socket.timeout):
+    with pytest.raises(api.APITimeoutError) as excinfo:
         api.call_minimax("system", "user")
+
+    err = excinfo.value
+    assert isinstance(err, RuntimeError)
+    assert isinstance(err, TimeoutError)
+    assert "逾時" in str(err)
+    assert "retry=1" in str(err)
+    assert isinstance(err.__cause__, socket.timeout)
 
     assert mock_urlopen.call_count == 1
     assert mock_urlopen.call_args.args[0].full_url == "https://api.example.local/v1/chat"
@@ -156,8 +170,14 @@ def test_call_minimax_missing_api_key(monkeypatch):
 def test_call_minimax_invalid_json_raises(_mock_api_runtime, mock_urlopen):
     mock_urlopen.return_value = FakeHTTPResponse(b"not json")
 
-    with pytest.raises(api.APIError, match="JSONDecodeError"):
+    with pytest.raises(api.APIError) as excinfo:
         api.call_minimax("system", "user")
+
+    err = excinfo.value
+    assert "JSONDecodeError" in str(err)
+    assert "retry=1" in str(err)
+    assert not isinstance(err, api.APITimeoutError)
+    assert isinstance(err.__cause__, json.JSONDecodeError)
 
     assert mock_urlopen.call_count == 1
     assert mock_urlopen.call_args.args[0].full_url == "https://api.example.local/v1/chat"
@@ -168,18 +188,32 @@ def test_call_minimax_missing_choices_field_raises_api_error(_mock_api_runtime, 
         json.dumps({"result": "ok"}, ensure_ascii=False).encode("utf-8")
     )
 
-    with pytest.raises(api.APIError, match="choices"):
+    with pytest.raises(api.APIError) as excinfo:
         api.call_minimax("system", "user")
+
+    err = excinfo.value
+    assert "choices" in str(err)
+    assert "retry=1" in str(err)
+    assert not isinstance(err, api.APITimeoutError)
+    assert isinstance(err.__cause__, KeyError)
 
     assert mock_urlopen.call_count == 1
     assert mock_urlopen.call_args.args[0].full_url == "https://api.example.local/v1/chat"
 
 
 def test_call_minimax_exception_is_propagated(_mock_api_runtime, mock_urlopen):
-    mock_urlopen.side_effect = RuntimeError("boom")
+    original = RuntimeError("boom")
+    mock_urlopen.side_effect = original
 
-    with pytest.raises(RuntimeError, match="boom"):
+    with pytest.raises(api.APIError) as excinfo:
         api.call_minimax("system", "user")
+
+    err = excinfo.value
+    assert "RuntimeError" in str(err)
+    assert "boom" in str(err)
+    assert "retry=1" in str(err)
+    assert not isinstance(err, api.APITimeoutError)
+    assert err.__cause__ is original
 
     assert mock_urlopen.call_count == 1
     assert mock_urlopen.call_args.args[0].full_url == "https://api.example.local/v1/chat"
