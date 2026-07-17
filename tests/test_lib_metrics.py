@@ -77,3 +77,16 @@ def test_record_round_default_target_failures_is_list(monkeypatch, tmp_path):
     assert payload["target_failures"] == []
     assert payload["event"] == "round"
     assert path.read_text(encoding="utf-8").strip().startswith("{")
+
+
+def test_record_event_no_data_covers_false_branch(monkeypatch, tmp_path):
+    """明確測試 record_event 無 data 參數，覆蓋 if data: False 分支 (25->27)"""
+    temp_metrics = tmp_path / "metrics.jsonl"
+    monkeypatch.setattr(metrics, "METRICS_PATH", str(temp_metrics))
+
+    metrics.record_event("heartbeat")  # 無 data，應走 False 分支
+
+    data = json.loads(temp_metrics.read_text(encoding="utf-8"))
+    assert data["event"] == "heartbeat"
+    assert set(data.keys()) == {"event", "timestamp"}
+    assert "data" not in data
