@@ -239,3 +239,32 @@ def test_get_branch_L114_non_dict_section_returns_default(tmp_path):
     # L114: 未指定 default → 回傳 None
     result_none = config.get("api", "url")
     assert result_none is None, "L114: section_data 非 dict 且 default=None 時回傳 None"
+
+
+def test_invalid_numeric_env_var_raises_and_does_not_pollute_cfg(tmp_path, monkeypatch):
+    """數值型環境變數格式異常時，_apply_env_overrides 必須 raise ValueError，不得靜默存字串。"""
+    _set_config_path(tmp_path / "not-exist.json")
+    monkeypatch.setenv("AUTORESEARCH_API_TIMEOUT", "not-a-number")
+
+    with pytest.raises(ValueError, match="AUTORESEARCH_API_TIMEOUT"):
+        config.get_all()
+
+    config._CONFIG = None
+    monkeypatch.delenv("AUTORESEARCH_API_TIMEOUT", raising=False)
+    cfg = config.get_all()
+    assert cfg["api"]["timeout"] == 180
+    assert isinstance(cfg["api"]["timeout"], int)
+
+
+def test_invalid_parallel_env_var_raises(monkeypatch):
+    monkeypatch.setenv("AUTORESEARCH_SMOKE_PARALLEL", "abc")
+
+    with pytest.raises(ValueError, match="AUTORESEARCH_SMOKE_PARALLEL"):
+        config.get_all()
+
+
+def test_invalid_max_candidate_length_env_var_raises(monkeypatch):
+    monkeypatch.setenv("AUTORESEARCH_MAX_CANDIDATE_LENGTH", "not-a-number")
+
+    with pytest.raises(ValueError, match="AUTORESEARCH_MAX_CANDIDATE_LENGTH"):
+        config.get_all()

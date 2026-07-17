@@ -75,6 +75,15 @@ def _deep_merge(base, override):
             base[key] = value
 
 
+_NUMERIC_ENV_KEYS = frozenset({
+    "AUTORESEARCH_API_TIMEOUT",
+    "AUTORESEARCH_SMOKE_PARALLEL",
+    "AUTORESEARCH_DEV_PARALLEL",
+    "AUTORESEARCH_HOLDOUT_PARALLEL",
+    "AUTORESEARCH_MAX_CANDIDATE_LENGTH",
+})
+
+
 def _apply_env_overrides(cfg):
     env_map = {
         "MINIMAX_API_KEY": ("api", "api_key"),
@@ -91,13 +100,18 @@ def _apply_env_overrides(cfg):
         if val is not None:
             if section not in cfg:
                 cfg[section] = {}
-            try:
-                cfg[section][key] = int(val)
-            except (ValueError, TypeError):
+            if env_key in _NUMERIC_ENV_KEYS:
                 try:
-                    cfg[section][key] = float(val)
+                    cfg[section][key] = int(val)
                 except (ValueError, TypeError):
-                    cfg[section][key] = val
+                    try:
+                        cfg[section][key] = float(val)
+                    except (ValueError, TypeError):
+                        raise ValueError(
+                            f"環境變數 {env_key}={val!r} 無法解析為數值"
+                        ) from None
+            else:
+                cfg[section][key] = val
 
 
 def get(section, key=None, default=None):
