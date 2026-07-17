@@ -675,3 +675,109 @@ def test_valid_api_model_env_var_accepted(tmp_path, monkeypatch):
 
     cfg = config.get_all()
     assert cfg["api"]["model"] == "gpt-5.4-mini"
+
+
+# ── 合法值通過：數值型 env var 接受有效數值並寫入 cfg ──────────────────
+
+
+def test_valid_smoke_parallel_env_var_accepted(tmp_path, monkeypatch):
+    """合法數值 AUTORESEARCH_SMOKE_PARALLEL 必須被接受並寫入 cfg。"""
+    _set_config_path(tmp_path / "not-exist.json")
+    monkeypatch.setenv("AUTORESEARCH_SMOKE_PARALLEL", "12")
+
+    cfg = config.get_all()
+    assert cfg["parallel"]["smoke"] == 12
+    assert isinstance(cfg["parallel"]["smoke"], int)
+
+
+def test_valid_dev_parallel_env_var_accepted(tmp_path, monkeypatch):
+    """合法數值 AUTORESEARCH_DEV_PARALLEL 必須被接受並寫入 cfg。"""
+    _set_config_path(tmp_path / "not-exist.json")
+    monkeypatch.setenv("AUTORESEARCH_DEV_PARALLEL", "48")
+
+    cfg = config.get_all()
+    assert cfg["parallel"]["dev"] == 48
+    assert isinstance(cfg["parallel"]["dev"], int)
+
+
+def test_valid_holdout_parallel_env_var_accepted(tmp_path, monkeypatch):
+    """合法數值 AUTORESEARCH_HOLDOUT_PARALLEL 必須被接受並寫入 cfg。"""
+    _set_config_path(tmp_path / "not-exist.json")
+    monkeypatch.setenv("AUTORESEARCH_HOLDOUT_PARALLEL", "36")
+
+    cfg = config.get_all()
+    assert cfg["parallel"]["holdout"] == 36
+    assert isinstance(cfg["parallel"]["holdout"], int)
+
+
+def test_valid_max_candidate_length_env_var_accepted(tmp_path, monkeypatch):
+    """合法數值 AUTORESEARCH_MAX_CANDIDATE_LENGTH 必須被接受並寫入 cfg。"""
+    _set_config_path(tmp_path / "not-exist.json")
+    monkeypatch.setenv("AUTORESEARCH_MAX_CANDIDATE_LENGTH", "400")
+
+    cfg = config.get_all()
+    assert cfg["thresholds"]["max_candidate_length"] == 400
+    assert isinstance(cfg["thresholds"]["max_candidate_length"], int)
+
+
+# ── 非法值被拒絕：MINIMAX_API_KEY 空字串/空白 ──────────────────────────
+
+
+def test_empty_minimax_api_key_env_var_accepted_and_not_validated(tmp_path, monkeypatch):
+    """MINIMAX_API_KEY 不在 _STRING_ENV_KEYS 中，空字串不會被 validate_config 拒絕。"""
+    _set_config_path(tmp_path / "not-exist.json")
+    monkeypatch.setenv("MINIMAX_API_KEY", "")
+
+    cfg = config.get_all()
+    assert cfg["api"]["api_key"] == ""
+
+
+def test_valid_minimax_api_key_env_var_accepted(tmp_path, monkeypatch):
+    """合法 MINIMAX_API_KEY 必須被寫入 cfg。"""
+    _set_config_path(tmp_path / "not-exist.json")
+    monkeypatch.setenv("MINIMAX_API_KEY", "sk-test-key-123")
+
+    cfg = config.get_all()
+    assert cfg["api"]["api_key"] == "sk-test-key-123"
+
+
+# ── config.json 無效覆蓋的拒絕 + 回退驗證 ──────────────────────────────
+
+
+def test_config_json_empty_string_timeout_rejected_and_falls_back_to_default(tmp_path):
+    """config.json 以空字串覆蓋 api.timeout 必須被拒絕，回退至預設值。"""
+    config_file = tmp_path / "config.json"
+    config_file.write_text(
+        json.dumps({"api": {"timeout": ""}}),
+        encoding="utf-8",
+    )
+    _set_config_path(config_file)
+
+    with pytest.raises(ValueError, match="api.timeout"):
+        config.get_all()
+
+
+def test_config_json_negative_retry_rejected_and_falls_back(tmp_path):
+    """config.json 以負數覆蓋 api.retry 必須被 validate_config 拒絕。"""
+    config_file = tmp_path / "config.json"
+    config_file.write_text(
+        json.dumps({"api": {"retry": -3}}),
+        encoding="utf-8",
+    )
+    _set_config_path(config_file)
+
+    with pytest.raises(ValueError, match="api.retry.*必須為正數"):
+        config.get_all()
+
+
+def test_config_json_wrong_type_for_url_rejected_and_falls_back(tmp_path):
+    """config.json 以數字覆蓋 api.url 必須被 validate_config 拒絕。"""
+    config_file = tmp_path / "config.json"
+    config_file.write_text(
+        json.dumps({"api": {"url": 12345}}),
+        encoding="utf-8",
+    )
+    _set_config_path(config_file)
+
+    with pytest.raises(ValueError, match="api.url.*型別不符"):
+        config.get_all()
