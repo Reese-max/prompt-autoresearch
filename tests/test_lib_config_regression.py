@@ -147,3 +147,23 @@ def test_invalid_default_max_candidate_length_zero_raises(monkeypatch):
 
     with pytest.raises(ValueError, match="thresholds.max_candidate_length"):
         config.get_all()
+
+
+# ── L166 路徑覆蓋：_STRING_SCHEMA 值為非字串型別時必須拒絕 ──────────────
+
+
+@pytest.mark.parametrize(
+    "bad_value",
+    [123, True, [1, 2], {"k": "v"}],
+    ids=["int", "bool", "list", "dict"],
+)
+def test_string_schema_rejects_non_string_type(tmp_path, bad_value):
+    """覆蓋 lib/config.py L166：_STRING_SCHEMA 欄位收到非字串型別時 raise ValueError。"""
+    config_file = tmp_path / "config.json"
+    config_file.write_text(
+        json.dumps({"api": {"url": bad_value}}),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match=r"api\.url=.*型別不符，期望 str"):
+        config.get_all()
