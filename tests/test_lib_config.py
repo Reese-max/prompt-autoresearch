@@ -20,8 +20,9 @@ CONFIG_ENV_KEYS = [
 
 @pytest.fixture(autouse=True)
 def clean_config_state(monkeypatch):
-    """每個測試使用隔離的 config 載入快取與環境變數。"""
+    """每個測試使用隔離的 config 載入快取、環境變數與路徑。"""
     monkeypatch.setattr(config, "_CONFIG", None)
+    monkeypatch.setattr(config, "_CONFIG_PATH", config._CONFIG_PATH)
     for key in CONFIG_ENV_KEYS:
         monkeypatch.delenv(key, raising=False)
     yield
@@ -288,6 +289,27 @@ def test_invalid_max_candidate_length_env_var_raises(tmp_path, monkeypatch):
     assert isinstance(cfg["thresholds"]["max_candidate_length"], int)
 
 
+def test_valid_file_config_plus_invalid_env_var_for_same_key_raises(tmp_path, monkeypatch):
+    """config.json 有效覆蓋 timeout，env var 以無效值覆寫同 key → env 優先但驗證攔下。"""
+    config_file = tmp_path / "config.json"
+    config_file.write_text(
+        json.dumps({"api": {"timeout": 300}}),
+        encoding="utf-8",
+    )
+    _set_config_path(config_file)
+    monkeypatch.setenv("AUTORESEARCH_API_TIMEOUT", "not-a-number")
+
+    with pytest.raises(ValueError, match="AUTORESEARCH_API_TIMEOUT"):
+        config.get_all()
+
+    config._CONFIG = None
+    monkeypatch.delenv("AUTORESEARCH_API_TIMEOUT", raising=False)
+    cfg = config.get_all()
+    config.validate_config(cfg)
+    assert cfg["api"]["timeout"] == 300
+    assert isinstance(cfg["api"]["timeout"], int)
+
+
 # ── 預設值回退路徑驗證：config.json 空值/錯誤型別覆蓋 defaults ──────────
 
 
@@ -350,16 +372,18 @@ def test_config_json_null_for_numeric_default_validated(tmp_path):
 # ── 預設值回退路徑驗證：環境變數空值 ─────────────────────────────────────
 
 
-def test_empty_numeric_env_var_raises_value_error(monkeypatch):
+def test_empty_numeric_env_var_raises_value_error(tmp_path, monkeypatch):
     """數值型環境變數為空字串時，_apply_env_overrides 必須拒絕。"""
+    _set_config_path(tmp_path / "not-exist.json")
     monkeypatch.setenv("AUTORESEARCH_API_TIMEOUT", "")
 
     with pytest.raises(ValueError, match="不可為空字串"):
         config.get_all()
 
 
-def test_whitespace_numeric_env_var_raises_value_error(monkeypatch):
+def test_whitespace_numeric_env_var_raises_value_error(tmp_path, monkeypatch):
     """數值型環境變數為純空白時，_apply_env_overrides 必須拒絕。"""
+    _set_config_path(tmp_path / "not-exist.json")
     monkeypatch.setenv("AUTORESEARCH_SMOKE_PARALLEL", "   ")
 
     with pytest.raises(ValueError, match="不可為空字串"):

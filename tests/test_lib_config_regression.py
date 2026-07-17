@@ -91,3 +91,24 @@ def test_fallback_final_value_must_pass_validation(monkeypatch):
     assert isinstance(cfg["thresholds"]["holdout_max_drop"], (int, float))
     assert isinstance(cfg["thresholds"]["type_max_regression"], (int, float))
     assert isinstance(cfg["thresholds"]["word_rate_min"], (int, float))
+
+
+def test_file_valid_override_plus_env_invalid_same_key_rejected(tmp_path, monkeypatch):
+    """場景 4：config.json 有效覆蓋 timeout，env var 無效覆寫同 key → 驗證攔下，清理後回歸 defaults。"""
+    config_file = tmp_path / "config.json"
+    config_file.write_text(
+        json.dumps({"api": {"timeout": 300}}),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(config, "_CONFIG_PATH", str(config_file))
+    monkeypatch.setenv("AUTORESEARCH_API_TIMEOUT", "not-a-number")
+
+    with pytest.raises(ValueError, match="AUTORESEARCH_API_TIMEOUT"):
+        config.get_all()
+
+    config._CONFIG = None
+    monkeypatch.delenv("AUTORESEARCH_API_TIMEOUT", raising=False)
+    cfg = config.get_all()
+    config.validate_config(cfg)
+    assert cfg["api"]["timeout"] == 300
+    assert isinstance(cfg["api"]["timeout"], int)
