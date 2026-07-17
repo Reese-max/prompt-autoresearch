@@ -151,6 +151,59 @@ class ArchitectureSurfaceTests(unittest.TestCase):
         self.assertIn("實驗治理報告", snapshot["content"])
         self.assertIn("Dev 卡點", snapshot["content"])
 
+    def _assert_experiment_report_contract(self, snapshot):
+        self.assertEqual(snapshot["path"], "generated:experiment_report")
+        self.assertIsInstance(snapshot["run_count"], int)
+        self.assertGreaterEqual(snapshot["run_count"], 1)
+        self.assertEqual(snapshot["limit"], 3)
+        self.assertIn("content", snapshot)
+        self.assertIn("實驗治理報告", snapshot["content"])
+        self.assertIn("Dev 卡點", snapshot["content"])
+
+    def test_experiment_report_snapshot_rejects_semantically_wrong_output(self):
+        malformed_variants = [
+            (
+                "wrong path string",
+                {
+                    "path": "generated:something_else",
+                    "run_count": 3,
+                    "limit": 3,
+                    "content": "實驗治理報告\nDev 卡點：pass",
+                },
+            ),
+            (
+                "content swapped with path",
+                {
+                    "path": "實驗治理報告\nDev 卡點：pass",
+                    "run_count": 3,
+                    "limit": 3,
+                    "content": "generated:experiment_report",
+                },
+            ),
+            (
+                "run_count is string instead of int",
+                {
+                    "path": "generated:experiment_report",
+                    "run_count": "not_a_number",
+                    "limit": 3,
+                    "content": "實驗治理報告\nDev 卡點：pass",
+                },
+            ),
+            (
+                "missing content key",
+                {
+                    "path": "generated:experiment_report",
+                    "run_count": 3,
+                    "limit": 3,
+                },
+            ),
+        ]
+
+        for label, fake_payload in malformed_variants:
+            with self.subTest(variant=label):
+                with self.assertRaises(AssertionError):
+                    self._assert_experiment_report_contract(fake_payload)
+
     def test_frontend_has_architecture_tab_contract(self):
         index_html = (PROJECT_ROOT / "index.html").read_text(encoding="utf-8")
         app_js = (PROJECT_ROOT / "app.js").read_text(encoding="utf-8")
