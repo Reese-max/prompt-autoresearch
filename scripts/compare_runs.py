@@ -168,17 +168,18 @@ def compare(new_dir, base_dir, mode=None):
     passed_all = passed_all and c2
     print(f"  2. 單項題型無大幅退步限制 (退步 <= 3.0分): {c2_status}")
     
-    # 條件 3: 風險控制。strict 要求 100%；pragmatic 要求不低於 baseline、至少 95%，且 F12 不增加。
+    # 條件 3: 風險控制。strict 要求 100%；pragmatic 要求不低於 baseline、至少 90%，且 F12 不增加。
     f12_new = fail_new.get("F12", 0)
     f12_base = fail_base.get("F12", 0)
     if mode == "strict":
         c3 = (risk_rate == 100.0)
         c3_reason = f"風險滿分率僅 {risk_rate:.1f}%，strict 模式要求 100%"
     else:
-        c3 = (risk_rate >= 90.0 and f12_new <= f12_base + 2)
+        c3 = (risk_rate >= 90.0 and risk_rate >= base_risk_rate and f12_new <= f12_base + 2)
         c3_reason = (
             f"風險滿分率 {risk_rate:.1f}% 未達 pragmatic 門檻："
-            f"需 >=90%，且 F12 增加不超過 2 ({f12_base}->{f12_new})"
+            f"需 >=90% 且不低於 baseline ({base_risk_rate:.1f}%)，"
+            f"且 F12 增加不超過 2 ({f12_base}->{f12_new})"
         )
     c3_status = f"{C_GREEN}通過{C_RESET}" if c3 else f"{C_RED}拒絕 ({c3_reason}){C_RESET}"
     passed_all = passed_all and c3

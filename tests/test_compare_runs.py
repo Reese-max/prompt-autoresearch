@@ -259,3 +259,37 @@ def test_mutation_char_count_survives_existence_assertions(tmp_path, capsys):
     # 以下斷言用 pytest.raises 證明：若只檢查存在性，word_rate 退化不會被發現
     with pytest.raises(AssertionError):
         assert lc["word_rate"] == pytest.approx(100.0)
+
+
+# ---------- 回歸測試：pragmatic 模式 risk_rate 低於 baseline 應被拒 ----------
+
+def test_compare_pragmatic_rejects_risk_regression_below_baseline(tmp_path, capsys):
+    """回歸測試：pragmatic 模式下，候選 risk_rate 較 baseline 退步但仍在 90%
+    以上時，應因「不低於 baseline」而被拒絕。
+
+    場景：baseline 10 題 risk=10 → risk_rate=100%；candidate 10 題中 1 題
+    risk=0 → risk_rate=90%。分數提升滿足 c1，風險仍在 90% 門檻以上，
+    但 risk 從 100% 降至90% 屬於退步——按接受條件精神應 REVERT。
+
+    預期：passed=False（穩定失敗表示 bug 存在）。
+    """
+    base_records = [rec(f"q{i}", score=78.0, risk=10) for i in range(10)]
+    new_records = (
+        [rec(f"q{i}", score=86.0, risk=10) for i in range(9)]
+        + [rec("q9", score=86.0, risk=0)]
+    )
+    base = make_run(tmp_path / "base", base_records)
+    new = make_run(tmp_path / "new", new_records)
+    passed, avg_new, diff = cr.compare(new, base, mode="pragmatic")
+
+    lc = cr.LAST_COMPARISON
+    # 驗證測試前提
+    assert lc["base_risk_rate"] == pytest.approx(100.0)
+    assert lc["risk_rate"] == pytest.approx(90.0)
+    assert diff >= 2.0  # c1 滿足
+
+    # 核心斷言：risk 從 100% 降至 90%，不應被接受
+    assert passed is False, (
+        f"pragmatic 模式不應接受 risk 從 {lc['base_risk_rate']:.0f}% "
+        f"降至 {lc['risk_rate']:.0f}% 的候選"
+    )
