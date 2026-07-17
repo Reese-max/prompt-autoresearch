@@ -83,7 +83,31 @@ def test_analyze_skips_zero_count_bucket(monkeypatch):
             )
 
     monkeypatch.setattr(feedback, "defaultdict", lambda factory: SeededDefaultDict(factory))
-    assert feedback.analyze_feedback_by_hash([]) == {}
+    result = feedback.analyze_feedback_by_hash([])
+    assert result == {}
+    assert "seed" not in result
+
+
+def test_analyze_skips_zero_count_entry_directly(monkeypatch):
+    """直接測試 count==0 時的 continue 分支（76->75）"""
+    # 透過 monkeypatch 讓 analyze_feedback_by_hash 內部建立的 entry 初始 count=0
+    orig_defaultdict = feedback.defaultdict
+
+    def fake_defaultdict(factory):
+        d = orig_defaultdict(factory)
+        # 預先塞入一個 count=0 的 entry，模擬邊界情況
+        d["zero-hash"] = {
+            "count": 0,
+            "total_score": 0,
+            "scores": defaultdict(float),
+            "question_types": defaultdict(lambda: {"count": 0, "total": 0}),
+        }
+        return d
+
+    monkeypatch.setattr(feedback, "defaultdict", fake_defaultdict)
+    result = feedback.analyze_feedback_by_hash([])
+    # 因為 count==0，該 entry 應被 continue 跳過，不會出現在結果中
+    assert "zero-hash" not in result
 
 
 def test_analyze_separates_different_hashes():
