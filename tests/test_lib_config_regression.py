@@ -47,8 +47,8 @@ def test_missing_env_var_falls_back_to_default():
     assert cfg["thresholds"]["max_candidate_length"] == config._DEFAULTS["thresholds"]["max_candidate_length"]
 
 
-def test_invalid_env_var_triggers_fallback(monkeypatch):
-    """場景 2：環境變數格式錯誤時被驗證攔下，清理後 cfg 通過合法性檢查且不污染。"""
+def test_invalid_env_var_raises_and_falls_back_to_default(monkeypatch):
+    """場景 2：環境變數格式錯誤時被驗證攔下，清理後回退至預設值且通過合法性檢查。"""
     monkeypatch.setenv("AUTORESEARCH_API_TIMEOUT", "not-a-number")
 
     with pytest.raises(ValueError, match="AUTORESEARCH_API_TIMEOUT"):

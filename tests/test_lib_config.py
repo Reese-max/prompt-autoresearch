@@ -242,8 +242,8 @@ def test_get_branch_L114_non_dict_section_returns_default(tmp_path):
     assert result_none is None, "L114: section_data 非 dict 且 default=None 時回傳 None"
 
 
-def test_invalid_numeric_env_var_raises_and_does_not_pollute_cfg(tmp_path, monkeypatch):
-    """數值型環境變數格式異常時，_apply_env_overrides 必須 raise ValueError，不得靜默存字串。"""
+def test_invalid_numeric_env_var_raises_and_falls_back_to_default(tmp_path, monkeypatch):
+    """數值型環境變數格式異常時，raise ValueError 拒絕無效值，清理後回退至預設值。"""
     _set_config_path(tmp_path / "not-exist.json")
     monkeypatch.setenv("AUTORESEARCH_API_TIMEOUT", "not-a-number")
 
@@ -257,8 +257,8 @@ def test_invalid_numeric_env_var_raises_and_does_not_pollute_cfg(tmp_path, monke
     assert isinstance(cfg["api"]["timeout"], int)
 
 
-def test_invalid_parallel_env_var_raises(tmp_path, monkeypatch):
-    """無效 smoke_parallel 被驗證攔下，清理後 cfg 通過合法性檢查且不污染。"""
+def test_invalid_parallel_env_var_raises_and_falls_back_to_default(tmp_path, monkeypatch):
+    """無效 smoke_parallel 被驗證攔下，清理後回退至預設值且通過合法性檢查。"""
     _set_config_path(tmp_path / "not-exist.json")
     monkeypatch.setenv("AUTORESEARCH_SMOKE_PARALLEL", "abc")
 
@@ -273,8 +273,8 @@ def test_invalid_parallel_env_var_raises(tmp_path, monkeypatch):
     assert isinstance(cfg["parallel"]["smoke"], int)
 
 
-def test_invalid_max_candidate_length_env_var_raises(tmp_path, monkeypatch):
-    """無效 max_candidate_length 被驗證攔下，清理後 cfg 通過合法性檢查且不污染。"""
+def test_invalid_max_candidate_length_env_var_raises_and_falls_back_to_default(tmp_path, monkeypatch):
+    """無效 max_candidate_length 被驗證攔下，清理後回退至預設值且通過合法性檢查。"""
     _set_config_path(tmp_path / "not-exist.json")
     monkeypatch.setenv("AUTORESEARCH_MAX_CANDIDATE_LENGTH", "not-a-number")
 
@@ -289,8 +289,8 @@ def test_invalid_max_candidate_length_env_var_raises(tmp_path, monkeypatch):
     assert isinstance(cfg["thresholds"]["max_candidate_length"], int)
 
 
-def test_valid_file_config_plus_invalid_env_var_for_same_key_raises(tmp_path, monkeypatch):
-    """config.json 有效覆蓋 timeout，env var 以無效值覆寫同 key → env 優先但驗證攔下。"""
+def test_valid_file_config_plus_invalid_env_var_raises_and_falls_back_to_file_value(tmp_path, monkeypatch):
+    """config.json 有效覆蓋 timeout，env var 以無效值覆寫同 key → env 優先但驗證攔下，回退至檔案值。"""
     config_file = tmp_path / "config.json"
     config_file.write_text(
         json.dumps({"api": {"timeout": 300}}),
@@ -390,8 +390,8 @@ def test_whitespace_numeric_env_var_raises_value_error(tmp_path, monkeypatch):
         config.get_all()
 
 
-def test_empty_smoke_parallel_env_var_rejects_does_not_pollute(tmp_path, monkeypatch):
-    """空字串 smoke_parallel 被拒絕後，cfg 不受影響仍為 defaults。"""
+def test_empty_smoke_parallel_env_var_raises_and_falls_back_to_default(tmp_path, monkeypatch):
+    """空字串 smoke_parallel 被拒絕後，回退至預設值且不污染 cfg。"""
     _set_config_path(tmp_path / "not-exist.json")
     monkeypatch.setenv("AUTORESEARCH_SMOKE_PARALLEL", "")
 
@@ -405,8 +405,8 @@ def test_empty_smoke_parallel_env_var_rejects_does_not_pollute(tmp_path, monkeyp
     assert isinstance(cfg["parallel"]["smoke"], int)
 
 
-def test_empty_dev_parallel_env_var_rejects_and_preserves_other(tmp_path, monkeypatch):
-    """空字串 dev_parallel 被驗證攔下，raise 前不污染其他數值設定，清理後 cfg 通過合法性檢查。"""
+def test_empty_dev_parallel_env_var_raises_and_falls_back_to_default(tmp_path, monkeypatch):
+    """空字串 dev_parallel 被驗證攔下，raise 前不污染其他數值設定，清理後回退至預設值。"""
     _set_config_path(tmp_path / "not-exist.json")
     monkeypatch.setenv("AUTORESEARCH_DEV_PARALLEL", "")
 
@@ -423,8 +423,8 @@ def test_empty_dev_parallel_env_var_rejects_and_preserves_other(tmp_path, monkey
     assert cfg["parallel"]["holdout"] == config._DEFAULTS["parallel"]["holdout"]
 
 
-def test_empty_max_candidate_length_env_var_raises(tmp_path, monkeypatch):
-    """空字串 max_candidate_length 被驗證攔下，清理後 cfg 通過合法性檢查且不污染。"""
+def test_empty_max_candidate_length_env_var_raises_and_falls_back_to_default(tmp_path, monkeypatch):
+    """空字串 max_candidate_length 被驗證攔下，清理後回退至預設值且通過合法性檢查。"""
     _set_config_path(tmp_path / "not-exist.json")
     monkeypatch.setenv("AUTORESEARCH_MAX_CANDIDATE_LENGTH", "")
 
@@ -439,8 +439,8 @@ def test_empty_max_candidate_length_env_var_raises(tmp_path, monkeypatch):
     assert isinstance(cfg["thresholds"]["max_candidate_length"], int)
 
 
-def test_empty_holdout_parallel_env_var_raises(tmp_path, monkeypatch):
-    """空字串 holdout_parallel 被驗證攔下，清理後 cfg 通過合法性檢查且不污染。"""
+def test_empty_holdout_parallel_env_var_raises_and_falls_back_to_default(tmp_path, monkeypatch):
+    """空字串 holdout_parallel 被驗證攔下，清理後回退至預設值且通過合法性檢查。"""
     _set_config_path(tmp_path / "not-exist.json")
     monkeypatch.setenv("AUTORESEARCH_HOLDOUT_PARALLEL", "")
 
