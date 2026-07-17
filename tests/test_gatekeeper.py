@@ -304,6 +304,17 @@ def test_gatekeeper_direct_checks_length_bands(gatekeeper_module):
     _assert_violation(violations, "R01_LENGTH_REJECT", expected_present=True, expected_severity="reject")
 
 
+def test_gatekeeper_accepts_exact_700_character_limit(gatekeeper_module):
+    prompt = BASE_PROMPT + "x" * (700 - len(BASE_PROMPT))
+
+    passed, violations = gatekeeper_module.run_gatekeeper(prompt)
+
+    assert len(prompt) == 700
+    _assert_violation(violations, "R01_LENGTH_REJECT", expected_present=False)
+    _assert_violation(violations, "R01_LENGTH_WARNING", expected_present=True, expected_severity="warning")
+    assert passed is True
+
+
 def test_gatekeeper_direct_blocks_unknown_rule_in_semantic_checker(gatekeeper_module):
     assert gatekeeper_module._semantic_check("R99_NO_SUCH_RULE", "只含一般字詞即可") is False
 
