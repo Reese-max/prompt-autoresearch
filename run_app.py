@@ -323,9 +323,15 @@ def build_experiment_report_snapshot(limit=10):
 
     safe_limit = max(1, min(50, int(limit or 10)))
     rows = list_runs()
+    run_count = len(rows)
+    if run_count < 1:
+        raise ValueError(
+            "build_experiment_report_snapshot: run_count < 1，"
+            "空 runs 目錄無法產生有效實驗治理報告 snapshot"
+        )
     return {
         "path": "generated:experiment_report",
-        "run_count": len(rows),
+        "run_count": run_count,
         "limit": safe_limit,
         "content": build_report(rows, safe_limit),
     }
@@ -397,7 +403,10 @@ class LocalProxyHandler(http.server.SimpleHTTPRequestHandler):
                 limit = int(parse_qs(parsed.query).get("limit", ["10"])[0])
             except ValueError:
                 limit = 10
-            self.send_json(200, build_experiment_report_snapshot(limit))
+            try:
+                self.send_json(200, build_experiment_report_snapshot(limit))
+            except ValueError as e:
+                self.send_json(500, {"error": str(e)})
             return
         elif self.path == "/api/evolution-log":
             self.send_json(200, {"path": "runs/evolution.log", "content": read_text("runs/evolution.log")})

@@ -1,0 +1,69 @@
+============================= test session starts =============================
+platform win32 -- Python 3.11.9, pytest-9.1.1, pluggy-1.6.0 -- C:\Users\Administrator\AppData\Local\hermes\hermes-agent\venv\Scripts\python.exe
+cachedir: .pytest_cache
+rootdir: D:\Users\Administrator\Desktop\autodev-ng\data\prompt-autoresearch\worktrees\28fed6d0
+configfile: pytest.ini
+plugins: anyio-4.12.1, langsmith-0.8.9, asyncio-1.3.0, cov-7.1.0, split-0.11.0, timeout-2.4.0, xdist-3.8.0
+asyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collecting ... collected 1 item
+
+tests/test_architecture_surface.py::ArchitectureSurfaceTests::test_experiment_report_snapshot_rejects_semantically_wrong_output FAILED [100%]
+
+================================== FAILURES ===================================
+_ ArchitectureSurfaceTests.test_experiment_report_snapshot_rejects_semantically_wrong_output _
+
+self = <test_architecture_surface.ArchitectureSurfaceTests testMethod=test_experiment_report_snapshot_rejects_semantically_wrong_output>
+
+    def test_experiment_report_snapshot_rejects_semantically_wrong_output(self):
+        """負向測試：呼叫真正的 build_experiment_report_snapshot，驗證無效輸出被拒絕。
+        未修正前，函式無驗證機制——空 runs 產生 run_count=0 的無效 snapshot 會被
+        靜默送出 API，此測試因此穩定失敗（raise 被觸發但無 ValueError）。
+        修正後，函式應在 output 不符合 contract 時 raise ValueError，此測試通過。"""
+        from run_app import build_experiment_report_snapshot
+        import scripts.experiment_report as er
+    
+        import tempfile
+    
+        # \u7a7a runs \u76ee\u9304 \u2192 run_count=0 \u9055\u53cd contract\uff08run_count \u2265 1\uff09
+        # 修正前：函式回傳 run_count=0 的無效 dict，assertRaises(ValueError) 找不到 ValueError → FAIL
+        # 修正後：函式驗證 output 並 raise ValueError → assertRaises(ValueError) 通過
+        orig_runs = er.RUNS_DIR
+        with tempfile.TemporaryDirectory() as td:
+            empty_runs = os.path.join(td, "runs")
+            os.makedirs(empty_runs)
+            er.RUNS_DIR = empty_runs
+            try:
+>               with self.assertRaises(ValueError):
+E               AssertionError: ValueError not raised
+
+tests\test_architecture_surface.py:184: AssertionError
+=============================== tests coverage ================================
+_______________ coverage: platform win32, python 3.11.9-final-0 _______________
+
+Name                                       Stmts   Miss  Cover   Missing
+------------------------------------------------------------------------
+api\__init__.py                                0      0   100%
+api\continuous_optimizer.py                   82     82     0%   13-169
+api\feedback.py                               85     85     0%   13-198
+api\server.py                                219    219     0%   23-396
+lib\__init__.py                                0      0   100%
+lib\api.py                                    63     63     0%   10-114
+lib\config.py                                101     82    19%   57-69, 73-77, 132-175, 181-216, 221-230, 234-235, 239
+lib\io.py                                     47     47     0%   7-80
+lib\metrics.py                                13     13     0%   11-62
+scripts\__init__.py                            0      0   100%
+scripts\analyze_runs.py                       92     92     0%   5-138
+scripts\backfill_candidate_scorecards.py      66     66     0%   12-125
+scripts\compare_runs.py                      159    159     0%   7-253
+scripts\evaluate.py                          250    250     0%   6-482
+scripts\evaluate_routed.py                   110    110     0%   8-176
+scripts\experiment_report.py                 167     91    46%   36, 42-45, 49-53, 57-62, 68, 70-79, 103-111, 115-120, 124-128, 140-146, 154-158, 161, 183-185, 199, 212-225, 233-234, 238-239, 244-246, 249, 268-280, 284
+scripts\gatekeeper.py                         82     82     0%   7-191
+scripts\generate_questions.py                 21     21     0%   7-471
+scripts\leaderboard.py                        43     43     0%   8-74
+scripts\preflight.py                          93     93     0%   6-146
+------------------------------------------------------------------------
+TOTAL                                       1693   1598     6%
+=========================== short test summary info ===========================
+FAILED tests/test_architecture_surface.py::ArchitectureSurfaceTests::test_experiment_report_snapshot_rejects_semantically_wrong_output
+============================== 1 failed in 0.32s ==============================

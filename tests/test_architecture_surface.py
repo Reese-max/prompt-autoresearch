@@ -1,6 +1,8 @@
 import json
+import os
 import subprocess
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -161,48 +163,28 @@ class ArchitectureSurfaceTests(unittest.TestCase):
         self.assertIn("Dev 卡點", snapshot["content"])
 
     def test_experiment_report_snapshot_rejects_semantically_wrong_output(self):
-        malformed_variants = [
-            (
-                "wrong path string",
-                {
-                    "path": "generated:something_else",
-                    "run_count": 3,
-                    "limit": 3,
-                    "content": "實驗治理報告\nDev 卡點：pass",
-                },
-            ),
-            (
-                "content swapped with path",
-                {
-                    "path": "實驗治理報告\nDev 卡點：pass",
-                    "run_count": 3,
-                    "limit": 3,
-                    "content": "generated:experiment_report",
-                },
-            ),
-            (
-                "run_count is string instead of int",
-                {
-                    "path": "generated:experiment_report",
-                    "run_count": "not_a_number",
-                    "limit": 3,
-                    "content": "實驗治理報告\nDev 卡點：pass",
-                },
-            ),
-            (
-                "missing content key",
-                {
-                    "path": "generated:experiment_report",
-                    "run_count": 3,
-                    "limit": 3,
-                },
-            ),
-        ]
+        """負向測試：呼叫真正的 build_experiment_report_snapshot，驗證無效輸出被拒絕。
+        未修正前，函式無驗證機制——空 runs 產生 run_count=0 的無效 snapshot 會被
+        靜默送出 API，此測試因此穩定失敗（raise 被觸發但無 ValueError）。
+        修正後，函式應在 output 不符合 contract 時 raise ValueError，此測試通過。"""
+        from run_app import build_experiment_report_snapshot
+        import scripts.experiment_report as er
 
-        for label, fake_payload in malformed_variants:
-            with self.subTest(variant=label):
-                with self.assertRaises(AssertionError):
-                    self._assert_experiment_report_contract(fake_payload)
+        import tempfile
+
+        # 空 runs 目錄 → run_count=0 違反 contract（run_count ≥ 1）
+        # 修正前：函式回傳 run_count=0 的無效 dict，assertRaises(ValueError) 找不到 ValueError → FAIL
+        # 修正後：函式驗證 output 並 raise ValueError → assertRaises(ValueError) 通過
+        orig_runs = er.RUNS_DIR
+        with tempfile.TemporaryDirectory() as td:
+            empty_runs = os.path.join(td, "runs")
+            os.makedirs(empty_runs)
+            er.RUNS_DIR = empty_runs
+            try:
+                with self.assertRaises(ValueError):
+                    build_experiment_report_snapshot(limit=3)
+            finally:
+                er.RUNS_DIR = orig_runs
 
     def test_frontend_has_architecture_tab_contract(self):
         index_html = (PROJECT_ROOT / "index.html").read_text(encoding="utf-8")
