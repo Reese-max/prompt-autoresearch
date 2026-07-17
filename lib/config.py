@@ -10,6 +10,7 @@ lib/config.py — 統一配置管理。
 """
 import copy
 import json
+import math
 import os
 
 _CONFIG = None
@@ -105,8 +106,15 @@ _NUMERIC_SCHEMA = {
 
 _POSITIVE_KEYS = frozenset({
     "api.timeout",
+    "api.retry",
+    "api.rate_limit.max_concurrent",
+    "api.rate_limit.min_interval_ms",
     "parallel.smoke",
+    "parallel.dev",
+    "parallel.holdout",
     "thresholds.max_candidate_length",
+    "archive.max_versions",
+    "multi_candidate.count",
 })
 
 
@@ -124,6 +132,10 @@ def validate_config(cfg):
         if not isinstance(value, expected_types):
             raise ValueError(
                 f"設定值 {dotted_key}={value!r} 型別不符，期望 {expected_types}"
+            )
+        if isinstance(value, float) and (math.isnan(value) or math.isinf(value)):
+            raise ValueError(
+                f"設定值 {dotted_key}={value!r} 不允許 NaN 或 inf"
             )
         if dotted_key in _POSITIVE_KEYS and value <= 0:
             raise ValueError(
