@@ -263,6 +263,39 @@ def test_mutation_char_count_survives_existence_assertions(tmp_path, capsys):
 
 # ---------- 回歸測試：pragmatic 模式 risk_rate 低於 baseline 應被拒 ----------
 
+def test_compare_type_regression_exactly_3_points_still_accepted(tmp_path):
+    """Mutation 邊界測試：題型退步恰好 3.0 分時，`>` 邊界應允許接受（非拒絕）。
+
+    原始程式碼 c2 條件為 `b_val - n_val > 3.0`，表示退步 <= 3.0 為通過。
+    若被變異為 `>= 3.0`，則 3.0 分退步會被錯誤拒絕，
+    證明 100% code coverage + 既有通過測試不足以保證 correctness。
+    """
+    base = make_run(tmp_path / "base", [
+        rec("q1", "事實", 90.0),
+        rec("q2", "推理", 90.0),
+        rec("q3", "比較", 90.0),
+    ])
+    new = make_run(tmp_path / "new", [
+        rec("q1", "事實", 87.0),   # 退步恰好 3.0 分
+        rec("q2", "推理", 93.0),   # 提升 3.0 分
+        rec("q3", "比較", 95.0),   # 提升 5.0 分
+    ])
+    # 均分: base=90, new=91.67, diff=+1.67
+    # 事實退步 3.0 分：c2 用 > 3.0 應通過
+    # 風險率: 新 100%, 舊 100%: c3 通過
+    passed, avg_new, diff = cr.compare(new, base, mode="pragmatic")
+    lc = cr.LAST_COMPARISON
+
+    # 驗證前提：均分退步 3.0
+    assert lc["type_diffs"]["事實"]["diff"] == pytest.approx(-3.0)
+
+    # 核心斷言：退步 <= 3.0 應被接受
+    assert passed is True, (
+        f"題型退步恰好 3.0 分應被接受（c2 門檻為 > 3.0），"
+        f"但實際判定為 REVERT——可能被變異為 >= 3.0"
+    )
+
+
 def test_compare_pragmatic_rejects_risk_regression_below_baseline(tmp_path, capsys):
     """回歸測試：pragmatic 模式下，候選 risk_rate 較 baseline 退步但仍在 90%
     以上時，應因「不低於 baseline」而被拒絕。
