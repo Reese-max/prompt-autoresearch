@@ -223,3 +223,39 @@ def test_compare_base_falsy_failure_not_counted(tmp_path, capsys):
     assert cr.LAST_COMPARISON["failure_base"] == {"F03": 1}
     assert "" not in cr.LAST_COMPARISON["failure_base"]
     assert cr.LAST_COMPARISON["failure_new"] == {}
+
+
+# ---------- 變異情境：coverage 不等於 correctness ----------
+
+def test_mutation_char_count_survives_existence_assertions(tmp_path, capsys):
+    """變異情境：同一份輸出只改動 char_count（1000→100），
+存在性斷言（passed、ACCEPT in output）仍通過，
+但精確值斷言揭示 word_rate 從 100% 退化為 50%——
+證明 100% code coverage 不足以保證 correctness。"""
+    base = make_run(tmp_path / "base", [
+        rec("q1", "事實", 80.0), rec("q2", "推理", 78.0),
+    ])
+    # 變異：q1.char_count 從預設 1000 改為 100（脫離 800-1200 合格範圍）
+    new = make_run(tmp_path / "new", [
+        rec("q1", "事實", 86.0, char_count=100),
+        rec("q2", "推理", 84.0),
+    ])
+    passed, avg_new, diff = cr.compare(new, base, mode="pragmatic")
+
+    # ---- 存在性斷言：變異後仍通過（示範 coverage 不足） ----
+    assert passed is True          # 分數提升 +6.0 滿足 c1；c4 僅警告不拒
+    assert avg_new == pytest.approx(85.0)
+    assert diff == pytest.approx(6.0)
+    out = capsys.readouterr().out
+    assert "ACCEPT" in out
+    assert "警告" in out            # c4 字數合格率警告（變異觸發）
+
+    # ---- 精確值斷言：揭示變異事實 ----
+    lc = cr.LAST_COMPARISON
+    # word_rate 應為 50.0%（2 筆中僅 1 筆 char_count 在 800-1200）
+    assert lc["word_rate"] == pytest.approx(50.0)
+    # risk_rate 不受 char_count 影響，仍為 100.0%
+    assert lc["risk_rate"] == 100.0
+    # 以下斷言用 pytest.raises 證明：若只檢查存在性，word_rate 退化不會被發現
+    with pytest.raises(AssertionError):
+        assert lc["word_rate"] == pytest.approx(100.0)
