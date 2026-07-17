@@ -64,6 +64,7 @@ def _load_config():
         except Exception:
             pass
     _apply_env_overrides(_CONFIG)
+    validate_config(_CONFIG)
     return _CONFIG
 
 
@@ -82,6 +83,42 @@ _NUMERIC_ENV_KEYS = frozenset({
     "AUTORESEARCH_HOLDOUT_PARALLEL",
     "AUTORESEARCH_MAX_CANDIDATE_LENGTH",
 })
+
+_NUMERIC_SCHEMA = {
+    "api.timeout": (int, float),
+    "api.retry": (int, float),
+    "api.rate_limit.max_concurrent": (int, float),
+    "api.rate_limit.min_interval_ms": (int, float),
+    "parallel.smoke": (int, float),
+    "parallel.dev": (int, float),
+    "parallel.holdout": (int, float),
+    "thresholds.max_candidate_length": (int, float),
+    "thresholds.smoke_allowed_drop": (int, float),
+    "thresholds.smoke_min_score": (int, float),
+    "thresholds.dev_min_improvement": (int, float),
+    "thresholds.holdout_max_drop": (int, float),
+    "thresholds.type_max_regression": (int, float),
+    "thresholds.word_rate_min": (int, float),
+    "archive.max_versions": (int, float),
+    "multi_candidate.count": (int, float),
+}
+
+
+def validate_config(cfg):
+    for dotted_key, expected_types in _NUMERIC_SCHEMA.items():
+        parts = dotted_key.split(".")
+        value = cfg
+        for part in parts:
+            if not isinstance(value, dict):
+                value = {}
+                break
+            value = value.get(part, {})
+        if value == {}:
+            continue
+        if not isinstance(value, expected_types):
+            raise ValueError(
+                f"設定值 {dotted_key}={value!r} 型別不符，期望 {expected_types}"
+            )
 
 
 def _apply_env_overrides(cfg):

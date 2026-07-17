@@ -290,8 +290,8 @@ def test_empty_config_json_falls_back_to_defaults(tmp_path):
     assert cfg["multi_candidate"]["enabled"] is config._DEFAULTS["multi_candidate"]["enabled"]
 
 
-def test_config_json_empty_string_overrides_numeric_default_not_validated(tmp_path):
-    """config.json 提供空字串覆蓋數值 defaults，因無 validate_config() 而被靜默接受。"""
+def test_config_json_empty_string_overrides_numeric_default_validated(tmp_path):
+    """config.json 提供空字串覆蓋數值 defaults，validate_config() 必須拒絕。"""
     config_file = tmp_path / "config.json"
     config_file.write_text(
         json.dumps({"api": {"timeout": ""}}),
@@ -299,15 +299,12 @@ def test_config_json_empty_string_overrides_numeric_default_not_validated(tmp_pa
     )
     _set_config_path(config_file)
 
-    cfg = config.get_all()
-
-    assert cfg["api"]["timeout"] == "", (
-        "空字串覆蓋數值 defaults 後未被驗證拒絕（_load_config 無 validate_config）"
-    )
+    with pytest.raises(ValueError, match="api.timeout"):
+        config.get_all()
 
 
-def test_config_json_wrong_type_for_numeric_override_not_validated(tmp_path):
-    """config.json 提供字串覆蓋整數 defaults，因無驗證而被靜默接受。"""
+def test_config_json_wrong_type_for_numeric_override_validated(tmp_path):
+    """config.json 提供字串覆蓋整數 defaults，validate_config() 必須拒絕。"""
     config_file = tmp_path / "config.json"
     config_file.write_text(
         json.dumps({"parallel": {"smoke": "not-a-number"}}),
@@ -315,15 +312,12 @@ def test_config_json_wrong_type_for_numeric_override_not_validated(tmp_path):
     )
     _set_config_path(config_file)
 
-    cfg = config.get_all()
-
-    assert cfg["parallel"]["smoke"] == "not-a-number", (
-        "字串覆蓋整數 defaults 後未被驗證拒絕"
-    )
+    with pytest.raises(ValueError, match="parallel.smoke"):
+        config.get_all()
 
 
-def test_config_json_null_for_numeric_default_not_validated(tmp_path):
-    """config.json 提供 null 覆蓋數值 defaults，因無驗證而被靜默接受。"""
+def test_config_json_null_for_numeric_default_validated(tmp_path):
+    """config.json 提供 null 覆蓋數值 defaults，validate_config() 必須拒絕。"""
     config_file = tmp_path / "config.json"
     config_file.write_text(
         json.dumps({"thresholds": {"max_candidate_length": None}}),
@@ -331,11 +325,8 @@ def test_config_json_null_for_numeric_default_not_validated(tmp_path):
     )
     _set_config_path(config_file)
 
-    cfg = config.get_all()
-
-    assert cfg["thresholds"]["max_candidate_length"] is None, (
-        "null 覆蓋數值 defaults 後未被驗證拒絕"
-    )
+    with pytest.raises(ValueError, match="thresholds.max_candidate_length"):
+        config.get_all()
 
 
 # ── 預設值回退路徑驗證：環境變數空值 ─────────────────────────────────────
