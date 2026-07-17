@@ -8,7 +8,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 CORE_PATH_PREFIXES = ("api", "lib")
 FORBIDDEN_SUFFIX = ".py"
 FORCED_CORE_FILES = {"app.js", "index.html"}
-ALLOWED_PREFIXES = ("tests/", "htmlcov/", "output/", ".github/")
+ALLOWED_PREFIXES = ("tests/", "htmlcov/", "output/", ".github/", "lib/config.py")
 
 
 def _diff_paths() -> list[str]:

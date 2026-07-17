@@ -101,6 +101,10 @@ def _apply_env_overrides(cfg):
             if section not in cfg:
                 cfg[section] = {}
             if env_key in _NUMERIC_ENV_KEYS:
+                if val.strip() == "":
+                    raise ValueError(
+                        f"環境變數 {env_key} 不可為空字串"
+                    )
                 try:
                     cfg[section][key] = int(val)
                 except (ValueError, TypeError):

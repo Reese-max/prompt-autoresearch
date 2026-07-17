@@ -268,3 +268,130 @@ def test_invalid_max_candidate_length_env_var_raises(monkeypatch):
 
     with pytest.raises(ValueError, match="AUTORESEARCH_MAX_CANDIDATE_LENGTH"):
         config.get_all()
+
+
+# ── 預設值回退路徑驗證：config.json 空值/錯誤型別覆蓋 defaults ──────────
+
+
+def test_empty_config_json_falls_back_to_defaults(tmp_path):
+    """config.json 為空物件 {} 時，所有值應使用 _DEFAULTS。"""
+    config_file = tmp_path / "config.json"
+    config_file.write_text(json.dumps({}), encoding="utf-8")
+    _set_config_path(config_file)
+
+    cfg = config.get_all()
+
+    assert cfg["api"]["timeout"] == config._DEFAULTS["api"]["timeout"]
+    assert cfg["api"]["retry"] == config._DEFAULTS["api"]["retry"]
+    assert cfg["parallel"]["smoke"] == config._DEFAULTS["parallel"]["smoke"]
+    assert cfg["parallel"]["dev"] == config._DEFAULTS["parallel"]["dev"]
+    assert cfg["thresholds"]["max_candidate_length"] == config._DEFAULTS["thresholds"]["max_candidate_length"]
+    assert cfg["archive"]["max_versions"] == config._DEFAULTS["archive"]["max_versions"]
+    assert cfg["multi_candidate"]["enabled"] is config._DEFAULTS["multi_candidate"]["enabled"]
+
+
+def test_config_json_empty_string_overrides_numeric_default_not_validated(tmp_path):
+    """config.json 提供空字串覆蓋數值 defaults，因無 validate_config() 而被靜默接受。"""
+    config_file = tmp_path / "config.json"
+    config_file.write_text(
+        json.dumps({"api": {"timeout": ""}}),
+        encoding="utf-8",
+    )
+    _set_config_path(config_file)
+
+    cfg = config.get_all()
+
+    assert cfg["api"]["timeout"] == "", (
+        "空字串覆蓋數值 defaults 後未被驗證拒絕（_load_config 無 validate_config）"
+    )
+
+
+def test_config_json_wrong_type_for_numeric_override_not_validated(tmp_path):
+    """config.json 提供字串覆蓋整數 defaults，因無驗證而被靜默接受。"""
+    config_file = tmp_path / "config.json"
+    config_file.write_text(
+        json.dumps({"parallel": {"smoke": "not-a-number"}}),
+        encoding="utf-8",
+    )
+    _set_config_path(config_file)
+
+    cfg = config.get_all()
+
+    assert cfg["parallel"]["smoke"] == "not-a-number", (
+        "字串覆蓋整數 defaults 後未被驗證拒絕"
+    )
+
+
+def test_config_json_null_for_numeric_default_not_validated(tmp_path):
+    """config.json 提供 null 覆蓋數值 defaults，因無驗證而被靜默接受。"""
+    config_file = tmp_path / "config.json"
+    config_file.write_text(
+        json.dumps({"thresholds": {"max_candidate_length": None}}),
+        encoding="utf-8",
+    )
+    _set_config_path(config_file)
+
+    cfg = config.get_all()
+
+    assert cfg["thresholds"]["max_candidate_length"] is None, (
+        "null 覆蓋數值 defaults 後未被驗證拒絕"
+    )
+
+
+# ── 預設值回退路徑驗證：環境變數空值 ─────────────────────────────────────
+
+
+def test_empty_numeric_env_var_raises_value_error(monkeypatch):
+    """數值型環境變數為空字串時，_apply_env_overrides 必須拒絕。"""
+    monkeypatch.setenv("AUTORESEARCH_API_TIMEOUT", "")
+
+    with pytest.raises(ValueError, match="不可為空字串"):
+        config.get_all()
+
+
+def test_whitespace_numeric_env_var_raises_value_error(monkeypatch):
+    """數值型環境變數為純空白時，_apply_env_overrides 必須拒絕。"""
+    monkeypatch.setenv("AUTORESEARCH_SMOKE_PARALLEL", "   ")
+
+    with pytest.raises(ValueError, match="不可為空字串"):
+        config.get_all()
+
+
+def test_empty_smoke_parallel_env_var_rejects_does_not_pollute(tmp_path, monkeypatch):
+    """空字串 smoke_parallel 被拒絕後，cfg 不受影響仍為 defaults。"""
+    _set_config_path(tmp_path / "not-exist.json")
+    monkeypatch.setenv("AUTORESEARCH_SMOKE_PARALLEL", "")
+
+    with pytest.raises(ValueError, match="AUTORESEARCH_SMOKE_PARALLEL"):
+        config.get_all()
+
+    config._CONFIG = None
+    monkeypatch.delenv("AUTORESEARCH_SMOKE_PARALLEL", raising=False)
+    cfg = config.get_all()
+    assert cfg["parallel"]["smoke"] == config._DEFAULTS["parallel"]["smoke"]
+    assert isinstance(cfg["parallel"]["smoke"], int)
+
+
+def test_empty_dev_parallel_env_var_rejects_and_preserves_other(tmp_path, monkeypatch):
+    """空字串 dev_parallel 被拒絕時，raise 前不應污染 cfg。"""
+    _set_config_path(tmp_path / "not-exist.json")
+    monkeypatch.setenv("AUTORESEARCH_DEV_PARALLEL", "")
+
+    with pytest.raises(ValueError, match="AUTORESEARCH_DEV_PARALLEL"):
+        config.get_all()
+
+
+def test_empty_max_candidate_length_env_var_raises(monkeypatch):
+    """空字串 max_candidate_length 必須被拒絕。"""
+    monkeypatch.setenv("AUTORESEARCH_MAX_CANDIDATE_LENGTH", "")
+
+    with pytest.raises(ValueError, match="AUTORESEARCH_MAX_CANDIDATE_LENGTH"):
+        config.get_all()
+
+
+def test_empty_holdout_parallel_env_var_raises(monkeypatch):
+    """空字串 holdout_parallel 必須被拒絕。"""
+    monkeypatch.setenv("AUTORESEARCH_HOLDOUT_PARALLEL", "")
+
+    with pytest.raises(ValueError, match="AUTORESEARCH_HOLDOUT_PARALLEL"):
+        config.get_all()
