@@ -111,6 +111,24 @@ def test_connection_exception_should_be_wrapped_with_api_context(
         api.call_minimax("system", "user")
 
 
+def test_retry_exhaustion_wraps_final_dependency_error(
+    _mock_api_runtime, mock_urlopen, monkeypatch
+):
+    monkeypatch.setattr(api, "get", _make_fake_get(retry=2))
+    monkeypatch.setattr(api.time, "sleep", lambda _: None)
+    first = ConnectionError("temporary failure")
+    final = ConnectionError("connection lost")
+    mock_urlopen.side_effect = [first, final]
+
+    with pytest.raises(api.APIError, match="連線失敗") as excinfo:
+        api.call_minimax("system", "user")
+
+    err = excinfo.value
+    assert "retry=2" in str(err)
+    assert mock_urlopen.call_count == 2
+    assert err.__cause__ is final
+
+
 def test_retry_zero_should_raise_instead_of_silent_empty_string(
     _mock_api_runtime, mock_urlopen, monkeypatch
 ):
