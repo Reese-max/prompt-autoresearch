@@ -1,0 +1,75 @@
+================================================================================
+ Red/Green 證據：設定快取回傳結構可變性回歸測試
+================================================================================
+
+目的
+----------------
+新增回歸測試：`test_get_all_returns_isolated_mutable_views`，
+驗證 `config.get_all()` 回傳值的變更不會回寫污染內部快取。
+
+RED（修正前，故障可重現）
+--------------------------
+
+執行指令：
+`python -m pytest -q tests/test_lib_config_regression.py -k isolated_mutable_views --maxfail=1`
+
+輸出：
+
+F
+================================== FAILURES ===================================
+_________________ test_get_all_returns_isolated_mutable_views _________________
+
+    def test_get_all_returns_isolated_mutable_views():
+        cfg1 = config.get_all()
+        cfg1["api"]["timeout"] = 0
+        cfg1["multi_candidate"]["temperatures"].append(1.23)
+        cfg1["api"]["rate_limit"]["max_concurrent"] = -1
+
+        cfg2 = config.get_all()
+>       assert cfg2["api"]["timeout"] == config._DEFAULTS["api"]["timeout"]
+E       assert 0 == 180
+
+tests\test_lib_config_regression.py:200: AssertionError
+=========================== short test summary info ===========================
+FAILED tests/test_lib_config_regression.py::test_get_all_returns_isolated_mutable_views
+!!!!!!!!!!!!!!!!!!!!!!!!!! stopping after 1 failures !!!!!!!!!!!!!!!!!!!!!!!!!!
+1 failed, 15 deselected in 0.11s
+
+根因
+----------------
+- `get_all()` 當時僅以 `dict(_load_config())` 做淺拷貝，
+  未對巢狀 dict/list 作深拷貝，外部變更直接污染 `_CONFIG` 快取。
+
+GREEN（修正後）
+---------------
+
+修正：
+`lib/config.py`
+
+```python
+def get_all():
+    return copy.deepcopy(_load_config())
+```
+
+再次執行指令：
+`python -m pytest -q tests/test_lib_config_regression.py -k isolated_mutable_views`
+
+輸出：
+
+.                                                                        [100%]
+1 passed, 15 deselected in 0.31s
+
+整體驗證（同一回合）
+----------------------
+
+`python -m pytest -q`
+
+輸出：
+
+........................................................................ [ 18%]
+........................................................................ [ 36%]
+........................................................................ [ 54%]
+........................................................................ [ 72%]
+........................................................................ [ 90%]
+........................................                                 [100%]
+400 passed in 15.70s

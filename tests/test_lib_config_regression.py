@@ -187,3 +187,16 @@ def test_string_schema_rejects_non_string_type_for_model(tmp_path, bad_value):
 
     with pytest.raises(ValueError, match=r"api\.model=.*型別不符，期望 str"):
         config.get_all()
+
+
+def test_get_all_returns_isolated_mutable_views():
+    """回歸：get_all 回傳結果必須與快取隔離，避免外部 mutating 改壞後續設定快取。"""
+    cfg1 = config.get_all()
+    cfg1["api"]["timeout"] = 0
+    cfg1["multi_candidate"]["temperatures"].append(1.23)
+    cfg1["api"]["rate_limit"]["max_concurrent"] = -1
+
+    cfg2 = config.get_all()
+    assert cfg2["api"]["timeout"] == config._DEFAULTS["api"]["timeout"]
+    assert cfg2["api"]["rate_limit"]["max_concurrent"] == config._DEFAULTS["api"]["rate_limit"]["max_concurrent"]
+    assert cfg2["multi_candidate"]["temperatures"] == config._DEFAULTS["multi_candidate"]["temperatures"]

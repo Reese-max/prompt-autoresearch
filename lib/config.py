@@ -236,4 +236,4 @@ def get_section(section):
 
 
 def get_all():
-    return dict(_load_config())
+    return copy.deepcopy(_load_config())
