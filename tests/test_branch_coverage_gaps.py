@@ -60,11 +60,13 @@ def test_call_minimax_exits_when_attempt_iterator_is_empty(monkeypatch):
     )
     monkeypatch.setattr(api, "_semaphore", None)
     monkeypatch.setattr(api, "_rate_wait", lambda: None)
-    monkeypatch.setattr(api, "range", lambda _: (), raising=False)
+    empty_attempts = Mock(return_value=())
+    monkeypatch.setattr(api, "range", empty_attempts, raising=False)
     urlopen = Mock()
     monkeypatch.setattr(api.urllib.request, "urlopen", urlopen)
 
     assert api.call_minimax("system", "user") is None
+    empty_attempts.assert_called_once_with(4)
     urlopen.assert_not_called()
 
 
