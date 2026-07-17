@@ -103,6 +103,12 @@ _NUMERIC_SCHEMA = {
     "multi_candidate.count": (int, float),
 }
 
+_POSITIVE_KEYS = frozenset({
+    "api.timeout",
+    "parallel.smoke",
+    "thresholds.max_candidate_length",
+})
+
 
 def validate_config(cfg):
     for dotted_key, expected_types in _NUMERIC_SCHEMA.items():
@@ -118,6 +124,10 @@ def validate_config(cfg):
         if not isinstance(value, expected_types):
             raise ValueError(
                 f"設定值 {dotted_key}={value!r} 型別不符，期望 {expected_types}"
+            )
+        if dotted_key in _POSITIVE_KEYS and value <= 0:
+            raise ValueError(
+                f"設定值 {dotted_key}={value!r} 必須為正數"
             )
 
 

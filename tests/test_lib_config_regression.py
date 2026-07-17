@@ -4,7 +4,9 @@
   1. 環境變數缺失時走預設值。
   2. 環境變數格式錯誤時觸發回退（raise ValueError）。
   3. 回退後最終生效值必須通過同一套合法性檢查，拒絕不合法設定。
+  4. 預設值為非法值（非正數）時，validate_config 必須攔截並拋出 ValueError。
 """
+import copy
 import json
 from pathlib import Path
 
@@ -112,3 +114,36 @@ def test_file_valid_override_plus_env_invalid_same_key_rejected(tmp_path, monkey
     config.validate_config(cfg)
     assert cfg["api"]["timeout"] == 300
     assert isinstance(cfg["api"]["timeout"], int)
+
+
+# ── 場景 5：monkeypatch _DEFAULTS 為非法值，缺失環境變數回退預設後仍被驗證攔截 ──
+
+
+def test_invalid_default_api_timeout_zero_raises(monkeypatch):
+    """monkeypatch _DEFAULTS 設 api.timeout=0，無環境變數覆蓋時 get() 必須驗證攔截。"""
+    modified = copy.deepcopy(config._DEFAULTS)
+    modified["api"]["timeout"] = 0
+    monkeypatch.setattr(config, "_DEFAULTS", modified)
+
+    with pytest.raises(ValueError, match="api.timeout"):
+        config.get_all()
+
+
+def test_invalid_default_parallel_smoke_negative_raises(monkeypatch):
+    """monkeypatch _DEFAULTS 設 parallel.smoke=-1，無環境變數覆蓋時 get() 必須驗證攔截。"""
+    modified = copy.deepcopy(config._DEFAULTS)
+    modified["parallel"]["smoke"] = -1
+    monkeypatch.setattr(config, "_DEFAULTS", modified)
+
+    with pytest.raises(ValueError, match="parallel.smoke"):
+        config.get_all()
+
+
+def test_invalid_default_max_candidate_length_zero_raises(monkeypatch):
+    """monkeypatch _DEFAULTS 設 thresholds.max_candidate_length=0，無環境變數覆蓋時 get() 必須驗證攔截。"""
+    modified = copy.deepcopy(config._DEFAULTS)
+    modified["thresholds"]["max_candidate_length"] = 0
+    monkeypatch.setattr(config, "_DEFAULTS", modified)
+
+    with pytest.raises(ValueError, match="thresholds.max_candidate_length"):
+        config.get_all()
