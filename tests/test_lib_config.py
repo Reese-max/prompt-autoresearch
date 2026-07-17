@@ -496,3 +496,29 @@ def test_env_override_section_created_when_missing_from_cfg(monkeypatch):
     # L102: test_cfg["parallel"] = {} 後 test_cfg["parallel"]["dev"] = 99
     assert "parallel" in test_cfg, "L101-102: 缺失的 section 被自動建立"
     assert test_cfg["parallel"]["dev"] == 99, "L102: 建立後 env 值正確寫入"
+
+
+# ── 環境變數格式錯誤驗證：nan / inf / 負數 / 零 / 空白 ────────────────
+
+
+@pytest.mark.parametrize(
+    "bad_value,description",
+    [
+        ("nan", "浮點非數"),
+        ("inf", "無限大"),
+        ("-1", "負數"),
+        ("0", "零"),
+        ("", "空字串"),
+        ("   ", "純空白"),
+    ],
+    ids=["nan", "inf", "negative", "zero", "empty-string", "whitespace"],
+)
+def test_invalid_api_timeout_env_var_raises_value_error(monkeypatch, bad_value, description):
+    """設定 AUTORESEARCH_API_TIMEOUT 為各種格式錯誤值後重置 _CONFIG，
+    呼叫 get('api','timeout') 必須全部拋出 ValueError。"""
+    monkeypatch.setenv("AUTORESEARCH_API_TIMEOUT", bad_value)
+
+    config._CONFIG = None
+
+    with pytest.raises(ValueError):
+        config.get("api", "timeout")
