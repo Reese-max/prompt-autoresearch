@@ -85,6 +85,11 @@ _NUMERIC_ENV_KEYS = frozenset({
     "AUTORESEARCH_MAX_CANDIDATE_LENGTH",
 })
 
+_STRING_ENV_KEYS = frozenset({
+    "AUTORESEARCH_API_URL",
+    "AUTORESEARCH_API_MODEL",
+})
+
 _NUMERIC_SCHEMA = {
     "api.timeout": (int, float),
     "api.retry": (int, float),
@@ -117,6 +122,11 @@ _POSITIVE_KEYS = frozenset({
     "multi_candidate.count",
 })
 
+_STRING_SCHEMA = {
+    "api.url": {"min_length": 1, "url_prefixes": ("http://", "https://")},
+    "api.model": {"min_length": 1},
+}
+
 
 def validate_config(cfg):
     for dotted_key, expected_types in _NUMERIC_SCHEMA.items():
@@ -141,6 +151,30 @@ def validate_config(cfg):
             raise ValueError(
                 f"設定值 {dotted_key}={value!r} 必須為正數"
             )
+
+    for dotted_key, rules in _STRING_SCHEMA.items():
+        parts = dotted_key.split(".")
+        value = cfg
+        for part in parts:
+            if not isinstance(value, dict):
+                value = None
+                break
+            value = value.get(part)
+        if value is None:
+            continue
+        if not isinstance(value, str):
+            raise ValueError(
+                f"設定值 {dotted_key}={value!r} 型別不符，期望 str"
+            )
+        if len(value.strip()) == 0:
+            raise ValueError(
+                f"設定值 {dotted_key} 不可為空字串或純空白"
+            )
+        if "url_prefixes" in rules:
+            if not any(value.startswith(p) for p in rules["url_prefixes"]):
+                raise ValueError(
+                    f"設定值 {dotted_key}={value!r} 必須為有效的 http:// 或 https:// URL"
+                )
 
 
 def _apply_env_overrides(cfg):
@@ -174,6 +208,11 @@ def _apply_env_overrides(cfg):
                             f"環境變數 {env_key}={val!r} 無法解析為數值"
                         ) from None
             else:
+                if env_key in _STRING_ENV_KEYS:
+                    if val.strip() == "":
+                        raise ValueError(
+                            f"環境變數 {env_key} 不可為空字串"
+                        )
                 cfg[section][key] = val
 
 

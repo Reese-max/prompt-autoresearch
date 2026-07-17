@@ -522,3 +522,156 @@ def test_invalid_api_timeout_env_var_raises_value_error(monkeypatch, bad_value, 
 
     with pytest.raises(ValueError):
         config.get("api", "timeout")
+
+
+# ── 字串設定驗證：AUTORESEARCH_API_URL / AUTORESEARCH_API_MODEL ──────────
+
+
+def test_empty_api_url_env_var_raises_value_error(tmp_path, monkeypatch):
+    """空字串 AUTORESEARCH_API_URL 必須被 _apply_env_overrides 拒絕。"""
+    _set_config_path(tmp_path / "not-exist.json")
+    monkeypatch.setenv("AUTORESEARCH_API_URL", "")
+
+    with pytest.raises(ValueError, match="AUTORESEARCH_API_URL.*不可為空字串"):
+        config.get_all()
+
+
+def test_whitespace_api_url_env_var_raises_value_error(tmp_path, monkeypatch):
+    """純空白 AUTORESEARCH_API_URL 必須被 _apply_env_overrides 拒絕。"""
+    _set_config_path(tmp_path / "not-exist.json")
+    monkeypatch.setenv("AUTORESEARCH_API_URL", "   ")
+
+    with pytest.raises(ValueError, match="AUTORESEARCH_API_URL.*不可為空字串"):
+        config.get_all()
+
+
+def test_empty_api_model_env_var_raises_value_error(tmp_path, monkeypatch):
+    """空字串 AUTORESEARCH_API_MODEL 必須被 _apply_env_overrides 拒絕。"""
+    _set_config_path(tmp_path / "not-exist.json")
+    monkeypatch.setenv("AUTORESEARCH_API_MODEL", "")
+
+    with pytest.raises(ValueError, match="AUTORESEARCH_API_MODEL.*不可為空字串"):
+        config.get_all()
+
+
+def test_whitespace_api_model_env_var_raises_value_error(tmp_path, monkeypatch):
+    """純空白 AUTORESEARCH_API_MODEL 必須被 _apply_env_overrides 拒絕。"""
+    _set_config_path(tmp_path / "not-exist.json")
+    monkeypatch.setenv("AUTORESEARCH_API_MODEL", "   ")
+
+    with pytest.raises(ValueError, match="AUTORESEARCH_API_MODEL.*不可為空字串"):
+        config.get_all()
+
+
+def test_invalid_api_url_format_env_var_raises_value_error(tmp_path, monkeypatch):
+    """非 http/https 格式的 AUTORESEARCH_API_URL 必須被 validate_config 拒絕。"""
+    _set_config_path(tmp_path / "not-exist.json")
+    monkeypatch.setenv("AUTORESEARCH_API_URL", "ftp://example.com/api")
+
+    with pytest.raises(ValueError, match="api.url.*http://.*https://"):
+        config.get_all()
+
+
+def test_invalid_api_url_no_protocol_env_var_raises_value_error(tmp_path, monkeypatch):
+    """無協議前綴的 AUTORESEARCH_API_URL 必須被 validate_config 拒絕。"""
+    _set_config_path(tmp_path / "not-exist.json")
+    monkeypatch.setenv("AUTORESEARCH_API_URL", "example.com/api")
+
+    with pytest.raises(ValueError, match="api.url.*http://.*https://"):
+        config.get_all()
+
+
+def test_empty_api_url_in_config_json_raises_value_error(tmp_path):
+    """config.json 中 api.url 為空字串時，validate_config 必須拒絕。"""
+    config_file = tmp_path / "config.json"
+    config_file.write_text(
+        json.dumps({"api": {"url": ""}}),
+        encoding="utf-8",
+    )
+    _set_config_path(config_file)
+
+    with pytest.raises(ValueError, match="api.url.*不可為空字串或純空白"):
+        config.get_all()
+
+
+def test_invalid_api_url_format_in_config_json_raises_value_error(tmp_path):
+    """config.json 中 api.url 為非 http/https 格式時，validate_config 必須拒絕。"""
+    config_file = tmp_path / "config.json"
+    config_file.write_text(
+        json.dumps({"api": {"url": "ftp://invalid.example"}}),
+        encoding="utf-8",
+    )
+    _set_config_path(config_file)
+
+    with pytest.raises(ValueError, match="api.url.*http://.*https://"):
+        config.get_all()
+
+
+def test_empty_api_model_in_config_json_raises_value_error(tmp_path):
+    """config.json 中 api.model 為空字串時，validate_config 必須拒絕。"""
+    config_file = tmp_path / "config.json"
+    config_file.write_text(
+        json.dumps({"api": {"model": ""}}),
+        encoding="utf-8",
+    )
+    _set_config_path(config_file)
+
+    with pytest.raises(ValueError, match="api.model.*不可為空字串或純空白"):
+        config.get_all()
+
+
+def test_empty_api_url_env_var_fallback_to_default(tmp_path, monkeypatch):
+    """空字串 AUTORESEARCH_API_URL 被拒絕後，回退至預設值且通過合法性檢查。"""
+    _set_config_path(tmp_path / "not-exist.json")
+    monkeypatch.setenv("AUTORESEARCH_API_URL", "")
+
+    with pytest.raises(ValueError, match="AUTORESEARCH_API_URL"):
+        config.get_all()
+
+    config._CONFIG = None
+    monkeypatch.delenv("AUTORESEARCH_API_URL", raising=False)
+    cfg = config.get_all()
+    config.validate_config(cfg)
+    assert cfg["api"]["url"] == config._DEFAULTS["api"]["url"]
+
+
+def test_empty_api_model_env_var_fallback_to_default(tmp_path, monkeypatch):
+    """空字串 AUTORESEARCH_API_MODEL 被拒絕後，回退至預設值且通過合法性檢查。"""
+    _set_config_path(tmp_path / "not-exist.json")
+    monkeypatch.setenv("AUTORESEARCH_API_MODEL", "")
+
+    with pytest.raises(ValueError, match="AUTORESEARCH_API_MODEL"):
+        config.get_all()
+
+    config._CONFIG = None
+    monkeypatch.delenv("AUTORESEARCH_API_MODEL", raising=False)
+    cfg = config.get_all()
+    config.validate_config(cfg)
+    assert cfg["api"]["model"] == config._DEFAULTS["api"]["model"]
+
+
+def test_valid_api_url_env_var_accepted(tmp_path, monkeypatch):
+    """合法 http/https URL 的 AUTORESEARCH_API_URL 必須被接受。"""
+    _set_config_path(tmp_path / "not-exist.json")
+    monkeypatch.setenv("AUTORESEARCH_API_URL", "https://valid.example/v1/api")
+
+    cfg = config.get_all()
+    assert cfg["api"]["url"] == "https://valid.example/v1/api"
+
+
+def test_valid_http_api_url_env_var_accepted(tmp_path, monkeypatch):
+    """合法 http:// URL 的 AUTORESEARCH_API_URL 必須被接受。"""
+    _set_config_path(tmp_path / "not-exist.json")
+    monkeypatch.setenv("AUTORESEARCH_API_URL", "http://localhost:8080/api")
+
+    cfg = config.get_all()
+    assert cfg["api"]["url"] == "http://localhost:8080/api"
+
+
+def test_valid_api_model_env_var_accepted(tmp_path, monkeypatch):
+    """非空的 AUTORESEARCH_API_MODEL 必須被接受。"""
+    _set_config_path(tmp_path / "not-exist.json")
+    monkeypatch.setenv("AUTORESEARCH_API_MODEL", "gpt-5.4-mini")
+
+    cfg = config.get_all()
+    assert cfg["api"]["model"] == "gpt-5.4-mini"
