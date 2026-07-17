@@ -395,3 +395,46 @@ def test_empty_holdout_parallel_env_var_raises(monkeypatch):
 
     with pytest.raises(ValueError, match="AUTORESEARCH_HOLDOUT_PARALLEL"):
         config.get_all()
+
+
+# ── L131 路徑覆蓋：正常 dict section + string key 的 get() 查詢 ─────────
+
+
+def test_get_normal_dict_section_string_key_returns_value(tmp_path):
+    """覆蓋 L131：section_data 為 dict 時，以 string key 查詢回傳對應值。"""
+    config_file = tmp_path / "config.json"
+    config_file.write_text(json.dumps({}), encoding="utf-8")
+    _set_config_path(config_file)
+    config._load_config()
+
+    # L130: isinstance(section_data, dict) → True
+    # L131: section_data.get("timeout", default) → 180
+    result = config.get("api", "timeout")
+    assert result == 180, "L131: dict section + string key 回傳對應值"
+    assert isinstance(result, int)
+
+
+def test_get_normal_dict_section_missing_key_returns_default(tmp_path):
+    """覆蓋 L131：section_data 為 dict 時，key 不存在回傳 default。"""
+    config_file = tmp_path / "config.json"
+    config_file.write_text(json.dumps({}), encoding="utf-8")
+    _set_config_path(config_file)
+    config._load_config()
+
+    # L131: section_data.get("nonexistent_key", 42) → 42
+    result = config.get("api", "nonexistent_key", 42)
+    assert result == 42, "L131: 缺失 key 回傳 default"
+
+
+def test_env_override_section_created_when_missing_from_cfg(monkeypatch):
+    """覆蓋 L101-102：env_map 對應的 section 不在 cfg 時，自動建立空 dict 後寫入。"""
+    # 直接呼叫 _apply_env_overrides，手動提供缺少 parallel section 的 cfg
+    test_cfg = {"api": {"timeout": 180}}
+    monkeypatch.setenv("AUTORESEARCH_DEV_PARALLEL", "99")
+
+    config._apply_env_overrides(test_cfg)
+
+    # L101: "parallel" not in test_cfg → True
+    # L102: test_cfg["parallel"] = {} 後 test_cfg["parallel"]["dev"] = 99
+    assert "parallel" in test_cfg, "L101-102: 缺失的 section 被自動建立"
+    assert test_cfg["parallel"]["dev"] == 99, "L102: 建立後 env 值正確寫入"
