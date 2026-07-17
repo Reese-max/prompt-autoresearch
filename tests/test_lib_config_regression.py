@@ -48,11 +48,18 @@ def test_missing_env_var_falls_back_to_default():
 
 
 def test_invalid_env_var_triggers_fallback(monkeypatch):
-    """場景 2：環境變數格式錯誤時觸發 ValueError（回退/拒絕）。"""
+    """場景 2：環境變數格式錯誤時被驗證攔下，清理後 cfg 通過合法性檢查且不污染。"""
     monkeypatch.setenv("AUTORESEARCH_API_TIMEOUT", "not-a-number")
 
     with pytest.raises(ValueError, match="AUTORESEARCH_API_TIMEOUT"):
         config.get_all()
+
+    config._CONFIG = None
+    monkeypatch.delenv("AUTORESEARCH_API_TIMEOUT", raising=False)
+    cfg = config.get_all()
+    config.validate_config(cfg)
+    assert cfg["api"]["timeout"] == config._DEFAULTS["api"]["timeout"]
+    assert isinstance(cfg["api"]["timeout"], int)
 
 
 def test_fallback_final_value_must_pass_validation(monkeypatch):

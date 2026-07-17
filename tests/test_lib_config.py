@@ -256,18 +256,36 @@ def test_invalid_numeric_env_var_raises_and_does_not_pollute_cfg(tmp_path, monke
     assert isinstance(cfg["api"]["timeout"], int)
 
 
-def test_invalid_parallel_env_var_raises(monkeypatch):
+def test_invalid_parallel_env_var_raises(tmp_path, monkeypatch):
+    """無效 smoke_parallel 被驗證攔下，清理後 cfg 通過合法性檢查且不污染。"""
+    _set_config_path(tmp_path / "not-exist.json")
     monkeypatch.setenv("AUTORESEARCH_SMOKE_PARALLEL", "abc")
 
     with pytest.raises(ValueError, match="AUTORESEARCH_SMOKE_PARALLEL"):
         config.get_all()
 
+    config._CONFIG = None
+    monkeypatch.delenv("AUTORESEARCH_SMOKE_PARALLEL", raising=False)
+    cfg = config.get_all()
+    config.validate_config(cfg)
+    assert cfg["parallel"]["smoke"] == config._DEFAULTS["parallel"]["smoke"]
+    assert isinstance(cfg["parallel"]["smoke"], int)
 
-def test_invalid_max_candidate_length_env_var_raises(monkeypatch):
+
+def test_invalid_max_candidate_length_env_var_raises(tmp_path, monkeypatch):
+    """無效 max_candidate_length 被驗證攔下，清理後 cfg 通過合法性檢查且不污染。"""
+    _set_config_path(tmp_path / "not-exist.json")
     monkeypatch.setenv("AUTORESEARCH_MAX_CANDIDATE_LENGTH", "not-a-number")
 
     with pytest.raises(ValueError, match="AUTORESEARCH_MAX_CANDIDATE_LENGTH"):
         config.get_all()
+
+    config._CONFIG = None
+    monkeypatch.delenv("AUTORESEARCH_MAX_CANDIDATE_LENGTH", raising=False)
+    cfg = config.get_all()
+    config.validate_config(cfg)
+    assert cfg["thresholds"]["max_candidate_length"] == config._DEFAULTS["thresholds"]["max_candidate_length"]
+    assert isinstance(cfg["thresholds"]["max_candidate_length"], int)
 
 
 # ── 預設值回退路徑驗證：config.json 空值/錯誤型別覆蓋 defaults ──────────
@@ -364,28 +382,53 @@ def test_empty_smoke_parallel_env_var_rejects_does_not_pollute(tmp_path, monkeyp
 
 
 def test_empty_dev_parallel_env_var_rejects_and_preserves_other(tmp_path, monkeypatch):
-    """空字串 dev_parallel 被拒絕時，raise 前不應污染 cfg。"""
+    """空字串 dev_parallel 被驗證攔下，raise 前不污染其他數值設定，清理後 cfg 通過合法性檢查。"""
     _set_config_path(tmp_path / "not-exist.json")
     monkeypatch.setenv("AUTORESEARCH_DEV_PARALLEL", "")
 
     with pytest.raises(ValueError, match="AUTORESEARCH_DEV_PARALLEL"):
         config.get_all()
 
+    config._CONFIG = None
+    monkeypatch.delenv("AUTORESEARCH_DEV_PARALLEL", raising=False)
+    cfg = config.get_all()
+    config.validate_config(cfg)
+    assert cfg["parallel"]["dev"] == config._DEFAULTS["parallel"]["dev"]
+    assert isinstance(cfg["parallel"]["dev"], int)
+    assert cfg["parallel"]["smoke"] == config._DEFAULTS["parallel"]["smoke"]
+    assert cfg["parallel"]["holdout"] == config._DEFAULTS["parallel"]["holdout"]
 
-def test_empty_max_candidate_length_env_var_raises(monkeypatch):
-    """空字串 max_candidate_length 必須被拒絕。"""
+
+def test_empty_max_candidate_length_env_var_raises(tmp_path, monkeypatch):
+    """空字串 max_candidate_length 被驗證攔下，清理後 cfg 通過合法性檢查且不污染。"""
+    _set_config_path(tmp_path / "not-exist.json")
     monkeypatch.setenv("AUTORESEARCH_MAX_CANDIDATE_LENGTH", "")
 
     with pytest.raises(ValueError, match="AUTORESEARCH_MAX_CANDIDATE_LENGTH"):
         config.get_all()
 
+    config._CONFIG = None
+    monkeypatch.delenv("AUTORESEARCH_MAX_CANDIDATE_LENGTH", raising=False)
+    cfg = config.get_all()
+    config.validate_config(cfg)
+    assert cfg["thresholds"]["max_candidate_length"] == config._DEFAULTS["thresholds"]["max_candidate_length"]
+    assert isinstance(cfg["thresholds"]["max_candidate_length"], int)
 
-def test_empty_holdout_parallel_env_var_raises(monkeypatch):
-    """空字串 holdout_parallel 必須被拒絕。"""
+
+def test_empty_holdout_parallel_env_var_raises(tmp_path, monkeypatch):
+    """空字串 holdout_parallel 被驗證攔下，清理後 cfg 通過合法性檢查且不污染。"""
+    _set_config_path(tmp_path / "not-exist.json")
     monkeypatch.setenv("AUTORESEARCH_HOLDOUT_PARALLEL", "")
 
     with pytest.raises(ValueError, match="AUTORESEARCH_HOLDOUT_PARALLEL"):
         config.get_all()
+
+    config._CONFIG = None
+    monkeypatch.delenv("AUTORESEARCH_HOLDOUT_PARALLEL", raising=False)
+    cfg = config.get_all()
+    config.validate_config(cfg)
+    assert cfg["parallel"]["holdout"] == config._DEFAULTS["parallel"]["holdout"]
+    assert isinstance(cfg["parallel"]["holdout"], int)
 
 
 # ── L131 路徑覆蓋：正常 dict section + string key 的 get() 查詢 ─────────
