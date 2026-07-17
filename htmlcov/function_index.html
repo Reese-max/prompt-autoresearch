@@ -11,7 +11,7 @@
 <header>
     <div class="content">
         <h1>Coverage report:
-            <span class="pc_cov">99%</span>
+            <span class="pc_cov">0%</span>
         </h1>
         <aside id="help_panel_wrapper">
             <input id="help_panel_state" type="checkbox">
@@ -27,6 +27,8 @@
                         <kbd>s</kbd>
                         <kbd>m</kbd>
                         <kbd>x</kbd>
+                        <kbd>b</kbd>
+                        <kbd>p</kbd>
                         <kbd>c</kbd>
                         &nbsp; change column sorting
                     </p>
@@ -55,20 +57,35 @@
         </h2>
         <p class="text">
             <a class="nav" href="https://coverage.readthedocs.io/en/7.14.1">coverage.py v7.14.1</a>,
-            created at 2026-07-13 12:43 +0800
+            created at 2026-07-18 05:38 +0800
         </p>
     </div>
 </header>
 <main id="index">
     <table class="index" data-sortable>
         <thead>
+            <tr class="tablehead grouphead">
+                <th class="spacer">&nbsp;</th>
+                <th class="spacer">&nbsp;</th>
+                <th class="spacer">&nbsp;</th>
+                <th class="left" colspan="4">Statements</th>
+                <th class="spacer">&nbsp;</th>
+                <th class="left" colspan="3">Branches</th>
+                <th class="spacer">&nbsp;</th>
+                <th>Total</th>
+            </tr>
             <tr class="tablehead" title="Click to sort">
                 <th id="file" class="name" aria-sort="none" data-shortcut="f">File<span class="arrows"></span></th>
                 <th id="region" class="name" aria-sort="none" data-default-sort-order="ascending" data-shortcut="n">function<span class="arrows"></span></th>
                 <th class="spacer">&nbsp;</th>
+                <th id="statements_coverage" aria-sort="none" data-default-sort-order="descending">coverage<span class="arrows"></span></th>
                 <th id="statements" aria-sort="none" data-default-sort-order="descending" data-shortcut="s">statements<span class="arrows"></span></th>
                 <th id="missing" aria-sort="none" data-default-sort-order="descending" data-shortcut="m">missing<span class="arrows"></span></th>
                 <th id="excluded" aria-sort="none" data-default-sort-order="descending" data-shortcut="x">excluded<span class="arrows"></span></th>
+                <th class="spacer">&nbsp;</th>
+                <th id="branches_coverage" aria-sort="none" data-default-sort-order="descending">coverage<span class="arrows"></span></th>
+                <th id="branches" aria-sort="none" data-default-sort-order="descending" data-shortcut="b">branches<span class="arrows"></span></th>
+                <th id="partial" aria-sort="none" data-default-sort-order="descending" data-shortcut="p">partial<span class="arrows"></span></th>
                 <th class="spacer">&nbsp;</th>
                 <th id="coverage" aria-sort="none" data-shortcut="c">coverage<span class="arrows"></span></th>
             </tr>
@@ -78,7 +95,12 @@
                 <td class="name"><a href="z_10fae538ba4e8521___init___py.html">api<span class="sep">\</span>__init__.py</a></td>
                 <td class="name"><a href="z_10fae538ba4e8521___init___py.html"><data value=''><span class='no-noun'>(no function)</span></data></a></td>
                 <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 0">100%</td>
                 <td>0</td>
+                <td>0</td>
+                <td>0</td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 0">100%</td>
                 <td>0</td>
                 <td>0</td>
                 <td class="spacer">&nbsp;</td>
@@ -88,347 +110,927 @@
                 <td class="name"><a href="z_10fae538ba4e8521_continuous_optimizer_py.html#t32">api<span class="sep">\</span>continuous_optimizer.py</a></td>
                 <td class="name"><a href="z_10fae538ba4e8521_continuous_optimizer_py.html#t32"><data value='check_feedback_threshold'>check_feedback_threshold</data></a></td>
                 <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 5">0%</td>
+                <td>5</td>
                 <td>5</td>
                 <td>0</td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 2">0%</td>
+                <td>2</td>
                 <td>0</td>
                 <td class="spacer">&nbsp;</td>
-                <td data-ratio="5 5">100%</td>
+                <td data-ratio="0 7">0%</td>
             </tr>
             <tr class="region">
                 <td class="name"><a href="z_10fae538ba4e8521_continuous_optimizer_py.html#t42">api<span class="sep">\</span>continuous_optimizer.py</a></td>
                 <td class="name"><a href="z_10fae538ba4e8521_continuous_optimizer_py.html#t42"><data value='analyze_and_suggest'>analyze_and_suggest</data></a></td>
                 <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 5">0%</td>
                 <td>5</td>
+                <td>5</td>
+                <td>0</td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 0">100%</td>
                 <td>0</td>
                 <td>0</td>
                 <td class="spacer">&nbsp;</td>
-                <td data-ratio="5 5">100%</td>
+                <td data-ratio="0 5">0%</td>
             </tr>
             <tr class="region">
                 <td class="name"><a href="z_10fae538ba4e8521_continuous_optimizer_py.html#t64">api<span class="sep">\</span>continuous_optimizer.py</a></td>
                 <td class="name"><a href="z_10fae538ba4e8521_continuous_optimizer_py.html#t64"><data value='run_optimization_round'>run_optimization_round</data></a></td>
                 <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 13">0%</td>
+                <td>13</td>
                 <td>13</td>
                 <td>0</td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 2">0%</td>
+                <td>2</td>
                 <td>0</td>
                 <td class="spacer">&nbsp;</td>
-                <td data-ratio="13 13">100%</td>
+                <td data-ratio="0 15">0%</td>
             </tr>
             <tr class="region">
                 <td class="name"><a href="z_10fae538ba4e8521_continuous_optimizer_py.html#t106">api<span class="sep">\</span>continuous_optimizer.py</a></td>
                 <td class="name"><a href="z_10fae538ba4e8521_continuous_optimizer_py.html#t106"><data value='run_continuous_loop'>run_continuous_loop</data></a></td>
                 <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 30">0%</td>
+                <td>30</td>
                 <td>30</td>
                 <td>0</td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 8">0%</td>
+                <td>8</td>
                 <td>0</td>
                 <td class="spacer">&nbsp;</td>
-                <td data-ratio="30 30">100%</td>
+                <td data-ratio="0 38">0%</td>
             </tr>
             <tr class="region">
                 <td class="name"><a href="z_10fae538ba4e8521_continuous_optimizer_py.html">api<span class="sep">\</span>continuous_optimizer.py</a></td>
                 <td class="name"><a href="z_10fae538ba4e8521_continuous_optimizer_py.html"><data value=''><span class='no-noun'>(no function)</span></data></a></td>
                 <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 29">0%</td>
+                <td>29</td>
                 <td>29</td>
                 <td>0</td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 4">0%</td>
+                <td>4</td>
                 <td>0</td>
                 <td class="spacer">&nbsp;</td>
-                <td data-ratio="29 29">100%</td>
+                <td data-ratio="0 33">0%</td>
             </tr>
             <tr class="region">
                 <td class="name"><a href="z_10fae538ba4e8521_feedback_py.html#t30">api<span class="sep">\</span>feedback.py</a></td>
                 <td class="name"><a href="z_10fae538ba4e8521_feedback_py.html#t30"><data value='load_feedback'>load_feedback</data></a></td>
                 <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 1">0%</td>
                 <td>1</td>
+                <td>1</td>
+                <td>0</td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 0">100%</td>
                 <td>0</td>
                 <td>0</td>
                 <td class="spacer">&nbsp;</td>
-                <td data-ratio="1 1">100%</td>
+                <td data-ratio="0 1">0%</td>
             </tr>
             <tr class="region">
                 <td class="name"><a href="z_10fae538ba4e8521_feedback_py.html#t35">api<span class="sep">\</span>feedback.py</a></td>
                 <td class="name"><a href="z_10fae538ba4e8521_feedback_py.html#t35"><data value='analyze_feedback_by_hash'>analyze_feedback_by_hash</data></a></td>
                 <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 26">0%</td>
                 <td>26</td>
-                <td>1</td>
+                <td>26</td>
                 <td>0</td>
                 <td class="spacer">&nbsp;</td>
-                <td data-ratio="25 26">96%</td>
+                <td data-ratio="0 14">0%</td>
+                <td>14</td>
+                <td>0</td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 40">0%</td>
             </tr>
             <tr class="region">
                 <td class="name"><a href="z_10fae538ba4e8521_feedback_py.html#t89">api<span class="sep">\</span>feedback.py</a></td>
                 <td class="name"><a href="z_10fae538ba4e8521_feedback_py.html#t89"><data value='get_recent_feedback_trend'>get_recent_feedback_trend</data></a></td>
                 <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 11">0%</td>
+                <td>11</td>
                 <td>11</td>
                 <td>0</td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 4">0%</td>
+                <td>4</td>
                 <td>0</td>
                 <td class="spacer">&nbsp;</td>
-                <td data-ratio="11 11">100%</td>
+                <td data-ratio="0 15">0%</td>
             </tr>
             <tr class="region">
                 <td class="name"><a href="z_10fae538ba4e8521_feedback_py.html#t106">api<span class="sep">\</span>feedback.py</a></td>
                 <td class="name"><a href="z_10fae538ba4e8521_feedback_py.html#t106"><data value='get_weak_areas'>get_weak_areas</data></a></td>
                 <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 11">0%</td>
+                <td>11</td>
                 <td>11</td>
                 <td>0</td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 10">0%</td>
+                <td>10</td>
                 <td>0</td>
                 <td class="spacer">&nbsp;</td>
-                <td data-ratio="11 11">100%</td>
+                <td data-ratio="0 21">0%</td>
             </tr>
             <tr class="region">
                 <td class="name"><a href="z_10fae538ba4e8521_feedback_py.html#t140">api<span class="sep">\</span>feedback.py</a></td>
                 <td class="name"><a href="z_10fae538ba4e8521_feedback_py.html#t140"><data value='generate_optimization_hints'>generate_optimization_hints</data></a></td>
                 <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 11">0%</td>
+                <td>11</td>
                 <td>11</td>
                 <td>0</td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 6">0%</td>
+                <td>6</td>
                 <td>0</td>
                 <td class="spacer">&nbsp;</td>
-                <td data-ratio="11 11">100%</td>
+                <td data-ratio="0 17">0%</td>
             </tr>
             <tr class="region">
                 <td class="name"><a href="z_10fae538ba4e8521_feedback_py.html#t178">api<span class="sep">\</span>feedback.py</a></td>
                 <td class="name"><a href="z_10fae538ba4e8521_feedback_py.html#t178"><data value='get_feedback_summary'>get_feedback_summary</data></a></td>
                 <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 5">0%</td>
                 <td>5</td>
+                <td>5</td>
+                <td>0</td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 0">100%</td>
                 <td>0</td>
                 <td>0</td>
                 <td class="spacer">&nbsp;</td>
-                <td data-ratio="5 5">100%</td>
+                <td data-ratio="0 5">0%</td>
             </tr>
             <tr class="region">
                 <td class="name"><a href="z_10fae538ba4e8521_feedback_py.html">api<span class="sep">\</span>feedback.py</a></td>
                 <td class="name"><a href="z_10fae538ba4e8521_feedback_py.html"><data value=''><span class='no-noun'>(no function)</span></data></a></td>
                 <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 20">0%</td>
                 <td>20</td>
+                <td>20</td>
+                <td>0</td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 2">0%</td>
                 <td>2</td>
                 <td>0</td>
                 <td class="spacer">&nbsp;</td>
-                <td data-ratio="18 20">90%</td>
+                <td data-ratio="0 22">0%</td>
             </tr>
             <tr class="region">
                 <td class="name"><a href="z_10fae538ba4e8521_server_py.html#t40">api<span class="sep">\</span>server.py</a></td>
                 <td class="name"><a href="z_10fae538ba4e8521_server_py.html#t40"><data value='get_feedback_module'>_get_feedback_module</data></a></td>
                 <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 7">0%</td>
+                <td>7</td>
                 <td>7</td>
                 <td>0</td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 2">0%</td>
+                <td>2</td>
                 <td>0</td>
                 <td class="spacer">&nbsp;</td>
-                <td data-ratio="7 7">100%</td>
+                <td data-ratio="0 9">0%</td>
             </tr>
             <tr class="region">
                 <td class="name"><a href="z_10fae538ba4e8521_server_py.html#t64">api<span class="sep">\</span>server.py</a></td>
                 <td class="name"><a href="z_10fae538ba4e8521_server_py.html#t64"><data value='cors_headers'>cors_headers</data></a></td>
                 <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 5">0%</td>
                 <td>5</td>
+                <td>5</td>
+                <td>0</td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 0">100%</td>
                 <td>0</td>
                 <td>0</td>
                 <td class="spacer">&nbsp;</td>
-                <td data-ratio="5 5">100%</td>
+                <td data-ratio="0 5">0%</td>
             </tr>
             <tr class="region">
                 <td class="name"><a href="z_10fae538ba4e8521_server_py.html#t73">api<span class="sep">\</span>server.py</a></td>
                 <td class="name"><a href="z_10fae538ba4e8521_server_py.html#t73"><data value='send_json'>send_json</data></a></td>
                 <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 7">0%</td>
                 <td>7</td>
+                <td>7</td>
+                <td>0</td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 0">100%</td>
                 <td>0</td>
                 <td>0</td>
                 <td class="spacer">&nbsp;</td>
-                <td data-ratio="7 7">100%</td>
+                <td data-ratio="0 7">0%</td>
             </tr>
             <tr class="region">
                 <td class="name"><a href="z_10fae538ba4e8521_server_py.html#t84">api<span class="sep">\</span>server.py</a></td>
                 <td class="name"><a href="z_10fae538ba4e8521_server_py.html#t84"><data value='send_error_json'>send_error_json</data></a></td>
                 <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 1">0%</td>
                 <td>1</td>
+                <td>1</td>
+                <td>0</td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 0">100%</td>
                 <td>0</td>
                 <td>0</td>
                 <td class="spacer">&nbsp;</td>
-                <td data-ratio="1 1">100%</td>
+                <td data-ratio="0 1">0%</td>
             </tr>
             <tr class="region">
                 <td class="name"><a href="z_10fae538ba4e8521_server_py.html#t92">api<span class="sep">\</span>server.py</a></td>
                 <td class="name"><a href="z_10fae538ba4e8521_server_py.html#t92"><data value='log_message'>PromptAPIHandler.log_message</data></a></td>
                 <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 2">0%</td>
                 <td>2</td>
+                <td>2</td>
+                <td>0</td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 0">100%</td>
                 <td>0</td>
                 <td>0</td>
                 <td class="spacer">&nbsp;</td>
-                <td data-ratio="2 2">100%</td>
+                <td data-ratio="0 2">0%</td>
             </tr>
             <tr class="region">
                 <td class="name"><a href="z_10fae538ba4e8521_server_py.html#t97">api<span class="sep">\</span>server.py</a></td>
                 <td class="name"><a href="z_10fae538ba4e8521_server_py.html#t97"><data value='do_OPTIONS'>PromptAPIHandler.do_OPTIONS</data></a></td>
                 <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 3">0%</td>
                 <td>3</td>
+                <td>3</td>
+                <td>0</td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 0">100%</td>
                 <td>0</td>
                 <td>0</td>
                 <td class="spacer">&nbsp;</td>
-                <td data-ratio="3 3">100%</td>
+                <td data-ratio="0 3">0%</td>
             </tr>
             <tr class="region">
                 <td class="name"><a href="z_10fae538ba4e8521_server_py.html#t103">api<span class="sep">\</span>server.py</a></td>
                 <td class="name"><a href="z_10fae538ba4e8521_server_py.html#t103"><data value='do_GET'>PromptAPIHandler.do_GET</data></a></td>
                 <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 11">0%</td>
+                <td>11</td>
                 <td>11</td>
                 <td>0</td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 4">0%</td>
+                <td>4</td>
                 <td>0</td>
                 <td class="spacer">&nbsp;</td>
-                <td data-ratio="11 11">100%</td>
+                <td data-ratio="0 15">0%</td>
             </tr>
             <tr class="region">
                 <td class="name"><a href="z_10fae538ba4e8521_server_py.html#t133">api<span class="sep">\</span>server.py</a></td>
                 <td class="name"><a href="z_10fae538ba4e8521_server_py.html#t133"><data value='do_POST'>PromptAPIHandler.do_POST</data></a></td>
                 <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 5">0%</td>
+                <td>5</td>
                 <td>5</td>
                 <td>0</td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 2">0%</td>
+                <td>2</td>
                 <td>0</td>
                 <td class="spacer">&nbsp;</td>
-                <td data-ratio="5 5">100%</td>
+                <td data-ratio="0 7">0%</td>
             </tr>
             <tr class="region">
                 <td class="name"><a href="z_10fae538ba4e8521_server_py.html#t145">api<span class="sep">\</span>server.py</a></td>
                 <td class="name"><a href="z_10fae538ba4e8521_server_py.html#t145"><data value='get_current_prompt'>PromptAPIHandler._get_current_prompt</data></a></td>
                 <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 6">0%</td>
+                <td>6</td>
                 <td>6</td>
                 <td>0</td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 2">0%</td>
+                <td>2</td>
                 <td>0</td>
                 <td class="spacer">&nbsp;</td>
-                <td data-ratio="6 6">100%</td>
+                <td data-ratio="0 8">0%</td>
             </tr>
             <tr class="region">
                 <td class="name"><a href="z_10fae538ba4e8521_server_py.html#t160">api<span class="sep">\</span>server.py</a></td>
                 <td class="name"><a href="z_10fae538ba4e8521_server_py.html#t160"><data value='get_prompt_meta'>PromptAPIHandler._get_prompt_meta</data></a></td>
                 <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 5">0%</td>
+                <td>5</td>
                 <td>5</td>
                 <td>0</td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 2">0%</td>
+                <td>2</td>
                 <td>0</td>
                 <td class="spacer">&nbsp;</td>
-                <td data-ratio="5 5">100%</td>
+                <td data-ratio="0 7">0%</td>
             </tr>
             <tr class="region">
                 <td class="name"><a href="z_10fae538ba4e8521_server_py.html#t169">api<span class="sep">\</span>server.py</a></td>
                 <td class="name"><a href="z_10fae538ba4e8521_server_py.html#t169"><data value='get_baseline'>PromptAPIHandler._get_baseline</data></a></td>
                 <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 6">0%</td>
+                <td>6</td>
                 <td>6</td>
                 <td>0</td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 2">0%</td>
+                <td>2</td>
                 <td>0</td>
                 <td class="spacer">&nbsp;</td>
-                <td data-ratio="6 6">100%</td>
+                <td data-ratio="0 8">0%</td>
             </tr>
             <tr class="region">
                 <td class="name"><a href="z_10fae538ba4e8521_server_py.html#t184">api<span class="sep">\</span>server.py</a></td>
                 <td class="name"><a href="z_10fae538ba4e8521_server_py.html#t184"><data value='get_route'>PromptAPIHandler._get_route</data></a></td>
                 <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 5">0%</td>
+                <td>5</td>
                 <td>5</td>
                 <td>0</td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 2">0%</td>
+                <td>2</td>
                 <td>0</td>
                 <td class="spacer">&nbsp;</td>
-                <td data-ratio="5 5">100%</td>
+                <td data-ratio="0 7">0%</td>
             </tr>
             <tr class="region">
                 <td class="name"><a href="z_10fae538ba4e8521_server_py.html#t193">api<span class="sep">\</span>server.py</a></td>
                 <td class="name"><a href="z_10fae538ba4e8521_server_py.html#t193"><data value='list_champions'>PromptAPIHandler._list_champions</data></a></td>
                 <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 13">0%</td>
+                <td>13</td>
                 <td>13</td>
                 <td>0</td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 6">0%</td>
+                <td>6</td>
                 <td>0</td>
                 <td class="spacer">&nbsp;</td>
-                <td data-ratio="13 13">100%</td>
+                <td data-ratio="0 19">0%</td>
             </tr>
             <tr class="region">
                 <td class="name"><a href="z_10fae538ba4e8521_server_py.html#t216">api<span class="sep">\</span>server.py</a></td>
                 <td class="name"><a href="z_10fae538ba4e8521_server_py.html#t216"><data value='get_champion'>PromptAPIHandler._get_champion</data></a></td>
                 <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 16">0%</td>
+                <td>16</td>
                 <td>16</td>
                 <td>0</td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 8">0%</td>
+                <td>8</td>
                 <td>0</td>
                 <td class="spacer">&nbsp;</td>
-                <td data-ratio="16 16">100%</td>
+                <td data-ratio="0 24">0%</td>
             </tr>
             <tr class="region">
                 <td class="name"><a href="z_10fae538ba4e8521_server_py.html#t245">api<span class="sep">\</span>server.py</a></td>
                 <td class="name"><a href="z_10fae538ba4e8521_server_py.html#t245"><data value='post_feedback'>PromptAPIHandler._post_feedback</data></a></td>
                 <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 18">0%</td>
+                <td>18</td>
                 <td>18</td>
                 <td>0</td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 4">0%</td>
+                <td>4</td>
                 <td>0</td>
                 <td class="spacer">&nbsp;</td>
-                <td data-ratio="18 18">100%</td>
+                <td data-ratio="0 22">0%</td>
             </tr>
             <tr class="region">
                 <td class="name"><a href="z_10fae538ba4e8521_server_py.html#t287">api<span class="sep">\</span>server.py</a></td>
                 <td class="name"><a href="z_10fae538ba4e8521_server_py.html#t287"><data value='get_feedback_summary'>PromptAPIHandler._get_feedback_summary</data></a></td>
                 <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 9">0%</td>
+                <td>9</td>
                 <td>9</td>
                 <td>0</td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 2">0%</td>
+                <td>2</td>
                 <td>0</td>
                 <td class="spacer">&nbsp;</td>
-                <td data-ratio="9 9">100%</td>
+                <td data-ratio="0 11">0%</td>
             </tr>
             <tr class="region">
                 <td class="name"><a href="z_10fae538ba4e8521_server_py.html#t300">api<span class="sep">\</span>server.py</a></td>
                 <td class="name"><a href="z_10fae538ba4e8521_server_py.html#t300"><data value='get_feedback_weak_areas'>PromptAPIHandler._get_feedback_weak_areas</data></a></td>
                 <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 9">0%</td>
+                <td>9</td>
                 <td>9</td>
                 <td>0</td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 2">0%</td>
+                <td>2</td>
                 <td>0</td>
                 <td class="spacer">&nbsp;</td>
-                <td data-ratio="9 9">100%</td>
+                <td data-ratio="0 11">0%</td>
             </tr>
             <tr class="region">
                 <td class="name"><a href="z_10fae538ba4e8521_server_py.html#t313">api<span class="sep">\</span>server.py</a></td>
                 <td class="name"><a href="z_10fae538ba4e8521_server_py.html#t313"><data value='get_feedback_hints'>PromptAPIHandler._get_feedback_hints</data></a></td>
                 <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 9">0%</td>
+                <td>9</td>
                 <td>9</td>
                 <td>0</td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 2">0%</td>
+                <td>2</td>
                 <td>0</td>
                 <td class="spacer">&nbsp;</td>
-                <td data-ratio="9 9">100%</td>
+                <td data-ratio="0 11">0%</td>
             </tr>
             <tr class="region">
                 <td class="name"><a href="z_10fae538ba4e8521_server_py.html#t326">api<span class="sep">\</span>server.py</a></td>
                 <td class="name"><a href="z_10fae538ba4e8521_server_py.html#t326"><data value='get_optimizer_status'>PromptAPIHandler._get_optimizer_status</data></a></td>
                 <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 10">0%</td>
+                <td>10</td>
                 <td>10</td>
                 <td>0</td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 4">0%</td>
+                <td>4</td>
                 <td>0</td>
                 <td class="spacer">&nbsp;</td>
-                <td data-ratio="10 10">100%</td>
+                <td data-ratio="0 14">0%</td>
             </tr>
             <tr class="region">
                 <td class="name"><a href="z_10fae538ba4e8521_server_py.html#t349">api<span class="sep">\</span>server.py</a></td>
                 <td class="name"><a href="z_10fae538ba4e8521_server_py.html#t349"><data value='health_check'>PromptAPIHandler._health_check</data></a></td>
                 <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 3">0%</td>
                 <td>3</td>
+                <td>3</td>
+                <td>0</td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 0">100%</td>
                 <td>0</td>
                 <td>0</td>
                 <td class="spacer">&nbsp;</td>
-                <td data-ratio="3 3">100%</td>
+                <td data-ratio="0 3">0%</td>
             </tr>
             <tr class="region">
                 <td class="name"><a href="z_10fae538ba4e8521_server_py.html#t363">api<span class="sep">\</span>server.py</a></td>
                 <td class="name"><a href="z_10fae538ba4e8521_server_py.html#t363"><data value='main'>main</data></a></td>
                 <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 27">0%</td>
                 <td>27</td>
+                <td>27</td>
+                <td>0</td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 0">100%</td>
                 <td>0</td>
                 <td>0</td>
                 <td class="spacer">&nbsp;</td>
-                <td data-ratio="27 27">100%</td>
+                <td data-ratio="0 27">0%</td>
             </tr>
             <tr class="region">
                 <td class="name"><a href="z_10fae538ba4e8521_server_py.html">api<span class="sep">\</span>server.py</a></td>
                 <td class="name"><a href="z_10fae538ba4e8521_server_py.html"><data value=''><span class='no-noun'>(no function)</span></data></a></td>
                 <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 42">0%</td>
                 <td>42</td>
+                <td>42</td>
+                <td>0</td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 2">0%</td>
+                <td>2</td>
+                <td>0</td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 44">0%</td>
+            </tr>
+            <tr class="region">
+                <td class="name"><a href="z_306ed2d68c6501e8___init___py.html">lib<span class="sep">\</span>__init__.py</a></td>
+                <td class="name"><a href="z_306ed2d68c6501e8___init___py.html"><data value=''><span class='no-noun'>(no function)</span></data></a></td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 0">100%</td>
+                <td>0</td>
+                <td>0</td>
+                <td>0</td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 0">100%</td>
+                <td>0</td>
+                <td>0</td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 0">100%</td>
+            </tr>
+            <tr class="region">
+                <td class="name"><a href="z_306ed2d68c6501e8_api_py.html#t29">lib<span class="sep">\</span>api.py</a></td>
+                <td class="name"><a href="z_306ed2d68c6501e8_api_py.html#t29"><data value='translate_error'>_translate_error</data></a></td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 11">0%</td>
+                <td>11</td>
+                <td>11</td>
+                <td>0</td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 10">0%</td>
+                <td>10</td>
+                <td>0</td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 21">0%</td>
+            </tr>
+            <tr class="region">
+                <td class="name"><a href="z_306ed2d68c6501e8_api_py.html#t49">lib<span class="sep">\</span>api.py</a></td>
+                <td class="name"><a href="z_306ed2d68c6501e8_api_py.html#t49"><data value='get_semaphore'>_get_semaphore</data></a></td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 4">0%</td>
+                <td>4</td>
+                <td>4</td>
+                <td>0</td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 2">0%</td>
+                <td>2</td>
+                <td>0</td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 6">0%</td>
+            </tr>
+            <tr class="region">
+                <td class="name"><a href="z_306ed2d68c6501e8_api_py.html#t57">lib<span class="sep">\</span>api.py</a></td>
+                <td class="name"><a href="z_306ed2d68c6501e8_api_py.html#t57"><data value='rate_wait'>_rate_wait</data></a></td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 7">0%</td>
+                <td>7</td>
+                <td>7</td>
+                <td>0</td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 2">0%</td>
+                <td>2</td>
+                <td>0</td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 9">0%</td>
+            </tr>
+            <tr class="region">
+                <td class="name"><a href="z_306ed2d68c6501e8_api_py.html#t68">lib<span class="sep">\</span>api.py</a></td>
+                <td class="name"><a href="z_306ed2d68c6501e8_api_py.html#t68"><data value='call_minimax'>call_minimax</data></a></td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 24">0%</td>
+                <td>24</td>
+                <td>24</td>
+                <td>0</td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 6">0%</td>
+                <td>6</td>
+                <td>0</td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 30">0%</td>
+            </tr>
+            <tr class="region">
+                <td class="name"><a href="z_306ed2d68c6501e8_api_py.html">lib<span class="sep">\</span>api.py</a></td>
+                <td class="name"><a href="z_306ed2d68c6501e8_api_py.html"><data value=''><span class='no-noun'>(no function)</span></data></a></td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 17">0%</td>
+                <td>17</td>
+                <td>17</td>
+                <td>0</td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 0">100%</td>
+                <td>0</td>
+                <td>0</td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 17">0%</td>
+            </tr>
+            <tr class="region">
+                <td class="name"><a href="z_306ed2d68c6501e8_config_py.html#t55">lib<span class="sep">\</span>config.py</a></td>
+                <td class="name"><a href="z_306ed2d68c6501e8_config_py.html#t55"><data value='load_config'>_load_config</data></a></td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 13">0%</td>
+                <td>13</td>
+                <td>13</td>
+                <td>0</td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 4">0%</td>
+                <td>4</td>
+                <td>0</td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 17">0%</td>
+            </tr>
+            <tr class="region">
+                <td class="name"><a href="z_306ed2d68c6501e8_config_py.html#t72">lib<span class="sep">\</span>config.py</a></td>
+                <td class="name"><a href="z_306ed2d68c6501e8_config_py.html#t72"><data value='deep_merge'>_deep_merge</data></a></td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 4">0%</td>
+                <td>4</td>
+                <td>4</td>
+                <td>0</td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 4">0%</td>
+                <td>4</td>
+                <td>0</td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 8">0%</td>
+            </tr>
+            <tr class="region">
+                <td class="name"><a href="z_306ed2d68c6501e8_config_py.html#t131">lib<span class="sep">\</span>config.py</a></td>
+                <td class="name"><a href="z_306ed2d68c6501e8_config_py.html#t131"><data value='validate_config'>validate_config</data></a></td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 33">0%</td>
+                <td>33</td>
+                <td>33</td>
+                <td>0</td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 30">0%</td>
+                <td>30</td>
+                <td>0</td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 63">0%</td>
+            </tr>
+            <tr class="region">
+                <td class="name"><a href="z_306ed2d68c6501e8_config_py.html#t180">lib<span class="sep">\</span>config.py</a></td>
+                <td class="name"><a href="z_306ed2d68c6501e8_config_py.html#t180"><data value='apply_env_overrides'>_apply_env_overrides</data></a></td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 20">0%</td>
+                <td>20</td>
+                <td>20</td>
+                <td>0</td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 14">0%</td>
+                <td>14</td>
+                <td>0</td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 34">0%</td>
+            </tr>
+            <tr class="region">
+                <td class="name"><a href="z_306ed2d68c6501e8_config_py.html#t219">lib<span class="sep">\</span>config.py</a></td>
+                <td class="name"><a href="z_306ed2d68c6501e8_config_py.html#t219"><data value='get'>get</data></a></td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 9">0%</td>
+                <td>9</td>
+                <td>9</td>
+                <td>0</td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 6">0%</td>
+                <td>6</td>
+                <td>0</td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 15">0%</td>
+            </tr>
+            <tr class="region">
+                <td class="name"><a href="z_306ed2d68c6501e8_config_py.html#t233">lib<span class="sep">\</span>config.py</a></td>
+                <td class="name"><a href="z_306ed2d68c6501e8_config_py.html#t233"><data value='get_section'>get_section</data></a></td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 2">0%</td>
+                <td>2</td>
+                <td>2</td>
+                <td>0</td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 0">100%</td>
+                <td>0</td>
+                <td>0</td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 2">0%</td>
+            </tr>
+            <tr class="region">
+                <td class="name"><a href="z_306ed2d68c6501e8_config_py.html#t238">lib<span class="sep">\</span>config.py</a></td>
+                <td class="name"><a href="z_306ed2d68c6501e8_config_py.html#t238"><data value='get_all'>get_all</data></a></td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 1">0%</td>
+                <td>1</td>
                 <td>1</td>
                 <td>0</td>
                 <td class="spacer">&nbsp;</td>
-                <td data-ratio="41 42">98%</td>
+                <td data-ratio="0 0">100%</td>
+                <td>0</td>
+                <td>0</td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 1">0%</td>
+            </tr>
+            <tr class="region">
+                <td class="name"><a href="z_306ed2d68c6501e8_config_py.html">lib<span class="sep">\</span>config.py</a></td>
+                <td class="name"><a href="z_306ed2d68c6501e8_config_py.html"><data value=''><span class='no-noun'>(no function)</span></data></a></td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 19">0%</td>
+                <td>19</td>
+                <td>19</td>
+                <td>0</td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 0">100%</td>
+                <td>0</td>
+                <td>0</td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 19">0%</td>
+            </tr>
+            <tr class="region">
+                <td class="name"><a href="z_306ed2d68c6501e8_io_py.html#t12">lib<span class="sep">\</span>io.py</a></td>
+                <td class="name"><a href="z_306ed2d68c6501e8_io_py.html#t12"><data value='load_file'>load_file</data></a></td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 4">0%</td>
+                <td>4</td>
+                <td>4</td>
+                <td>0</td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 2">0%</td>
+                <td>2</td>
+                <td>0</td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 6">0%</td>
+            </tr>
+            <tr class="region">
+                <td class="name"><a href="z_306ed2d68c6501e8_io_py.html#t20">lib<span class="sep">\</span>io.py</a></td>
+                <td class="name"><a href="z_306ed2d68c6501e8_io_py.html#t20"><data value='write_file'>write_file</data></a></td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 3">0%</td>
+                <td>3</td>
+                <td>3</td>
+                <td>0</td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 0">100%</td>
+                <td>0</td>
+                <td>0</td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 3">0%</td>
+            </tr>
+            <tr class="region">
+                <td class="name"><a href="z_306ed2d68c6501e8_io_py.html#t27">lib<span class="sep">\</span>io.py</a></td>
+                <td class="name"><a href="z_306ed2d68c6501e8_io_py.html#t27"><data value='sha256_text'>sha256_text</data></a></td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 1">0%</td>
+                <td>1</td>
+                <td>1</td>
+                <td>0</td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 0">100%</td>
+                <td>0</td>
+                <td>0</td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 1">0%</td>
+            </tr>
+            <tr class="region">
+                <td class="name"><a href="z_306ed2d68c6501e8_io_py.html#t32">lib<span class="sep">\</span>io.py</a></td>
+                <td class="name"><a href="z_306ed2d68c6501e8_io_py.html#t32"><data value='load_json'>load_json</data></a></td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 9">0%</td>
+                <td>9</td>
+                <td>9</td>
+                <td>0</td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 4">0%</td>
+                <td>4</td>
+                <td>0</td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 13">0%</td>
+            </tr>
+            <tr class="region">
+                <td class="name"><a href="z_306ed2d68c6501e8_io_py.html#t45">lib<span class="sep">\</span>io.py</a></td>
+                <td class="name"><a href="z_306ed2d68c6501e8_io_py.html#t45"><data value='write_json'>write_json</data></a></td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 3">0%</td>
+                <td>3</td>
+                <td>3</td>
+                <td>0</td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 0">100%</td>
+                <td>0</td>
+                <td>0</td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 3">0%</td>
+            </tr>
+            <tr class="region">
+                <td class="name"><a href="z_306ed2d68c6501e8_io_py.html#t52">lib<span class="sep">\</span>io.py</a></td>
+                <td class="name"><a href="z_306ed2d68c6501e8_io_py.html#t52"><data value='read_jsonl'>read_jsonl</data></a></td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 10">0%</td>
+                <td>10</td>
+                <td>10</td>
+                <td>0</td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 8">0%</td>
+                <td>8</td>
+                <td>0</td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 18">0%</td>
+            </tr>
+            <tr class="region">
+                <td class="name"><a href="z_306ed2d68c6501e8_io_py.html#t66">lib<span class="sep">\</span>io.py</a></td>
+                <td class="name"><a href="z_306ed2d68c6501e8_io_py.html#t66"><data value='append_jsonl'>append_jsonl</data></a></td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 3">0%</td>
+                <td>3</td>
+                <td>3</td>
+                <td>0</td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 0">100%</td>
+                <td>0</td>
+                <td>0</td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 3">0%</td>
+            </tr>
+            <tr class="region">
+                <td class="name"><a href="z_306ed2d68c6501e8_io_py.html#t73">lib<span class="sep">\</span>io.py</a></td>
+                <td class="name"><a href="z_306ed2d68c6501e8_io_py.html#t73"><data value='normalize_path'>normalize_path</data></a></td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 1">0%</td>
+                <td>1</td>
+                <td>1</td>
+                <td>0</td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 0">100%</td>
+                <td>0</td>
+                <td>0</td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 1">0%</td>
+            </tr>
+            <tr class="region">
+                <td class="name"><a href="z_306ed2d68c6501e8_io_py.html#t78">lib<span class="sep">\</span>io.py</a></td>
+                <td class="name"><a href="z_306ed2d68c6501e8_io_py.html#t78"><data value='ensure_dir'>ensure_dir</data></a></td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 1">0%</td>
+                <td>1</td>
+                <td>1</td>
+                <td>0</td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 0">100%</td>
+                <td>0</td>
+                <td>0</td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 1">0%</td>
+            </tr>
+            <tr class="region">
+                <td class="name"><a href="z_306ed2d68c6501e8_io_py.html">lib<span class="sep">\</span>io.py</a></td>
+                <td class="name"><a href="z_306ed2d68c6501e8_io_py.html"><data value=''><span class='no-noun'>(no function)</span></data></a></td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 12">0%</td>
+                <td>12</td>
+                <td>12</td>
+                <td>0</td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 0">100%</td>
+                <td>0</td>
+                <td>0</td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 12">0%</td>
+            </tr>
+            <tr class="region">
+                <td class="name"><a href="z_306ed2d68c6501e8_metrics_py.html#t19">lib<span class="sep">\</span>metrics.py</a></td>
+                <td class="name"><a href="z_306ed2d68c6501e8_metrics_py.html#t19"><data value='record_event'>record_event</data></a></td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 4">0%</td>
+                <td>4</td>
+                <td>4</td>
+                <td>0</td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 2">0%</td>
+                <td>2</td>
+                <td>0</td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 6">0%</td>
+            </tr>
+            <tr class="region">
+                <td class="name"><a href="z_306ed2d68c6501e8_metrics_py.html#t30">lib<span class="sep">\</span>metrics.py</a></td>
+                <td class="name"><a href="z_306ed2d68c6501e8_metrics_py.html#t30"><data value='record_round'>record_round</data></a></td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 3">0%</td>
+                <td>3</td>
+                <td>3</td>
+                <td>0</td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 0">100%</td>
+                <td>0</td>
+                <td>0</td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 3">0%</td>
+            </tr>
+            <tr class="region">
+                <td class="name"><a href="z_306ed2d68c6501e8_metrics_py.html">lib<span class="sep">\</span>metrics.py</a></td>
+                <td class="name"><a href="z_306ed2d68c6501e8_metrics_py.html"><data value=''><span class='no-noun'>(no function)</span></data></a></td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 6">0%</td>
+                <td>6</td>
+                <td>6</td>
+                <td>0</td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 0">100%</td>
+                <td>0</td>
+                <td>0</td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 6">0%</td>
             </tr>
             <tr class="region">
                 <td class="name"><a href="z_de1a740d5dc98ffd___init___py.html">scripts<span class="sep">\</span>__init__.py</a></td>
                 <td class="name"><a href="z_de1a740d5dc98ffd___init___py.html"><data value=''><span class='no-noun'>(no function)</span></data></a></td>
                 <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 0">100%</td>
                 <td>0</td>
+                <td>0</td>
+                <td>0</td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 0">100%</td>
                 <td>0</td>
                 <td>0</td>
                 <td class="spacer">&nbsp;</td>
@@ -438,681 +1040,1021 @@
                 <td class="name"><a href="z_de1a740d5dc98ffd_analyze_runs_py.html#t18">scripts<span class="sep">\</span>analyze_runs.py</a></td>
                 <td class="name"><a href="z_de1a740d5dc98ffd_analyze_runs_py.html#t18"><data value='list_run_dirs'>list_run_dirs</data></a></td>
                 <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 3">0%</td>
+                <td>3</td>
                 <td>3</td>
                 <td>0</td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 2">0%</td>
+                <td>2</td>
                 <td>0</td>
                 <td class="spacer">&nbsp;</td>
-                <td data-ratio="3 3">100%</td>
+                <td data-ratio="0 5">0%</td>
             </tr>
             <tr class="region">
                 <td class="name"><a href="z_de1a740d5dc98ffd_analyze_runs_py.html#t28">scripts<span class="sep">\</span>analyze_runs.py</a></td>
                 <td class="name"><a href="z_de1a740d5dc98ffd_analyze_runs_py.html#t28"><data value='load_json'>load_json</data></a></td>
                 <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 7">0%</td>
+                <td>7</td>
                 <td>7</td>
                 <td>0</td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 2">0%</td>
+                <td>2</td>
                 <td>0</td>
                 <td class="spacer">&nbsp;</td>
-                <td data-ratio="7 7">100%</td>
+                <td data-ratio="0 9">0%</td>
             </tr>
             <tr class="region">
                 <td class="name"><a href="z_de1a740d5dc98ffd_analyze_runs_py.html#t38">scripts<span class="sep">\</span>analyze_runs.py</a></td>
                 <td class="name"><a href="z_de1a740d5dc98ffd_analyze_runs_py.html#t38"><data value='read_details'>read_details</data></a></td>
                 <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 9">0%</td>
+                <td>9</td>
                 <td>9</td>
                 <td>0</td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 6">0%</td>
+                <td>6</td>
                 <td>0</td>
                 <td class="spacer">&nbsp;</td>
-                <td data-ratio="9 9">100%</td>
+                <td data-ratio="0 15">0%</td>
             </tr>
             <tr class="region">
                 <td class="name"><a href="z_de1a740d5dc98ffd_analyze_runs_py.html#t50">scripts<span class="sep">\</span>analyze_runs.py</a></td>
                 <td class="name"><a href="z_de1a740d5dc98ffd_analyze_runs_py.html#t50"><data value='normalize'>normalize</data></a></td>
                 <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 1">0%</td>
                 <td>1</td>
+                <td>1</td>
+                <td>0</td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 0">100%</td>
                 <td>0</td>
                 <td>0</td>
                 <td class="spacer">&nbsp;</td>
-                <td data-ratio="1 1">100%</td>
+                <td data-ratio="0 1">0%</td>
             </tr>
             <tr class="region">
                 <td class="name"><a href="z_de1a740d5dc98ffd_analyze_runs_py.html#t54">scripts<span class="sep">\</span>analyze_runs.py</a></td>
                 <td class="name"><a href="z_de1a740d5dc98ffd_analyze_runs_py.html#t54"><data value='summarize_run'>summarize_run</data></a></td>
                 <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 17">0%</td>
+                <td>17</td>
                 <td>17</td>
                 <td>0</td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 8">0%</td>
+                <td>8</td>
                 <td>0</td>
                 <td class="spacer">&nbsp;</td>
-                <td data-ratio="17 17">100%</td>
+                <td data-ratio="0 25">0%</td>
             </tr>
             <tr class="region">
                 <td class="name"><a href="z_de1a740d5dc98ffd_analyze_runs_py.html#t83">scripts<span class="sep">\</span>analyze_runs.py</a></td>
                 <td class="name"><a href="z_de1a740d5dc98ffd_analyze_runs_py.html#t83"><data value='main'>main</data></a></td>
                 <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 38">0%</td>
+                <td>38</td>
                 <td>38</td>
                 <td>0</td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 18">0%</td>
+                <td>18</td>
                 <td>0</td>
                 <td class="spacer">&nbsp;</td>
-                <td data-ratio="38 38">100%</td>
+                <td data-ratio="0 56">0%</td>
             </tr>
             <tr class="region">
                 <td class="name"><a href="z_de1a740d5dc98ffd_analyze_runs_py.html">scripts<span class="sep">\</span>analyze_runs.py</a></td>
                 <td class="name"><a href="z_de1a740d5dc98ffd_analyze_runs_py.html"><data value=''><span class='no-noun'>(no function)</span></data></a></td>
                 <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 17">0%</td>
                 <td>17</td>
-                <td>1</td>
+                <td>17</td>
                 <td>0</td>
                 <td class="spacer">&nbsp;</td>
-                <td data-ratio="16 17">94%</td>
+                <td data-ratio="0 6">0%</td>
+                <td>6</td>
+                <td>0</td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 23">0%</td>
             </tr>
             <tr class="region">
                 <td class="name"><a href="z_de1a740d5dc98ffd_backfill_candidate_scorecards_py.html#t26">scripts<span class="sep">\</span>backfill_candidate_scorecards.py</a></td>
                 <td class="name"><a href="z_de1a740d5dc98ffd_backfill_candidate_scorecards_py.html#t26"><data value='sha256_text'>sha256_text</data></a></td>
                 <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 2">0%</td>
                 <td>2</td>
+                <td>2</td>
+                <td>0</td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 0">100%</td>
                 <td>0</td>
                 <td>0</td>
                 <td class="spacer">&nbsp;</td>
-                <td data-ratio="2 2">100%</td>
+                <td data-ratio="0 2">0%</td>
             </tr>
             <tr class="region">
                 <td class="name"><a href="z_de1a740d5dc98ffd_backfill_candidate_scorecards_py.html#t32">scripts<span class="sep">\</span>backfill_candidate_scorecards.py</a></td>
                 <td class="name"><a href="z_de1a740d5dc98ffd_backfill_candidate_scorecards_py.html#t32"><data value='read_text'>read_text</data></a></td>
                 <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 3">0%</td>
+                <td>3</td>
                 <td>3</td>
                 <td>0</td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 2">0%</td>
+                <td>2</td>
                 <td>0</td>
                 <td class="spacer">&nbsp;</td>
-                <td data-ratio="3 3">100%</td>
+                <td data-ratio="0 5">0%</td>
             </tr>
             <tr class="region">
                 <td class="name"><a href="z_de1a740d5dc98ffd_backfill_candidate_scorecards_py.html#t38">scripts<span class="sep">\</span>backfill_candidate_scorecards.py</a></td>
                 <td class="name"><a href="z_de1a740d5dc98ffd_backfill_candidate_scorecards_py.html#t38"><data value='load_json'>load_json</data></a></td>
                 <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 6">0%</td>
+                <td>6</td>
                 <td>6</td>
                 <td>0</td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 2">0%</td>
+                <td>2</td>
                 <td>0</td>
                 <td class="spacer">&nbsp;</td>
-                <td data-ratio="6 6">100%</td>
+                <td data-ratio="0 8">0%</td>
             </tr>
             <tr class="region">
                 <td class="name"><a href="z_de1a740d5dc98ffd_backfill_candidate_scorecards_py.html#t47">scripts<span class="sep">\</span>backfill_candidate_scorecards.py</a></td>
                 <td class="name"><a href="z_de1a740d5dc98ffd_backfill_candidate_scorecards_py.html#t47"><data value='parse_meta_md'>parse_meta_md</data></a></td>
                 <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 7">0%</td>
+                <td>7</td>
                 <td>7</td>
                 <td>0</td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 4">0%</td>
+                <td>4</td>
                 <td>0</td>
                 <td class="spacer">&nbsp;</td>
-                <td data-ratio="7 7">100%</td>
+                <td data-ratio="0 11">0%</td>
             </tr>
             <tr class="region">
                 <td class="name"><a href="z_de1a740d5dc98ffd_backfill_candidate_scorecards_py.html#t57">scripts<span class="sep">\</span>backfill_candidate_scorecards.py</a></td>
                 <td class="name"><a href="z_de1a740d5dc98ffd_backfill_candidate_scorecards_py.html#t57"><data value='is_candidate_prompt'>is_candidate_prompt</data></a></td>
                 <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 4">0%</td>
+                <td>4</td>
                 <td>4</td>
                 <td>0</td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 2">0%</td>
+                <td>2</td>
                 <td>0</td>
                 <td class="spacer">&nbsp;</td>
-                <td data-ratio="4 4">100%</td>
+                <td data-ratio="0 6">0%</td>
             </tr>
             <tr class="region">
                 <td class="name"><a href="z_de1a740d5dc98ffd_backfill_candidate_scorecards_py.html#t68">scripts<span class="sep">\</span>backfill_candidate_scorecards.py</a></td>
                 <td class="name"><a href="z_de1a740d5dc98ffd_backfill_candidate_scorecards_py.html#t68"><data value='build_scorecard'>build_scorecard</data></a></td>
                 <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 9">0%</td>
+                <td>9</td>
                 <td>9</td>
                 <td>0</td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 2">0%</td>
+                <td>2</td>
                 <td>0</td>
                 <td class="spacer">&nbsp;</td>
-                <td data-ratio="9 9">100%</td>
+                <td data-ratio="0 11">0%</td>
             </tr>
             <tr class="region">
                 <td class="name"><a href="z_de1a740d5dc98ffd_backfill_candidate_scorecards_py.html#t98">scripts<span class="sep">\</span>backfill_candidate_scorecards.py</a></td>
                 <td class="name"><a href="z_de1a740d5dc98ffd_backfill_candidate_scorecards_py.html#t98"><data value='main'>main</data></a></td>
                 <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 16">0%</td>
+                <td>16</td>
                 <td>16</td>
                 <td>0</td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 6">0%</td>
+                <td>6</td>
                 <td>0</td>
                 <td class="spacer">&nbsp;</td>
-                <td data-ratio="16 16">100%</td>
+                <td data-ratio="0 22">0%</td>
             </tr>
             <tr class="region">
                 <td class="name"><a href="z_de1a740d5dc98ffd_backfill_candidate_scorecards_py.html">scripts<span class="sep">\</span>backfill_candidate_scorecards.py</a></td>
                 <td class="name"><a href="z_de1a740d5dc98ffd_backfill_candidate_scorecards_py.html"><data value=''><span class='no-noun'>(no function)</span></data></a></td>
                 <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 19">0%</td>
                 <td>19</td>
-                <td>1</td>
+                <td>19</td>
                 <td>0</td>
                 <td class="spacer">&nbsp;</td>
-                <td data-ratio="18 19">95%</td>
+                <td data-ratio="0 4">0%</td>
+                <td>4</td>
+                <td>0</td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 23">0%</td>
             </tr>
             <tr class="region">
                 <td class="name"><a href="z_de1a740d5dc98ffd_compare_runs_py.html#t28">scripts<span class="sep">\</span>compare_runs.py</a></td>
                 <td class="name"><a href="z_de1a740d5dc98ffd_compare_runs_py.html#t28"><data value='acceptance_mode'>acceptance_mode</data></a></td>
                 <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 1">0%</td>
                 <td>1</td>
+                <td>1</td>
+                <td>0</td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 0">100%</td>
                 <td>0</td>
                 <td>0</td>
                 <td class="spacer">&nbsp;</td>
-                <td data-ratio="1 1">100%</td>
+                <td data-ratio="0 1">0%</td>
             </tr>
             <tr class="region">
                 <td class="name"><a href="z_de1a740d5dc98ffd_compare_runs_py.html#t31">scripts<span class="sep">\</span>compare_runs.py</a></td>
                 <td class="name"><a href="z_de1a740d5dc98ffd_compare_runs_py.html#t31"><data value='load_details'>load_details</data></a></td>
                 <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 12">0%</td>
+                <td>12</td>
                 <td>12</td>
                 <td>0</td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 8">0%</td>
+                <td>8</td>
                 <td>0</td>
                 <td class="spacer">&nbsp;</td>
-                <td data-ratio="12 12">100%</td>
+                <td data-ratio="0 20">0%</td>
             </tr>
             <tr class="region">
                 <td class="name"><a href="z_de1a740d5dc98ffd_compare_runs_py.html#t51">scripts<span class="sep">\</span>compare_runs.py</a></td>
                 <td class="name"><a href="z_de1a740d5dc98ffd_compare_runs_py.html#t51"><data value='compare'>compare</data></a></td>
                 <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 117">0%</td>
+                <td>117</td>
                 <td>117</td>
                 <td>0</td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 38">0%</td>
+                <td>38</td>
                 <td>0</td>
                 <td class="spacer">&nbsp;</td>
-                <td data-ratio="117 117">100%</td>
+                <td data-ratio="0 155">0%</td>
             </tr>
             <tr class="region">
                 <td class="name"><a href="z_de1a740d5dc98ffd_compare_runs_py.html">scripts<span class="sep">\</span>compare_runs.py</a></td>
                 <td class="name"><a href="z_de1a740d5dc98ffd_compare_runs_py.html"><data value=''><span class='no-noun'>(no function)</span></data></a></td>
                 <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 29">0%</td>
+                <td>29</td>
                 <td>29</td>
                 <td>0</td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 10">0%</td>
+                <td>10</td>
                 <td>0</td>
                 <td class="spacer">&nbsp;</td>
-                <td data-ratio="29 29">100%</td>
+                <td data-ratio="0 39">0%</td>
             </tr>
             <tr class="region">
                 <td class="name"><a href="z_de1a740d5dc98ffd_evaluate_py.html#t36">scripts<span class="sep">\</span>evaluate.py</a></td>
                 <td class="name"><a href="z_de1a740d5dc98ffd_evaluate_py.html#t36"><data value='cache_path'>cache_path</data></a></td>
                 <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 2">0%</td>
                 <td>2</td>
+                <td>2</td>
+                <td>0</td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 0">100%</td>
                 <td>0</td>
                 <td>0</td>
                 <td class="spacer">&nbsp;</td>
-                <td data-ratio="2 2">100%</td>
+                <td data-ratio="0 2">0%</td>
             </tr>
             <tr class="region">
                 <td class="name"><a href="z_de1a740d5dc98ffd_evaluate_py.html#t40">scripts<span class="sep">\</span>evaluate.py</a></td>
                 <td class="name"><a href="z_de1a740d5dc98ffd_evaluate_py.html#t40"><data value='load_cached_result'>load_cached_result</data></a></td>
                 <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 10">0%</td>
+                <td>10</td>
                 <td>10</td>
                 <td>0</td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 2">0%</td>
+                <td>2</td>
                 <td>0</td>
                 <td class="spacer">&nbsp;</td>
-                <td data-ratio="10 10">100%</td>
+                <td data-ratio="0 12">0%</td>
             </tr>
             <tr class="region">
                 <td class="name"><a href="z_de1a740d5dc98ffd_evaluate_py.html#t52">scripts<span class="sep">\</span>evaluate.py</a></td>
                 <td class="name"><a href="z_de1a740d5dc98ffd_evaluate_py.html#t52"><data value='save_cached_result'>save_cached_result</data></a></td>
                 <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 6">0%</td>
                 <td>6</td>
+                <td>6</td>
+                <td>0</td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 0">100%</td>
                 <td>0</td>
                 <td>0</td>
                 <td class="spacer">&nbsp;</td>
-                <td data-ratio="6 6">100%</td>
+                <td data-ratio="0 6">0%</td>
             </tr>
             <tr class="region">
                 <td class="name"><a href="z_de1a740d5dc98ffd_evaluate_py.html#t60">scripts<span class="sep">\</span>evaluate.py</a></td>
                 <td class="name"><a href="z_de1a740d5dc98ffd_evaluate_py.html#t60"><data value='parse_judge_json'>parse_judge_json</data></a></td>
                 <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 10">0%</td>
+                <td>10</td>
                 <td>10</td>
                 <td>0</td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 6">0%</td>
+                <td>6</td>
                 <td>0</td>
                 <td class="spacer">&nbsp;</td>
-                <td data-ratio="10 10">100%</td>
+                <td data-ratio="0 16">0%</td>
             </tr>
             <tr class="region">
                 <td class="name"><a href="z_de1a740d5dc98ffd_evaluate_py.html#t75">scripts<span class="sep">\</span>evaluate.py</a></td>
                 <td class="name"><a href="z_de1a740d5dc98ffd_evaluate_py.html#t75"><data value='evaluate_single_question'>evaluate_single_question</data></a></td>
                 <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 43">0%</td>
+                <td>43</td>
                 <td>43</td>
                 <td>0</td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 8">0%</td>
+                <td>8</td>
                 <td>0</td>
                 <td class="spacer">&nbsp;</td>
-                <td data-ratio="43 43">100%</td>
+                <td data-ratio="0 51">0%</td>
             </tr>
             <tr class="region">
                 <td class="name"><a href="z_de1a740d5dc98ffd_evaluate_py.html#t204">scripts<span class="sep">\</span>evaluate.py</a></td>
                 <td class="name"><a href="z_de1a740d5dc98ffd_evaluate_py.html#t204"><data value='run_evaluation'>run_evaluation</data></a></td>
                 <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 51">0%</td>
+                <td>51</td>
                 <td>51</td>
                 <td>0</td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 16">0%</td>
+                <td>16</td>
                 <td>0</td>
                 <td class="spacer">&nbsp;</td>
-                <td data-ratio="51 51">100%</td>
+                <td data-ratio="0 67">0%</td>
             </tr>
             <tr class="region">
                 <td class="name"><a href="z_de1a740d5dc98ffd_evaluate_py.html#t286">scripts<span class="sep">\</span>evaluate.py</a></td>
                 <td class="name"><a href="z_de1a740d5dc98ffd_evaluate_py.html#t286"><data value='calculate_statistics'>calculate_statistics</data></a></td>
                 <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 28">0%</td>
+                <td>28</td>
                 <td>28</td>
                 <td>0</td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 12">0%</td>
+                <td>12</td>
                 <td>0</td>
                 <td class="spacer">&nbsp;</td>
-                <td data-ratio="28 28">100%</td>
+                <td data-ratio="0 40">0%</td>
             </tr>
             <tr class="region">
                 <td class="name"><a href="z_de1a740d5dc98ffd_evaluate_py.html#t347">scripts<span class="sep">\</span>evaluate.py</a></td>
                 <td class="name"><a href="z_de1a740d5dc98ffd_evaluate_py.html#t347"><data value='save_run_results'>save_run_results</data></a></td>
                 <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 40">0%</td>
+                <td>40</td>
                 <td>40</td>
                 <td>0</td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 12">0%</td>
+                <td>12</td>
                 <td>0</td>
                 <td class="spacer">&nbsp;</td>
-                <td data-ratio="40 40">100%</td>
+                <td data-ratio="0 52">0%</td>
             </tr>
             <tr class="region">
                 <td class="name"><a href="z_de1a740d5dc98ffd_evaluate_py.html#t445">scripts<span class="sep">\</span>evaluate.py</a></td>
                 <td class="name"><a href="z_de1a740d5dc98ffd_evaluate_py.html#t445"><data value='main'>main</data></a></td>
                 <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 27">0%</td>
+                <td>27</td>
                 <td>27</td>
                 <td>0</td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 6">0%</td>
+                <td>6</td>
                 <td>0</td>
                 <td class="spacer">&nbsp;</td>
-                <td data-ratio="27 27">100%</td>
+                <td data-ratio="0 33">0%</td>
             </tr>
             <tr class="region">
                 <td class="name"><a href="z_de1a740d5dc98ffd_evaluate_py.html">scripts<span class="sep">\</span>evaluate.py</a></td>
                 <td class="name"><a href="z_de1a740d5dc98ffd_evaluate_py.html"><data value=''><span class='no-noun'>(no function)</span></data></a></td>
                 <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 33">0%</td>
                 <td>33</td>
-                <td>1</td>
+                <td>33</td>
                 <td>0</td>
                 <td class="spacer">&nbsp;</td>
-                <td data-ratio="32 33">97%</td>
+                <td data-ratio="0 6">0%</td>
+                <td>6</td>
+                <td>0</td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 39">0%</td>
             </tr>
             <tr class="region">
                 <td class="name"><a href="z_de1a740d5dc98ffd_evaluate_routed_py.html#t36">scripts<span class="sep">\</span>evaluate_routed.py</a></td>
                 <td class="name"><a href="z_de1a740d5dc98ffd_evaluate_routed_py.html#t36"><data value='load_json'>load_json</data></a></td>
                 <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 2">0%</td>
                 <td>2</td>
+                <td>2</td>
+                <td>0</td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 0">100%</td>
                 <td>0</td>
                 <td>0</td>
                 <td class="spacer">&nbsp;</td>
-                <td data-ratio="2 2">100%</td>
+                <td data-ratio="0 2">0%</td>
             </tr>
             <tr class="region">
                 <td class="name"><a href="z_de1a740d5dc98ffd_evaluate_routed_py.html#t41">scripts<span class="sep">\</span>evaluate_routed.py</a></td>
                 <td class="name"><a href="z_de1a740d5dc98ffd_evaluate_routed_py.html#t41"><data value='load_questions'>load_questions</data></a></td>
                 <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 6">0%</td>
+                <td>6</td>
                 <td>6</td>
                 <td>0</td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 4">0%</td>
+                <td>4</td>
                 <td>0</td>
                 <td class="spacer">&nbsp;</td>
-                <td data-ratio="6 6">100%</td>
+                <td data-ratio="0 10">0%</td>
             </tr>
             <tr class="region">
                 <td class="name"><a href="z_de1a740d5dc98ffd_evaluate_routed_py.html#t50">scripts<span class="sep">\</span>evaluate_routed.py</a></td>
                 <td class="name"><a href="z_de1a740d5dc98ffd_evaluate_routed_py.html#t50"><data value='resolve_prompt'>resolve_prompt</data></a></td>
                 <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 7">0%</td>
+                <td>7</td>
                 <td>7</td>
                 <td>0</td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 4">0%</td>
+                <td>4</td>
                 <td>0</td>
                 <td class="spacer">&nbsp;</td>
-                <td data-ratio="7 7">100%</td>
+                <td data-ratio="0 11">0%</td>
             </tr>
             <tr class="region">
                 <td class="name"><a href="z_de1a740d5dc98ffd_evaluate_routed_py.html#t60">scripts<span class="sep">\</span>evaluate_routed.py</a></td>
                 <td class="name"><a href="z_de1a740d5dc98ffd_evaluate_routed_py.html#t60"><data value='route_hash'>route_hash</data></a></td>
                 <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 2">0%</td>
                 <td>2</td>
+                <td>2</td>
+                <td>0</td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 0">100%</td>
                 <td>0</td>
                 <td>0</td>
                 <td class="spacer">&nbsp;</td>
-                <td data-ratio="2 2">100%</td>
+                <td data-ratio="0 2">0%</td>
             </tr>
             <tr class="region">
                 <td class="name"><a href="z_de1a740d5dc98ffd_evaluate_routed_py.html#t69">scripts<span class="sep">\</span>evaluate_routed.py</a></td>
                 <td class="name"><a href="z_de1a740d5dc98ffd_evaluate_routed_py.html#t69"><data value='calculate_route_usage'>calculate_route_usage</data></a></td>
                 <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 5">0%</td>
+                <td>5</td>
                 <td>5</td>
                 <td>0</td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 2">0%</td>
+                <td>2</td>
                 <td>0</td>
                 <td class="spacer">&nbsp;</td>
-                <td data-ratio="5 5">100%</td>
+                <td data-ratio="0 7">0%</td>
             </tr>
             <tr class="region">
                 <td class="name"><a href="z_de1a740d5dc98ffd_evaluate_routed_py.html#t77">scripts<span class="sep">\</span>evaluate_routed.py</a></td>
                 <td class="name"><a href="z_de1a740d5dc98ffd_evaluate_routed_py.html#t77"><data value='run_routed_evaluation'>run_routed_evaluation</data></a></td>
                 <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 47">0%</td>
+                <td>47</td>
                 <td>47</td>
                 <td>0</td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 6">0%</td>
+                <td>6</td>
                 <td>0</td>
                 <td class="spacer">&nbsp;</td>
-                <td data-ratio="47 47">100%</td>
+                <td data-ratio="0 53">0%</td>
             </tr>
             <tr class="region">
                 <td class="name"><a href="z_de1a740d5dc98ffd_evaluate_routed_py.html">scripts<span class="sep">\</span>evaluate_routed.py</a></td>
                 <td class="name"><a href="z_de1a740d5dc98ffd_evaluate_routed_py.html"><data value=''><span class='no-noun'>(no function)</span></data></a></td>
                 <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 41">0%</td>
+                <td>41</td>
                 <td>41</td>
                 <td>0</td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 10">0%</td>
+                <td>10</td>
                 <td>0</td>
                 <td class="spacer">&nbsp;</td>
-                <td data-ratio="41 41">100%</td>
+                <td data-ratio="0 51">0%</td>
             </tr>
             <tr class="region">
                 <td class="name"><a href="z_de1a740d5dc98ffd_experiment_report_py.html#t34">scripts<span class="sep">\</span>experiment_report.py</a></td>
                 <td class="name"><a href="z_de1a740d5dc98ffd_experiment_report_py.html#t34"><data value='load_json'>load_json</data></a></td>
                 <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 4">0%</td>
+                <td>4</td>
                 <td>4</td>
                 <td>0</td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 2">0%</td>
+                <td>2</td>
                 <td>0</td>
                 <td class="spacer">&nbsp;</td>
-                <td data-ratio="4 4">100%</td>
+                <td data-ratio="0 6">0%</td>
             </tr>
             <tr class="region">
                 <td class="name"><a href="z_de1a740d5dc98ffd_experiment_report_py.html#t41">scripts<span class="sep">\</span>experiment_report.py</a></td>
                 <td class="name"><a href="z_de1a740d5dc98ffd_experiment_report_py.html#t41"><data value='read_text'>read_text</data></a></td>
                 <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 4">0%</td>
+                <td>4</td>
                 <td>4</td>
                 <td>0</td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 2">0%</td>
+                <td>2</td>
                 <td>0</td>
                 <td class="spacer">&nbsp;</td>
-                <td data-ratio="4 4">100%</td>
+                <td data-ratio="0 6">0%</td>
             </tr>
             <tr class="region">
                 <td class="name"><a href="z_de1a740d5dc98ffd_experiment_report_py.html#t48">scripts<span class="sep">\</span>experiment_report.py</a></td>
                 <td class="name"><a href="z_de1a740d5dc98ffd_experiment_report_py.html#t48"><data value='dataset_name'>dataset_name</data></a></td>
                 <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 5">0%</td>
+                <td>5</td>
                 <td>5</td>
                 <td>0</td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 4">0%</td>
+                <td>4</td>
                 <td>0</td>
                 <td class="spacer">&nbsp;</td>
-                <td data-ratio="5 5">100%</td>
+                <td data-ratio="0 9">0%</td>
             </tr>
             <tr class="region">
                 <td class="name"><a href="z_de1a740d5dc98ffd_experiment_report_py.html#t56">scripts<span class="sep">\</span>experiment_report.py</a></td>
                 <td class="name"><a href="z_de1a740d5dc98ffd_experiment_report_py.html#t56"><data value='parse_decision'>parse_decision</data></a></td>
                 <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 6">0%</td>
+                <td>6</td>
                 <td>6</td>
                 <td>0</td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 4">0%</td>
+                <td>4</td>
                 <td>0</td>
                 <td class="spacer">&nbsp;</td>
-                <td data-ratio="6 6">100%</td>
+                <td data-ratio="0 10">0%</td>
             </tr>
             <tr class="region">
                 <td class="name"><a href="z_de1a740d5dc98ffd_experiment_report_py.html#t65">scripts<span class="sep">\</span>experiment_report.py</a></td>
                 <td class="name"><a href="z_de1a740d5dc98ffd_experiment_report_py.html#t65"><data value='list_runs'>list_runs</data></a></td>
                 <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 15">0%</td>
+                <td>15</td>
                 <td>15</td>
                 <td>0</td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 8">0%</td>
+                <td>8</td>
                 <td>0</td>
                 <td class="spacer">&nbsp;</td>
-                <td data-ratio="15 15">100%</td>
+                <td data-ratio="0 23">0%</td>
             </tr>
             <tr class="region">
                 <td class="name"><a href="z_de1a740d5dc98ffd_experiment_report_py.html#t102">scripts<span class="sep">\</span>experiment_report.py</a></td>
                 <td class="name"><a href="z_de1a740d5dc98ffd_experiment_report_py.html#t102"><data value='gate_notes'>gate_notes</data></a></td>
                 <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 9">0%</td>
+                <td>9</td>
                 <td>9</td>
                 <td>0</td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 6">0%</td>
+                <td>6</td>
                 <td>0</td>
                 <td class="spacer">&nbsp;</td>
-                <td data-ratio="9 9">100%</td>
+                <td data-ratio="0 15">0%</td>
             </tr>
             <tr class="region">
                 <td class="name"><a href="z_de1a740d5dc98ffd_experiment_report_py.html#t114">scripts<span class="sep">\</span>experiment_report.py</a></td>
                 <td class="name"><a href="z_de1a740d5dc98ffd_experiment_report_py.html#t114"><data value='format_table'>format_table</data></a></td>
                 <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 6">0%</td>
+                <td>6</td>
                 <td>6</td>
                 <td>0</td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 2">0%</td>
+                <td>2</td>
                 <td>0</td>
                 <td class="spacer">&nbsp;</td>
-                <td data-ratio="6 6">100%</td>
+                <td data-ratio="0 8">0%</td>
             </tr>
             <tr class="region">
                 <td class="name"><a href="z_de1a740d5dc98ffd_experiment_report_py.html#t123">scripts<span class="sep">\</span>experiment_report.py</a></td>
                 <td class="name"><a href="z_de1a740d5dc98ffd_experiment_report_py.html#t123"><data value='best_worst_type'>best_worst_type</data></a></td>
                 <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 5">0%</td>
+                <td>5</td>
                 <td>5</td>
                 <td>0</td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 2">0%</td>
+                <td>2</td>
                 <td>0</td>
                 <td class="spacer">&nbsp;</td>
-                <td data-ratio="5 5">100%</td>
+                <td data-ratio="0 7">0%</td>
             </tr>
             <tr class="region">
                 <td class="name"><a href="z_de1a740d5dc98ffd_experiment_report_py.html#t131">scripts<span class="sep">\</span>experiment_report.py</a></td>
                 <td class="name"><a href="z_de1a740d5dc98ffd_experiment_report_py.html#t131"><data value='top_rows'>top_rows</data></a></td>
                 <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 2">0%</td>
                 <td>2</td>
+                <td>2</td>
+                <td>0</td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 0">100%</td>
                 <td>0</td>
                 <td>0</td>
                 <td class="spacer">&nbsp;</td>
-                <td data-ratio="2 2">100%</td>
+                <td data-ratio="0 2">0%</td>
             </tr>
             <tr class="region">
                 <td class="name"><a href="z_de1a740d5dc98ffd_experiment_report_py.html#t136">scripts<span class="sep">\</span>experiment_report.py</a></td>
                 <td class="name"><a href="z_de1a740d5dc98ffd_experiment_report_py.html#t136"><data value='collect_decisions'>collect_decisions</data></a></td>
                 <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 11">0%</td>
+                <td>11</td>
                 <td>11</td>
                 <td>0</td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 4">0%</td>
+                <td>4</td>
                 <td>0</td>
                 <td class="spacer">&nbsp;</td>
-                <td data-ratio="11 11">100%</td>
+                <td data-ratio="0 15">0%</td>
             </tr>
             <tr class="region">
                 <td class="name"><a href="z_de1a740d5dc98ffd_experiment_report_py.html#t150">scripts<span class="sep">\</span>experiment_report.py</a></td>
                 <td class="name"><a href="z_de1a740d5dc98ffd_experiment_report_py.html#t150"><data value='collect_failure_trends'>collect_failure_trends</data></a></td>
                 <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 12">0%</td>
+                <td>12</td>
                 <td>12</td>
                 <td>0</td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 8">0%</td>
+                <td>8</td>
                 <td>0</td>
                 <td class="spacer">&nbsp;</td>
-                <td data-ratio="12 12">100%</td>
+                <td data-ratio="0 20">0%</td>
             </tr>
             <tr class="region">
                 <td class="name"><a href="z_de1a740d5dc98ffd_experiment_report_py.html#t165">scripts<span class="sep">\</span>experiment_report.py</a></td>
                 <td class="name"><a href="z_de1a740d5dc98ffd_experiment_report_py.html#t165"><data value='build_report'>build_report</data></a></td>
                 <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 49">0%</td>
+                <td>49</td>
                 <td>49</td>
                 <td>0</td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 20">0%</td>
+                <td>20</td>
                 <td>0</td>
                 <td class="spacer">&nbsp;</td>
-                <td data-ratio="49 49">100%</td>
+                <td data-ratio="0 69">0%</td>
             </tr>
             <tr class="region">
                 <td class="name"><a href="z_de1a740d5dc98ffd_experiment_report_py.html#t267">scripts<span class="sep">\</span>experiment_report.py</a></td>
                 <td class="name"><a href="z_de1a740d5dc98ffd_experiment_report_py.html#t267"><data value='main'>main</data></a></td>
                 <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 12">0%</td>
+                <td>12</td>
                 <td>12</td>
                 <td>0</td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 2">0%</td>
+                <td>2</td>
                 <td>0</td>
                 <td class="spacer">&nbsp;</td>
-                <td data-ratio="12 12">100%</td>
+                <td data-ratio="0 14">0%</td>
             </tr>
             <tr class="region">
                 <td class="name"><a href="z_de1a740d5dc98ffd_experiment_report_py.html">scripts<span class="sep">\</span>experiment_report.py</a></td>
                 <td class="name"><a href="z_de1a740d5dc98ffd_experiment_report_py.html"><data value=''><span class='no-noun'>(no function)</span></data></a></td>
                 <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 27">0%</td>
                 <td>27</td>
-                <td>1</td>
+                <td>27</td>
                 <td>0</td>
                 <td class="spacer">&nbsp;</td>
-                <td data-ratio="26 27">96%</td>
+                <td data-ratio="0 4">0%</td>
+                <td>4</td>
+                <td>0</td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 31">0%</td>
             </tr>
             <tr class="region">
                 <td class="name"><a href="z_de1a740d5dc98ffd_gatekeeper_py.html#t35">scripts<span class="sep">\</span>gatekeeper.py</a></td>
                 <td class="name"><a href="z_de1a740d5dc98ffd_gatekeeper_py.html#t35"><data value='semantic_check'>_semantic_check</data></a></td>
                 <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 7">0%</td>
+                <td>7</td>
                 <td>7</td>
                 <td>0</td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 6">0%</td>
+                <td>6</td>
                 <td>0</td>
                 <td class="spacer">&nbsp;</td>
-                <td data-ratio="7 7">100%</td>
+                <td data-ratio="0 13">0%</td>
             </tr>
             <tr class="region">
                 <td class="name"><a href="z_de1a740d5dc98ffd_gatekeeper_py.html#t46">scripts<span class="sep">\</span>gatekeeper.py</a></td>
                 <td class="name"><a href="z_de1a740d5dc98ffd_gatekeeper_py.html#t46"><data value='run_gatekeeper'>run_gatekeeper</data></a></td>
                 <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 32">0%</td>
+                <td>32</td>
                 <td>32</td>
                 <td>0</td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 26">0%</td>
+                <td>26</td>
                 <td>0</td>
                 <td class="spacer">&nbsp;</td>
-                <td data-ratio="32 32">100%</td>
+                <td data-ratio="0 58">0%</td>
             </tr>
             <tr class="region">
                 <td class="name"><a href="z_de1a740d5dc98ffd_gatekeeper_py.html#t149">scripts<span class="sep">\</span>gatekeeper.py</a></td>
                 <td class="name"><a href="z_de1a740d5dc98ffd_gatekeeper_py.html#t149"><data value='main'>main</data></a></td>
                 <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 28">0%</td>
+                <td>28</td>
                 <td>28</td>
                 <td>0</td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 10">0%</td>
+                <td>10</td>
                 <td>0</td>
                 <td class="spacer">&nbsp;</td>
-                <td data-ratio="28 28">100%</td>
+                <td data-ratio="0 38">0%</td>
             </tr>
             <tr class="region">
                 <td class="name"><a href="z_de1a740d5dc98ffd_gatekeeper_py.html">scripts<span class="sep">\</span>gatekeeper.py</a></td>
                 <td class="name"><a href="z_de1a740d5dc98ffd_gatekeeper_py.html"><data value=''><span class='no-noun'>(no function)</span></data></a></td>
                 <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 15">0%</td>
+                <td>15</td>
                 <td>15</td>
                 <td>0</td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 6">0%</td>
+                <td>6</td>
                 <td>0</td>
                 <td class="spacer">&nbsp;</td>
-                <td data-ratio="15 15">100%</td>
+                <td data-ratio="0 21">0%</td>
             </tr>
             <tr class="region">
                 <td class="name"><a href="z_de1a740d5dc98ffd_generate_questions_py.html#t10">scripts<span class="sep">\</span>generate_questions.py</a></td>
                 <td class="name"><a href="z_de1a740d5dc98ffd_generate_questions_py.html#t10"><data value='generate_all'>generate_all</data></a></td>
                 <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 16">0%</td>
+                <td>16</td>
                 <td>16</td>
                 <td>0</td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 6">0%</td>
+                <td>6</td>
                 <td>0</td>
                 <td class="spacer">&nbsp;</td>
-                <td data-ratio="16 16">100%</td>
+                <td data-ratio="0 22">0%</td>
             </tr>
             <tr class="region">
                 <td class="name"><a href="z_de1a740d5dc98ffd_generate_questions_py.html">scripts<span class="sep">\</span>generate_questions.py</a></td>
                 <td class="name"><a href="z_de1a740d5dc98ffd_generate_questions_py.html"><data value=''><span class='no-noun'>(no function)</span></data></a></td>
                 <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 5">0%</td>
                 <td>5</td>
-                <td>1</td>
+                <td>5</td>
                 <td>0</td>
                 <td class="spacer">&nbsp;</td>
-                <td data-ratio="4 5">80%</td>
+                <td data-ratio="0 2">0%</td>
+                <td>2</td>
+                <td>0</td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 7">0%</td>
             </tr>
             <tr class="region">
                 <td class="name"><a href="z_de1a740d5dc98ffd_leaderboard_py.html#t18">scripts<span class="sep">\</span>leaderboard.py</a></td>
                 <td class="name"><a href="z_de1a740d5dc98ffd_leaderboard_py.html#t18"><data value='load_json'>load_json</data></a></td>
                 <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 4">0%</td>
+                <td>4</td>
                 <td>4</td>
                 <td>0</td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 2">0%</td>
+                <td>2</td>
                 <td>0</td>
                 <td class="spacer">&nbsp;</td>
-                <td data-ratio="4 4">100%</td>
+                <td data-ratio="0 6">0%</td>
             </tr>
             <tr class="region">
                 <td class="name"><a href="z_de1a740d5dc98ffd_leaderboard_py.html#t25">scripts<span class="sep">\</span>leaderboard.py</a></td>
                 <td class="name"><a href="z_de1a740d5dc98ffd_leaderboard_py.html#t25"><data value='list_runs'>list_runs</data></a></td>
                 <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 12">0%</td>
+                <td>12</td>
                 <td>12</td>
                 <td>0</td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 8">0%</td>
+                <td>8</td>
                 <td>0</td>
                 <td class="spacer">&nbsp;</td>
-                <td data-ratio="12 12">100%</td>
+                <td data-ratio="0 20">0%</td>
             </tr>
             <tr class="region">
                 <td class="name"><a href="z_de1a740d5dc98ffd_leaderboard_py.html#t50">scripts<span class="sep">\</span>leaderboard.py</a></td>
                 <td class="name"><a href="z_de1a740d5dc98ffd_leaderboard_py.html#t50"><data value='main'>main</data></a></td>
                 <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 16">0%</td>
+                <td>16</td>
                 <td>16</td>
                 <td>0</td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 4">0%</td>
+                <td>4</td>
                 <td>0</td>
                 <td class="spacer">&nbsp;</td>
-                <td data-ratio="16 16">100%</td>
+                <td data-ratio="0 20">0%</td>
             </tr>
             <tr class="region">
                 <td class="name"><a href="z_de1a740d5dc98ffd_leaderboard_py.html">scripts<span class="sep">\</span>leaderboard.py</a></td>
                 <td class="name"><a href="z_de1a740d5dc98ffd_leaderboard_py.html"><data value=''><span class='no-noun'>(no function)</span></data></a></td>
                 <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 11">0%</td>
                 <td>11</td>
-                <td>1</td>
+                <td>11</td>
                 <td>0</td>
                 <td class="spacer">&nbsp;</td>
-                <td data-ratio="10 11">91%</td>
+                <td data-ratio="0 4">0%</td>
+                <td>4</td>
+                <td>0</td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 15">0%</td>
             </tr>
             <tr class="region">
                 <td class="name"><a href="z_de1a740d5dc98ffd_preflight_py.html#t32">scripts<span class="sep">\</span>preflight.py</a></td>
                 <td class="name"><a href="z_de1a740d5dc98ffd_preflight_py.html#t32"><data value='read_text'>read_text</data></a></td>
                 <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 4">0%</td>
+                <td>4</td>
                 <td>4</td>
                 <td>0</td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 2">0%</td>
+                <td>2</td>
                 <td>0</td>
                 <td class="spacer">&nbsp;</td>
-                <td data-ratio="4 4">100%</td>
+                <td data-ratio="0 6">0%</td>
             </tr>
             <tr class="region">
                 <td class="name"><a href="z_de1a740d5dc98ffd_preflight_py.html#t39">scripts<span class="sep">\</span>preflight.py</a></td>
                 <td class="name"><a href="z_de1a740d5dc98ffd_preflight_py.html#t39"><data value='sha256_text'>sha256_text</data></a></td>
                 <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 1">0%</td>
                 <td>1</td>
+                <td>1</td>
+                <td>0</td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 0">100%</td>
                 <td>0</td>
                 <td>0</td>
                 <td class="spacer">&nbsp;</td>
-                <td data-ratio="1 1">100%</td>
+                <td data-ratio="0 1">0%</td>
             </tr>
             <tr class="region">
                 <td class="name"><a href="z_de1a740d5dc98ffd_preflight_py.html#t43">scripts<span class="sep">\</span>preflight.py</a></td>
                 <td class="name"><a href="z_de1a740d5dc98ffd_preflight_py.html#t43"><data value='count_jsonl'>count_jsonl</data></a></td>
                 <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 9">0%</td>
+                <td>9</td>
                 <td>9</td>
                 <td>0</td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 6">0%</td>
+                <td>6</td>
                 <td>0</td>
                 <td class="spacer">&nbsp;</td>
-                <td data-ratio="9 9">100%</td>
+                <td data-ratio="0 15">0%</td>
             </tr>
             <tr class="region">
                 <td class="name"><a href="z_de1a740d5dc98ffd_preflight_py.html#t55">scripts<span class="sep">\</span>preflight.py</a></td>
                 <td class="name"><a href="z_de1a740d5dc98ffd_preflight_py.html#t55"><data value='load_json'>load_json</data></a></td>
                 <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 4">0%</td>
+                <td>4</td>
                 <td>4</td>
                 <td>0</td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 2">0%</td>
+                <td>2</td>
                 <td>0</td>
                 <td class="spacer">&nbsp;</td>
-                <td data-ratio="4 4">100%</td>
+                <td data-ratio="0 6">0%</td>
             </tr>
             <tr class="region">
                 <td class="name"><a href="z_de1a740d5dc98ffd_preflight_py.html#t62">scripts<span class="sep">\</span>preflight.py</a></td>
                 <td class="name"><a href="z_de1a740d5dc98ffd_preflight_py.html#t62"><data value='check_run_path'>check_run_path</data></a></td>
                 <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 1">0%</td>
                 <td>1</td>
+                <td>1</td>
+                <td>0</td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 0">100%</td>
                 <td>0</td>
                 <td>0</td>
                 <td class="spacer">&nbsp;</td>
-                <td data-ratio="1 1">100%</td>
+                <td data-ratio="0 1">0%</td>
             </tr>
             <tr class="region">
                 <td class="name"><a href="z_de1a740d5dc98ffd_preflight_py.html#t66">scripts<span class="sep">\</span>preflight.py</a></td>
                 <td class="name"><a href="z_de1a740d5dc98ffd_preflight_py.html#t66"><data value='main'>main</data></a></td>
                 <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 50">0%</td>
+                <td>50</td>
                 <td>50</td>
                 <td>0</td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 10">0%</td>
+                <td>10</td>
                 <td>0</td>
                 <td class="spacer">&nbsp;</td>
-                <td data-ratio="50 50">100%</td>
+                <td data-ratio="0 60">0%</td>
             </tr>
             <tr class="region">
                 <td class="name"><a href="z_de1a740d5dc98ffd_preflight_py.html#t76">scripts<span class="sep">\</span>preflight.py</a></td>
                 <td class="name"><a href="z_de1a740d5dc98ffd_preflight_py.html#t76"><data value='add'>main.add</data></a></td>
                 <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 1">0%</td>
                 <td>1</td>
+                <td>1</td>
+                <td>0</td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 0">100%</td>
                 <td>0</td>
                 <td>0</td>
                 <td class="spacer">&nbsp;</td>
-                <td data-ratio="1 1">100%</td>
+                <td data-ratio="0 1">0%</td>
             </tr>
             <tr class="region">
                 <td class="name"><a href="z_de1a740d5dc98ffd_preflight_py.html">scripts<span class="sep">\</span>preflight.py</a></td>
                 <td class="name"><a href="z_de1a740d5dc98ffd_preflight_py.html"><data value=''><span class='no-noun'>(no function)</span></data></a></td>
                 <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 23">0%</td>
+                <td>23</td>
                 <td>23</td>
                 <td>0</td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 6">0%</td>
+                <td>6</td>
                 <td>0</td>
                 <td class="spacer">&nbsp;</td>
-                <td data-ratio="23 23">100%</td>
+                <td data-ratio="0 29">0%</td>
             </tr>
         </tbody>
         <tfoot>
@@ -1120,11 +2062,16 @@
                 <td class="name">Total</td>
                 <td class="name">&nbsp;</td>
                 <td class="spacer">&nbsp;</td>
-                <td>1469</td>
-                <td>10</td>
+                <td data-ratio="0 1693">0%</td>
+                <td>1693</td>
+                <td>1693</td>
                 <td>0</td>
                 <td class="spacer">&nbsp;</td>
-                <td data-ratio="1459 1469">99%</td>
+                <td data-ratio="0 574">0%</td>
+                <td>574</td>
+                <td>0</td>
+                <td class="spacer">&nbsp;</td>
+                <td data-ratio="0 2267">0%</td>
             </tr>
         </tfoot>
     </table>
@@ -1136,7 +2083,7 @@
     <div class="content">
         <p>
             <a class="nav" href="https://coverage.readthedocs.io/en/7.14.1">coverage.py v7.14.1</a>,
-            created at 2026-07-13 12:43 +0800
+            created at 2026-07-18 05:38 +0800
         </p>
     </div>
     <aside class="hidden">
