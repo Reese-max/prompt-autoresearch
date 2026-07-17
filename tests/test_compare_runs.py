@@ -326,3 +326,14 @@ def test_compare_pragmatic_rejects_risk_regression_below_baseline(tmp_path, caps
         f"pragmatic 模式不應接受 risk 從 {lc['base_risk_rate']:.0f}% "
         f"降至 {lc['risk_rate']:.0f}% 的候選"
     )
+
+
+def test_compare_empty_both_sides_variance_zero(tmp_path):
+    """覆蓋 compare_runs.py 12->14 / 14->18：兩側皆無資料時，
+    all_types 為空集合，type_scores_list 亦為空，type_variance 走 else:0.0。"""
+    base = make_run(tmp_path / "base", [])
+    new = make_run(tmp_path / "new", [])
+    # 預期 SystemExit(1)：load_details 成功但 new_data 為 {}，compare 會印錯誤並 exit
+    with pytest.raises(SystemExit) as exc:
+        cr.compare(new, base, mode="pragmatic")
+    assert exc.value.code == 1

@@ -210,6 +210,15 @@ def test_main_parallel_defaults_from_env(tmp_path, monkeypatch, capsys):
     assert parallel["detail"] == "smoke=3, dev=12, holdout=8"
 
 
+def test_main_parallel_env_non_integer_fails(tmp_path, monkeypatch, capsys):
+    """覆蓋 preflight.py 12->14 / 14->17：環境變數非整數字串導致 int() 失敗。
+    任務要求：明確斷言錯誤被驗證機制攔下。"""
+    build_healthy_env(tmp_path, monkeypatch)
+    monkeypatch.setenv("AUTORESEARCH_SMOKE_PARALLEL", "abc")  # 非數字
+    with pytest.raises(ValueError, match="invalid literal for int"):
+        preflight.main(["--json"])
+
+
 # ---------- __main__ ----------
 
 def test_script_main_guard(monkeypatch, tmp_path):

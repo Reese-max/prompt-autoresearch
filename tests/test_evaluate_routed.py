@@ -234,3 +234,18 @@ def test_main_without_parallel_defaults_to_24(monkeypatch, tmp_path, capsys):
     out = capsys.readouterr().out
     assert "並行執行緒: 24" in out
     assert "路由評估完成" in out
+
+
+def test_main_parallel_flag_zero_value(monkeypatch, tmp_path, capsys):
+    """覆蓋 evaluate_routed.py 24->26 / 26->29：--parallel 後面接 0。
+    int("0") 成功但 max(1, 0) 會變 1，workers=1 路徑。"""
+    monkeypatch.chdir(tmp_path)
+    route_file, _ = make_route(tmp_path)
+    q_file = make_questions(tmp_path, [{"id": "q1", "type": "legal", "question": "Q1"}])
+    patch_evaluate(monkeypatch, tmp_path)
+
+    run_as_main(monkeypatch, ["evaluate_routed.py", str(route_file), str(q_file), "--parallel", "0"])
+
+    out = capsys.readouterr().out
+    assert "並行執行緒: 1" in out
+    assert "路由評估完成" in out
