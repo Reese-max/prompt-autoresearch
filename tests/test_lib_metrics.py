@@ -22,6 +22,18 @@ def test_record_event_append_payload_with_timestamp(monkeypatch, tmp_path):
     )
 
 
+def test_record_event_without_data_omits_optional_payload(monkeypatch, tmp_path):
+    temp_metrics = tmp_path / "metrics.jsonl"
+    monkeypatch.setattr(metrics, "METRICS_PATH", str(temp_metrics))
+
+    metrics.record_event("heartbeat")
+
+    data = json.loads(temp_metrics.read_text(encoding="utf-8"))
+    assert data["event"] == "heartbeat"
+    assert set(data) == {"event", "timestamp"}
+    assert "baseline_dev_score" not in data
+
+
 def test_record_round_returns_payload_and_default_conversion(monkeypatch, tmp_path):
     path = tmp_path / "metrics.jsonl"
     monkeypatch.setattr(metrics, "METRICS_PATH", str(path))
