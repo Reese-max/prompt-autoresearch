@@ -9,9 +9,12 @@ jobs:
     name: ${{ matrix.id }} (${{ matrix.os }}, Python ${{ matrix.python_version }})
     runs-on: ${{ matrix.os }}
     strategy:
+      # 任一組合失敗時，該 job 失敗會使整個 workflow 失敗；
+      # fail-fast: false 僅讓其餘組合跑完，方便一次看齊所有平台結果。
       fail-fast: false
       matrix:
         include:
+          # Linux × 宣告支援之 Python 版本
           - id: L310
             os: ubuntu-latest
             platform: Linux
@@ -24,14 +27,32 @@ jobs:
             os: ubuntu-latest
             platform: Linux
             python_version: "3.12"
+          # macOS × 宣告支援之 Python 版本
+          - id: M310
+            os: macos-latest
+            platform: macOS
+            python_version: "3.10"
           - id: M311
             os: macos-latest
             platform: macOS
             python_version: "3.11"
+          - id: M312
+            os: macos-latest
+            platform: macOS
+            python_version: "3.12"
+          # Windows × 宣告支援之 Python 版本
+          - id: W310
+            os: windows-latest
+            platform: Windows
+            python_version: "3.10"
           - id: W311
             os: windows-latest
             platform: Windows
             python_version: "3.11"
+          - id: W312
+            os: windows-latest
+            platform: Windows
+            python_version: "3.12"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -44,7 +65,8 @@ jobs:
           python --version
           python -m pip --version
           python -c "import platform, sys; print(f'RUNNER_OS={platform.system()}'); print(f'PYTHON_EXECUTABLE={sys.executable}'); print(f'PYTHON_VERSION={platform.python_version()}')"
-      - name: Run ${{ matrix.id }} test matrix
+      # 與本機/各組合相同：跑完整自動化測試套件（M6 全量，與 551 項 pytest 對齊）
+      - name: Run full automated test suite (${{ matrix.id }})
         run: |
           python -c "print('TEST_COMMAND=python scripts/run_test_matrix.py --platform ${{ matrix.platform }} --python-version ${{ matrix.python_version }}')"
           python scripts/run_test_matrix.py --platform ${{ matrix.platform }} --python-version ${{ matrix.python_version }}
