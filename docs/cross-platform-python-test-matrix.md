@@ -20,6 +20,43 @@ python scripts/run_test_matrix.py --platform Windows --python-version 3.11
 
 `--platform` 可指定 `Linux`、`macOS` 或 `Windows`；`--python-version` 可指定 `3.10`、`3.11` 或 `3.12`。腳本會拒絕與目前主機或解譯器不符的指定值，並為每個集合輸出一行 `MATRIX_RESULT` JSON，包含實際平台、完整 Python 版本、測試集合與退出碼；最後一行 `ALL` 是整體退出碼。
 
+## 可重現的本機矩陣
+
+`requirements.lock` 鎖定測試所需的直接與傳遞相依套件；請從新的 virtual environment 安裝它，且使用 `--no-deps`，避免 pip 重新解析出未鎖定的版本。每次只執行與目前主機及解譯器版本相符的一列；要跑完整矩陣，就在對應平台各以 3.10、3.11、3.12 重複以下步驟。
+
+所有命令均在 repo 根目錄執行，並直接呼叫 virtual environment 內的 Python，不需要啟用環境。`pip check` 必須成功後才執行矩陣。
+
+### Linux（範例：CPython 3.11）
+
+```bash
+python3.11 -m venv .venv-3.11
+.venv-3.11/bin/python -m pip install --no-deps -r requirements.lock
+.venv-3.11/bin/python -m pip check
+.venv-3.11/bin/python scripts/run_test_matrix.py --platform Linux --python-version 3.11
+```
+
+### macOS（範例：CPython 3.11）
+
+```bash
+python3.11 -m venv .venv-3.11
+.venv-3.11/bin/python -m pip install --no-deps -r requirements.lock
+.venv-3.11/bin/python -m pip check
+.venv-3.11/bin/python scripts/run_test_matrix.py --platform macOS --python-version 3.11
+```
+
+### Windows PowerShell（範例：CPython 3.11）
+
+```powershell
+python -m venv .venv-3.11
+& .\.venv-3.11\Scripts\python.exe -m pip install --no-deps -r requirements.lock
+& .\.venv-3.11\Scripts\python.exe -m pip check
+& .\.venv-3.11\Scripts\python.exe scripts\run_test_matrix.py --platform Windows --python-version 3.11
+```
+
+Windows 的 `python` 必須是目標 CPython 版本；若有 `py` launcher，可將第一行改成 `py -3.10 -m venv .venv-3.10` 或 `py -3.12 -m venv .venv-3.12` 來選擇版本。三個平台均將範例中的 `3.11` 同步替換為 `3.10` 或 `3.12`，並使用各自的 `.venv-<版本>` 目錄，即可完成該主機可執行的三個版本列。
+
+驗證成功時，最後一行會是 `test_set` 為 `ALL` 且 `exit_code` 為 `0` 的 `MATRIX_RESULT`。`--platform` 或 `--python-version` 與實際環境不符時，腳本會以退出碼 `2` 拒絕執行，避免把非目標組合誤標為通過。
+
 ## 組合矩陣
 
 每一列都必須執行 `M1` 至 `M6`。`M2` 至 `M5` 是核心功能分組，`M6` 是完整回歸門檻。
