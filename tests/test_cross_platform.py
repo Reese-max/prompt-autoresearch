@@ -577,3 +577,108 @@ class TestEnsureDir:
         io.ensure_dir(str(target))
         io.ensure_dir(str(target))  # 第二次不應報錯
         assert target.exists()
+
+
+# ---------------------------------------------------------------------------
+# 9. 核心評估流程：固定輸入與輸出契約跨平台一致
+# ---------------------------------------------------------------------------
+class TestCoreEvaluationFlow:
+    """固定輸入經核心評估流程後，輸出結構與檔案產物應一致。"""
+
+    def test_same_input_produces_spec_compliant_output(self, monkeypatch, tmp_path):
+        import shutil
+
+        import scripts.evaluate as evaluate
+
+        monkeypatch.chdir(tmp_path)
+        prompt_path = tmp_path / "輸入 資料" / "提示詞.md"
+        question_path = tmp_path / "輸入 資料" / "題庫.jsonl"
+        io.ensure_dir(str(prompt_path.parent))
+        prompt_path.write_bytes((UNICODE_PROMPT + "\r\n").encode("utf-8"))
+        question = {
+            "id": 1,
+            "type": "案例題",
+            "question": "請說明行政處分之要件。",
+            "key_points": ["定義", "要件"],
+        }
+        question_path.write_bytes(
+            (json.dumps(question, ensure_ascii=False) + "\r\n").encode("utf-8")
+        )
+        for rubric_name in (
+            "general.md",
+            "type_specific.md",
+            "risk_rules.md",
+            "failure_taxonomy.md",
+        ):
+            io.write_file(f"rubrics/{rubric_name}", "固定 UTF-8 評分規準")
+
+        answer = ("第一行中文\n第二行 mixed English\n" * 40)
+        judge_output = json.dumps(
+            {
+                "general_score": 55,
+                "type_specific_score": 15,
+                "risk_score": 9,
+                "failures": ["F03"],
+                "critique": "請加強採分點。",
+            },
+            ensure_ascii=False,
+        )
+
+        def fake_minimax(_system, _user, temperature=0.7):
+            if temperature == 0.3:
+                return answer
+            assert temperature == 0.1
+            return judge_output
+
+        monkeypatch.setattr(evaluate, "call_minimax", fake_minimax)
+        prompt_arg = io.normalize_path(str(prompt_path))
+        question_arg = io.normalize_path(str(question_path))
+
+        summary, results = evaluate.run_evaluation(
+            prompt_arg, question_arg, max_workers=1
+        )
+        first = results[0]
+
+        assert summary["prompt_file"] == prompt_arg
+        assert summary["question_file"] == question_arg
+        assert summary["prompt_hash"] == io.sha256_text(UNICODE_PROMPT)
+        assert summary["total_questions"] == 1
+        assert summary["average_score"] == 79.0
+        assert summary["word_count_pass_rate"] == 100.0
+        assert summary["risk_perfect_rate"] == 0.0
+        assert summary["error_count"] == 0
+        assert first["question_file"] == question_arg
+        assert first["answer"] == answer
+        assert first["char_count"] == len(answer)
+        assert first["total_score"] == 55 + 15 + 9
+        assert first["failures"] == ["F03"]
+
+        shutil.rmtree(tmp_path / ".cache")
+        repeat_summary, repeat_results = evaluate.run_evaluation(
+            prompt_arg, question_arg, max_workers=1
+        )
+        for key in ("prompt_file", "question_file", "prompt_hash", "total_questions", "average_score", "word_count_pass_rate", "risk_perfect_rate", "error_count"):
+            assert repeat_summary[key] == summary[key]
+        assert repeat_results == results
+
+        run_dir = Path(evaluate.save_run_results(summary, results))
+        for name in ("details.jsonl", "summary.json", "summary.md"):
+            artifact = run_dir / name
+            raw = artifact.read_bytes()
+            assert not raw.startswith(b"\xef\xbb\xbf")
+            raw.decode("utf-8")
+            assert artifact.exists()
+        details = [
+            json.loads(line)
+            for line in (run_dir / "details.jsonl").read_text(encoding="utf-8").splitlines()
+            if line
+        ]
+        stored_summary = json.loads(
+            (run_dir / "summary.json").read_text(encoding="utf-8")
+        )
+        assert details == results
+        assert stored_summary["question_file"] == question_arg
+        assert stored_summary["average_score"] == 79.0
+        assert len((run_dir / "summary.md").read_text(encoding="utf-8").splitlines()) > 1
+        assert "\t79.00\t" in (Path("results.tsv").read_text(encoding="utf-8"))
+        assert all((Path("runs/latest") / name).exists() for name in ("details.jsonl", "summary.json", "summary.md"))
