@@ -2,49 +2,53 @@
 
 ## 變更目的
 
-- 在 CI 執行中，讓每個 `matrix` 工作可輸出**可識別目標**的測試結果。
-- 讓每一個目標（作業系統 × Python 版本）都能留下可重播、可比對的輸出檔。
+- 在 CI 執行中，讓每個 `matrix` 工作可輸出**可識別目標**的環境資訊與測試結果。
+- 每個目標（作業系統 × Python 版本）必須留下 **OS、Python 版本、測試命令、退出碼**，並在失敗時印出明確 `MATRIX_TARGET_FAIL`，避免單一成功紀錄冒充全量驗證。
+- 每個目標產出可下載的 evidence artifact，支援獨立辨識與重跑。
 
 ## 變更內容
 
-1. `scripts/run_test_matrix.py`
-   - `MATRIX_RESULT` 的 JSON 中新增 `matrix_id` 欄位（預設為 `local`）。
-   - 新增 `CI_MATRIX_REPORT_PATH` 環境變數：若設定，會把每筆 `MATRIX_RESULT` 同步寫入 JSONL。
-   - 由 CI 步驟設定 `CI_MATRIX_ID` 與 `CI_MATRIX_REPORT_PATH`。
-2. `.github/workflows/ci.yml`
-   - `Run full automated test suite` 步驟改為傳入：
-     - `CI_MATRIX_ID: ${{ matrix.id }}`
-     - `CI_MATRIX_REPORT_PATH: matrix-${{ matrix.id }}.jsonl`
-   - 新增 `Upload CI matrix evidence`（`always()`）上傳 `matrix-${{ matrix.id }}.jsonl`。
+1. `.github/workflows/ci.yml`
+   - Job 名稱模板：`${{ matrix.id }} (${{ matrix.os }}, Python ${{ matrix.python_version }})`。
+   - `Record environment`：輸出 `MATRIX_ENV`（`matrix_id` / `os` / `runner_os` / `python_requested` / `python_version` / `python_executable`）。
+   - `Run acceptance test suite`：
+     - 執行前再印 `MATRIX_ENV` 與 `TEST_*` 欄位。
+     - 以子程序執行驗收命令並**一定**輸出：
+       - `MATRIX_TARGET_RESULT`：含 `os`、`python_version`、`test_command`、`exit_code`、`status`
+       - 失敗時另印 `MATRIX_TARGET_FAIL`（同上欄位）
+     - 寫入 `matrix-${{ matrix.id }}.jsonl`
+   - `Upload CI matrix evidence`（`always()`）上傳 `ci-matrix-evidence-<id>`。
+   - L311 coverage gate 同樣輸出 `MATRIX_ENV` / `MATRIX_TARGET_RESULT` / `MATRIX_TARGET_FAIL`。
 
-## 可重跑與驗證方式
-
-每個目標環境重跑命令（在該環境本機）如下：
+2. 驗收命令（九格矩陣共用）
 
 ```bash
-python scripts/run_test_matrix.py --platform <Linux|macOS|Windows> --python-version 3.10|3.11|3.12
+python -m pytest tests/ -q --deselect tests/test_architecture_surface.py::ArchitectureSurfaceTests::test_experiment_report_snapshot_contract
 ```
 
-CI 每一個 job 會在成功或失敗後，輸出同一組 `MATRIX_RESULT`，
-並附上以下欄位：
+## 日誌標記約定
 
-- `matrix_id`（如 `L310`, `M311`, `W312`）
-- `platform`
-- `python_version`
-- `test_set`
-- `tests`
-- `exit_code`
+| 標記 | 時機 | 必要欄位 |
+|------|------|----------|
+| `MATRIX_ENV` | 環境記錄／測試前 | `matrix_id`, `os`, `python_version`（或 `python_requested`）, `test_command`（測試步驟） |
+| `MATRIX_TARGET_RESULT` | 測試結束（成功或失敗） | `matrix_id`, `os`, `python_version`, `test_command`, `exit_code`, `status` |
+| `MATRIX_TARGET_FAIL` | `exit_code != 0` | 同上，便於 log 搜尋失敗目標 |
 
-每個矩陣目標會留下 `matrix-<id>.jsonl`，在 Actions 成果中以 artifact
-`ci-matrix-evidence-<id>` 下載可查。
+`status`：`PASS`（`exit_code=0`）或 `FAIL`（非零）。
 
-## 本次本機執行紀錄（已完成）
+## 可重跑方式
 
-- 平台：Windows
-- Python：3.11.9
-- 輸入：`python scripts/run_test_matrix.py --platform Windows --python-version 3.11`
-- 結果：
-  - `M1`, `M2`, `M3`, `M4`, `M5`, `M6`, `ALL` 皆為 `exit_code=0`
-  - `matrix_id=local`
+本機對齊單一矩陣目標（以 W311 為例）：
 
-> 備註：本機只能實際補上當前執行環境；若要完整覆蓋 9 組合，請以 CI 流程執行。
+```bash
+python -m pytest tests/ -q --deselect tests/test_architecture_surface.py::ArchitectureSurfaceTests::test_experiment_report_snapshot_contract
+```
+
+在 CI 日誌中以 `matrix_id`（如 `L310`、`M311`、`W312`）過濾，或下載 artifact
+`ci-matrix-evidence-<id>` 內的 `matrix-<id>.jsonl` 核對 `exit_code`。
+
+## 完成判定
+
+- 同一輪 CI 的 9 個 matrix job **各自**留下可識別的 `MATRIX_TARGET_RESULT`。
+- 不得以單一 job 成功代替其餘 8 格；任一目標 `exit_code != 0` 即阻擋合併（workflow 失敗）。
+- 失敗 job 必須出現 `MATRIX_TARGET_FAIL`，並含 OS、Python 版本、測試命令、退出碼。
