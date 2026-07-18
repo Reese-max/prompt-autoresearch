@@ -10,6 +10,16 @@
 - Windows／Python 3.11.9：本機完整測試已通過。
 - 其餘組合：列為待驗證，不視為已通過。
 
+## 本地單一驗證入口
+
+先啟用已安裝 `requirements.txt` 與 `requirements-dev.txt` 的目標 Python 環境，再以一個命令執行該平台／版本的 `M1` 至 `M6`：
+
+```bash
+python scripts/run_test_matrix.py --platform Windows --python-version 3.11
+```
+
+`--platform` 可指定 `Linux`、`macOS` 或 `Windows`；`--python-version` 可指定 `3.10`、`3.11` 或 `3.12`。腳本會拒絕與目前主機或解譯器不符的指定值，並為每個集合輸出一行 `MATRIX_RESULT` JSON，包含實際平台、完整 Python 版本、測試集合與退出碼；最後一行 `ALL` 是整體退出碼。
+
 ## 組合矩陣
 
 每一列都必須執行 `M1` 至 `M6`。`M2` 至 `M5` 是核心功能分組，`M6` 是完整回歸門檻。

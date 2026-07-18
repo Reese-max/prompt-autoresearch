@@ -3,8 +3,10 @@
 
 from contextlib import redirect_stderr, redirect_stdout
 from io import StringIO
+import json
 import os
 import runpy
+import subprocess
 import sys
 import warnings
 
@@ -98,3 +100,80 @@ def test_leaderboard_help_entrypoint():
     output = run_module_capture_output("scripts.leaderboard", ["--help"])
     assert output["exit_code"] == 0
     assert "--limit" in output["out"]
+
+
+def _matrix_rows(output):
+    return [
+        json.loads(line.removeprefix("MATRIX_RESULT "))
+        for line in output.splitlines()
+        if line.startswith("MATRIX_RESULT ")
+    ]
+
+
+def test_test_matrix_runs_every_set_and_reports_runtime(monkeypatch, capsys):
+    import scripts.run_test_matrix as matrix
+
+    calls = []
+    missing_key = {
+        "errors": [{"name": "MINIMAX_API_KEY"}],
+        "checks": [{"name": "Python version", "passed": True}],
+    }
+
+    def fake_run(command, **kwargs):
+        calls.append(command)
+        if command[-1] == "--json":
+            return subprocess.CompletedProcess(command, 1, json.dumps(missing_key), "")
+        return subprocess.CompletedProcess(command, 0, "", "")
+
+    monkeypatch.setattr(matrix, "_runtime", lambda: ("Windows", "3.11.9", "3.11"))
+    monkeypatch.setattr(matrix.subprocess, "run", fake_run)
+
+    assert matrix.main(["--platform", "Windows", "--python-version", "3.11"]) == 0
+    rows = _matrix_rows(capsys.readouterr().out)
+
+    assert [row["test_set"] for row in rows] == ["M1", "M2", "M3", "M4", "M5", "M6", "ALL"]
+    assert all(row["platform"] == "Windows" for row in rows)
+    assert all(row["python_version"] == "3.11.9" for row in rows)
+    assert all(row["exit_code"] == 0 for row in rows)
+    assert len(calls) == 7
+    assert all(command[0] == sys.executable for command in calls)
+
+
+def test_test_matrix_rejects_runtime_mismatch(monkeypatch, capsys):
+    import scripts.run_test_matrix as matrix
+
+    monkeypatch.setattr(matrix, "_runtime", lambda: ("Windows", "3.11.9", "3.11"))
+    monkeypatch.setattr(
+        matrix.subprocess,
+        "run",
+        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("不應執行測試")),
+    )
+
+    assert matrix.main(["--platform", "Linux", "--python-version", "3.11"]) == 2
+    rows = _matrix_rows(capsys.readouterr().out)
+    assert [(row["test_set"], row["exit_code"]) for row in rows] == [("M1", 2), ("ALL", 2)]
+
+
+def test_test_matrix_does_not_hide_other_preflight_errors(monkeypatch, capsys):
+    import scripts.run_test_matrix as matrix
+
+    calls = []
+    invalid_preflight = {
+        "errors": [{"name": "baseline.meta hash"}],
+        "checks": [{"name": "Python version", "passed": True}],
+    }
+
+    def fake_run(command, **kwargs):
+        calls.append(command)
+        if command[-1] == "--json":
+            return subprocess.CompletedProcess(command, 1, json.dumps(invalid_preflight), "")
+        return subprocess.CompletedProcess(command, 0, "", "")
+
+    monkeypatch.setattr(matrix, "_runtime", lambda: ("Windows", "3.11.9", "3.11"))
+    monkeypatch.setattr(matrix.subprocess, "run", fake_run)
+
+    assert matrix.main(["--platform", "Windows", "--python-version", "3.11"]) == 1
+    rows = _matrix_rows(capsys.readouterr().out)
+    assert rows[0]["test_set"] == "M1" and rows[0]["exit_code"] == 1
+    assert rows[-1]["test_set"] == "ALL" and rows[-1]["exit_code"] == 1
+    assert len(calls) == 7
