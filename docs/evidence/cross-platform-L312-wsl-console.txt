@@ -1,0 +1,22 @@
+# Cross-platform validation evidence — Linux WSL L312-approx
+# Recorded: 2026-07-19 06:19 +08:00
+# hostname: HPZBOOKG10 (WSL)
+# uname: Linux HPZBOOKG10 5.15.167.4-microsoft-standard-WSL2 #1 SMP Tue Nov 5 00:21:55 UTC 2024 x86_64
+# platform.system: Linux
+# python: 3.12.3
+# executable: /usr/bin/python3
+# cwd: /mnt/d/Users/Administrator/Desktop/autodev-ng/data/prompt-autoresearch/worktrees/04f3777f
+# command:
+#   python3 -m pytest tests/ -q --no-cov --deselect tests/test_architecture_surface.py::ArchitectureSurfaceTests::test_experiment_report_snapshot_contract
+
+........................................................................ [ 11%]
+........................................................................ [ 23%]
+........................................................................ [ 35%]
+........................................................................ [ 46%]
+........................................................................ [ 58%]
+........................................................................ [ 70%]
+........................................................................ [ 82%]
+........................................................................ [ 93%]
+.....................................                                    [100%]
+613 passed, 1 deselected in 12.43s
+LINUX_FULL=0
