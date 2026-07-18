@@ -10,31 +10,42 @@
 
 僅支援 CPython。PyPy、Jython、GraalPy 等不在支援範圍內。
 
-## 支援組合與 CI 對應
+## 支援組合與完成判定
 
-| 組合 ID | 平台 | Python 版本 | CI matrix ID | 最低版本要求通過 | 最高版本要求通過 |
-|---|---|---|---|---|---|
-| L310 | Linux | 3.10 | `L310` | 是（=3.10） | 是（≤3.12） |
-| L311 | Linux | 3.11 | `L311` | 是（≥3.10） | 是（≤3.12） |
-| L312 | Linux | 3.12 | `L312` | 是（≥3.10） | 是（=3.12） |
-| M310 | macOS | 3.10 | `M310` | 是（=3.10） | 是（≤3.12） |
-| M311 | macOS | 3.11 | `M311` | 是（≥3.10） | 是（≤3.12） |
-| M312 | macOS | 3.12 | `M312` | 是（≥3.10） | 是（=3.12） |
-| W310 | Windows | 3.10 | `W310` | 是（=3.10） | 是（≤3.12） |
-| W311 | Windows | 3.11 | `W311` | 是（≥3.10） | 是（≤3.12） |
-| W312 | Windows | 3.12 | `W312` | 是（≥3.10） | 是（=3.12） |
+| 組合 ID | 作業系統 runner | Python 執行階段 | 該組合完成判定 |
+|---|---|---|---|
+| L310 | Linux（`ubuntu-latest`） | CPython 3.10 | `L310` job 的 M1～M6 與 `ALL` 結果皆為 `exit_code = 0` |
+| L311 | Linux（`ubuntu-latest`） | CPython 3.11 | `L311` job 的 M1～M6 與 `ALL` 結果皆為 `exit_code = 0`，且 coverage gate ≥ 80% |
+| L312 | Linux（`ubuntu-latest`） | CPython 3.12 | `L312` job 的 M1～M6 與 `ALL` 結果皆為 `exit_code = 0` |
+| M310 | macOS（`macos-latest`） | CPython 3.10 | `M310` job 的 M1～M6 與 `ALL` 結果皆為 `exit_code = 0` |
+| M311 | macOS（`macos-latest`） | CPython 3.11 | `M311` job 的 M1～M6 與 `ALL` 結果皆為 `exit_code = 0` |
+| M312 | macOS（`macos-latest`） | CPython 3.12 | `M312` job 的 M1～M6 與 `ALL` 結果皆為 `exit_code = 0` |
+| W310 | Windows（`windows-latest`） | CPython 3.10 | `W310` job 的 M1～M6 與 `ALL` 結果皆為 `exit_code = 0` |
+| W311 | Windows（`windows-latest`） | CPython 3.11 | `W311` job 的 M1～M6 與 `ALL` 結果皆為 `exit_code = 0` |
+| W312 | Windows（`windows-latest`） | CPython 3.12 | `W312` job 的 M1～M6 與 `ALL` 結果皆為 `exit_code = 0` |
 
 共 9 個組合，對應 `.github/workflows/ci.yml` 的 9 個 matrix job。
 
 ## 排除組合
 
-| 排除條件 | 原因 | 政策 |
+| 作業系統／架構 | 執行階段 | 排除判定 |
 |---|---|---|
-| Python ≤ 3.9 | CPython 3.9 已於 2025-10 EOL，不再接收安全性修補 | 不支援，`scripts/preflight.py` 會攔截 |
-| Python ≥ 3.13 | 尚未納入 CI 測試矩陣，相容性未驗證 | 待驗證後決定是否加入；加入前視為不支援 |
-| PyPy / Jython / GraalPy | 非 CPython 解譯器，標準函式庫行為與 CPython 有差異 | 不支援 |
-| 32-bit 解譯器 | CI 全部使用 64-bit runner | 不支援 |
-| iOS / Android / WASI | 無 CI 覆蓋，stdlib 在這些平台有重大限制 | 不支援 |
+| Linux、macOS、Windows | CPython ≤ 3.9 | 低於最低版本；`scripts/preflight.py` 的 Python 版本檢查不通過 |
+| Linux、macOS、Windows | CPython ≥ 3.13 | 不在 CI 與 `SUPPORTED_PYTHON_VERSIONS` 內，完成相容性驗證前不支援 |
+| Linux、macOS、Windows | PyPy、Jython、GraalPy | 非 CPython，未納入 CI，不列為支援組合 |
+| Linux、macOS、Windows（32-bit） | 任意 Python | CI 僅驗證 64-bit runner，不列為支援組合 |
+| iOS、Android、WASI 或其他作業系統 | 任意 Python | 無 CI 覆蓋，不列為支援組合 |
+
+## 整體完成判定標準
+
+本文件所列相容性範圍僅在以下條件全部成立時判定完成：
+
+1. `.github/workflows/ci.yml` 與 `scripts/run_test_matrix.py` 仍完整列出上述 9 個組合。
+2. 同一輪 CI 的 9 個 matrix job 全部成功；每個 job 的 M1～M6 與 `ALL` 均回報 `exit_code = 0`。
+3. `L311` 的 `scripts/` 與 `api/` coverage gate 達 80% 以上。
+4. 完整測試無 `failed`、`error`、非預期的 `xfailed` 或 `skipped`。
+
+排除組合不需要通過測試，但不得標示為支援。若要擴大支援範圍，必須先加入 CI 與測試矩陣、依上述標準通過，再同步更新本文件。
 
 ## 退役政策
 
