@@ -64,8 +64,13 @@ def _load_config():
             _deep_merge(_CONFIG, user_cfg)
         except Exception:
             pass
-    _apply_env_overrides(_CONFIG)
-    validate_config(_CONFIG)
+    try:
+        _apply_env_overrides(_CONFIG)
+        validate_config(_CONFIG)
+    except Exception:
+        # 驗證或覆寫失敗時，清掉快取，避免下一次載入卡住失敗前的部分狀態。
+        _CONFIG = None
+        raise
     return _CONFIG
 
 
