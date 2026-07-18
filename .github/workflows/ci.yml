@@ -75,6 +75,40 @@ jobs:
           python --version
           python -m pip --version
           python -c "import json,os,platform,sys; p={'matrix_id':os.environ['CI_MATRIX_ID'],'os':os.environ['CI_MATRIX_PLATFORM'],'runner_os':os.environ['CI_MATRIX_RUNNER_OS'],'python_requested':os.environ['CI_MATRIX_PYTHON'],'python_version':platform.python_version(),'python_executable':sys.executable}; print('MATRIX_ENV '+json.dumps(p,ensure_ascii=False))"
+      - name: Run Linux acceptance command (L311)
+        if: matrix.id == 'L311'
+        shell: bash
+        env:
+          CI_ACCEPTANCE_LOG: acceptance-${{ matrix.id }}-raw.log
+        run: |
+          set +e
+          (
+            printf 'RUNNER_NAME=%s\n' "${RUNNER_NAME:-unknown}"
+            printf 'RUNNER_OS=%s\n' "${RUNNER_OS:-unknown}"
+            printf 'RUNNER_ARCH=%s\n' "${RUNNER_ARCH:-unknown}"
+            printf 'HOSTNAME=%s\n' "${HOSTNAME:-unknown}"
+            uname -a
+            cat /etc/os-release
+            python --version
+            printf '%s\n' 'COMMAND=python -m pytest tests/ -q --deselect tests/test_architecture_surface.py::ArchitectureSurfaceTests::test_experiment_report_snapshot_contract'
+            python -m pytest tests/ -q --deselect tests/test_architecture_surface.py::ArchitectureSurfaceTests::test_experiment_report_snapshot_contract
+            exit_code=$?
+            printf 'EXIT_CODE=%s\n' "$exit_code"
+            exit "$exit_code"
+          ) 2>&1 | tee "$CI_ACCEPTANCE_LOG"
+          statuses=("${PIPESTATUS[@]}")
+          set -e
+          if [ "${statuses[1]}" -ne 0 ]; then
+            exit "${statuses[1]}"
+          fi
+          exit "${statuses[0]}"
+      - name: Upload Linux acceptance output (L311)
+        if: always() && matrix.id == 'L311'
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-acceptance-L311
+          path: acceptance-${{ matrix.id }}-raw.log
+          if-no-files-found: error
       # 每個 OS × Python 組合安裝後執行完整測試套件（M1–M6，含全量 pytest）。
       - name: Run full automated test suite (${{ matrix.id }})
         shell: bash
