@@ -60,6 +60,193 @@ class TestNormalizePath:
 
 
 # ---------------------------------------------------------------------------
+# 1b. 路徑處理回歸：分隔符 / 絕對與相對 / 空白 / 非 ASCII
+# ---------------------------------------------------------------------------
+class TestCrossPlatformPathRegression:
+    """跨平台路徑處理回歸測試。
+
+    涵蓋 Windows/POSIX 分隔符、絕對與相對路徑、含空白及非 ASCII 字元的路徑。
+    確保 normalize_path 與檔案 I/O 在這些路徑形式上行為一致。
+    """
+
+    # --- 分隔符：Windows \ 與 POSIX / ---
+    @pytest.mark.parametrize(
+        "input_path,expected",
+        [
+            pytest.param(r"dir\file.txt", "dir/file.txt", id="win-sep-simple"),
+            pytest.param("dir/file.txt", "dir/file.txt", id="posix-sep-simple"),
+            pytest.param(r"a\b\c\d.txt", "a/b/c/d.txt", id="win-sep-nested"),
+            pytest.param("a/b/c/d.txt", "a/b/c/d.txt", id="posix-sep-nested"),
+            pytest.param(r"mixed/path\parts", "mixed/path/parts", id="mixed-seps"),
+            pytest.param(r"trailing\sep\\", "trailing/sep//", id="win-trailing"),
+            pytest.param("trailing/sep//", "trailing/sep//", id="posix-trailing"),
+        ],
+    )
+    def test_normalize_windows_and_posix_separators(self, input_path, expected):
+        result = io.normalize_path(input_path)
+        assert result == expected, (
+            f"分隔符正規化失敗 ({PLATFORM}): "
+            f"normalize_path({input_path!r}) -> {result!r}, 預期 {expected!r}"
+        )
+        assert "\\" not in result, (
+            f"正規化後不應殘留反斜線: {result!r}"
+        )
+
+    # --- 絕對路徑 ---
+    @pytest.mark.parametrize(
+        "input_path,expected",
+        [
+            pytest.param(r"C:\Users\Admin\file.txt", "C:/Users/Admin/file.txt", id="win-drive"),
+            pytest.param(r"D:\資料\專案\app.py", "D:/資料/專案/app.py", id="win-drive-nonascii"),
+            pytest.param(
+                r"C:\Program Files\My App\config.json",
+                "C:/Program Files/My App/config.json",
+                id="win-drive-spaces",
+            ),
+            pytest.param("/home/user/file.txt", "/home/user/file.txt", id="posix-abs"),
+            pytest.param("/home/user/我的 專案/檔案.txt", "/home/user/我的 專案/檔案.txt", id="posix-abs-nonascii-space"),
+            pytest.param(r"\\server\share\file.txt", "//server/share/file.txt", id="win-unc"),
+        ],
+    )
+    def test_normalize_absolute_paths(self, input_path, expected):
+        result = io.normalize_path(input_path)
+        assert result == expected, (
+            f"絕對路徑正規化失敗 ({PLATFORM}): "
+            f"normalize_path({input_path!r}) -> {result!r}, 預期 {expected!r}"
+        )
+
+    # --- 相對路徑 ---
+    @pytest.mark.parametrize(
+        "input_path,expected",
+        [
+            pytest.param("./rel/file.txt", "./rel/file.txt", id="dot-posix"),
+            pytest.param(r".\rel\file.txt", "./rel/file.txt", id="dot-win"),
+            pytest.param("../parent/file.txt", "../parent/file.txt", id="dotdot-posix"),
+            pytest.param(r"..\parent\file.txt", "../parent/file.txt", id="dotdot-win"),
+            pytest.param("subdir/nested", "subdir/nested", id="plain-rel-posix"),
+            pytest.param(r"subdir\nested", "subdir/nested", id="plain-rel-win"),
+            pytest.param("file only.txt", "file only.txt", id="rel-space-filename"),
+        ],
+    )
+    def test_normalize_relative_paths(self, input_path, expected):
+        result = io.normalize_path(input_path)
+        assert result == expected, (
+            f"相對路徑正規化失敗 ({PLATFORM}): "
+            f"normalize_path({input_path!r}) -> {result!r}, 預期 {expected!r}"
+        )
+
+    # --- 含空白路徑 ---
+    @pytest.mark.parametrize(
+        "input_path,expected",
+        [
+            pytest.param("my file.txt", "my file.txt", id="space-filename"),
+            pytest.param("my dir/my file.txt", "my dir/my file.txt", id="space-posix"),
+            pytest.param(r"my dir\my file.txt", "my dir/my file.txt", id="space-win"),
+            pytest.param("  leading space/file.txt", "  leading space/file.txt", id="leading-space-dir"),
+            pytest.param("path with   multi spaces/x", "path with   multi spaces/x", id="multi-spaces"),
+            pytest.param(
+                r"C:\Users\Admin\My Documents\report 2026.md",
+                "C:/Users/Admin/My Documents/report 2026.md",
+                id="abs-win-spaces",
+            ),
+        ],
+    )
+    def test_normalize_paths_with_spaces(self, input_path, expected):
+        result = io.normalize_path(input_path)
+        assert result == expected, (
+            f"空白路徑正規化失敗 ({PLATFORM}): "
+            f"normalize_path({input_path!r}) -> {result!r}, 預期 {expected!r}"
+        )
+        # 空白必須被保留，不可被剝除或壓縮
+        assert " " in result or " " not in input_path
+
+    # --- 非 ASCII 字元路徑 ---
+    @pytest.mark.parametrize(
+        "input_path,expected",
+        [
+            pytest.param("資料/測試.py", "資料/測試.py", id="cjk-posix"),
+            pytest.param(r"資料\測試.py", "資料/測試.py", id="cjk-win"),
+            pytest.param("日本語/ファイル.txt", "日本語/ファイル.txt", id="jp"),
+            pytest.param("한국어/파일.txt", "한국어/파일.txt", id="kr"),
+            pytest.param("emoji_📁_dir/file.txt", "emoji_📁_dir/file.txt", id="emoji"),
+            pytest.param(
+                r"專案\子目錄\設定 檔案.json",
+                "專案/子目錄/設定 檔案.json",
+                id="cjk-space-win",
+            ),
+            pytest.param(
+                "/tmp/用戶 資料/報告.md",
+                "/tmp/用戶 資料/報告.md",
+                id="cjk-space-posix-abs",
+            ),
+        ],
+    )
+    def test_normalize_non_ascii_paths(self, input_path, expected):
+        result = io.normalize_path(input_path)
+        assert result == expected, (
+            f"非 ASCII 路徑正規化失敗 ({PLATFORM}): "
+            f"normalize_path({input_path!r}) -> {result!r}, 預期 {expected!r}"
+        )
+
+    # --- 檔案 I/O：含空白與非 ASCII 的相對路徑 round-trip ---
+    def test_io_round_trip_relative_path_with_spaces_and_non_ascii(self, tmp_path):
+        """相對路徑含空白與非 ASCII 時，write/load 應一致。"""
+        rel = Path("子 目錄") / "報告 2026.txt"
+        target = tmp_path / rel
+        content = "跨平台路徑測試：空白 + 中文"
+
+        io.write_file(str(target), content)
+        assert target.exists(), f"檔案未建立: {target}"
+        assert io.load_file(str(target)) == content
+
+    # --- 檔案 I/O：絕對路徑 + 空白 + 非 ASCII ---
+    def test_io_round_trip_absolute_path_with_spaces_and_non_ascii(self, tmp_path):
+        """絕對路徑含空白與非 ASCII 時，write/load/json 應一致。"""
+        target = (tmp_path / "我的 專案" / "設定.json").resolve()
+        payload = {"路徑": str(target), "名稱": "測試 設定", "ok": True}
+
+        assert os.path.isabs(str(target)), f"應為絕對路徑: {target}"
+        io.write_json(str(target), payload)
+        loaded = io.load_json(str(target))
+        assert loaded == payload
+
+    # --- PurePath 形式：Windows / POSIX 構造後仍可 I/O ---
+    @pytest.mark.parametrize("path_type", PLATFORM_PATH_TYPES)
+    def test_io_with_platform_path_forms_spaces_and_non_ascii(self, tmp_path, path_type):
+        """以 PurePosixPath / PureWindowsPath 構造含空白與非 ASCII 的相對路徑。"""
+        relative = path_type("資料 夾") / "nested sub" / "輸出.txt"
+        path = tmp_path.joinpath(*relative.parts)
+        content = "separator regression"
+
+        io.ensure_dir(str(path.parent))
+        io.write_file(str(path), content)
+        assert io.load_file(str(path)) == content
+
+        # normalize_path 對 str(relative) 應統一為 /
+        normalized = io.normalize_path(str(relative))
+        assert "\\" not in normalized
+        assert "資料 夾" in normalized
+        assert "nested sub" in normalized
+
+    # --- JSONL：路徑含空白 ---
+    def test_jsonl_path_with_spaces(self, tmp_path):
+        path = tmp_path / "log with spaces" / "events.jsonl"
+        rows = [{"id": 1, "訊息": "空白路徑"}, {"id": 2, "path": str(path)}]
+        for row in rows:
+            io.append_jsonl(str(path), row)
+        assert io.read_jsonl(str(path)) == rows
+
+    # --- ensure_dir：含空白與非 ASCII 的巢狀目錄 ---
+    def test_ensure_dir_spaces_and_non_ascii(self, tmp_path):
+        target = tmp_path / "a b" / "中文 目錄" / "nested"
+        io.ensure_dir(str(target))
+        assert target.is_dir()
+        # 冪等
+        io.ensure_dir(str(target))
+        assert target.is_dir()
+
+
+# ---------------------------------------------------------------------------
 # 2. 檔案 I/O：Unicode 讀寫 round-trip 一致
 # ---------------------------------------------------------------------------
 class TestFileIORoundTrip:
