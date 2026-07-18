@@ -99,13 +99,21 @@ def _preflight_exit_code(result):
     return 0 if python_check.get("passed") and not errors else result.returncode or 1
 
 
+def _run_command(command, **kwargs):
+    try:
+        return subprocess.run(command, **kwargs)
+    except OSError as exc:
+        print(f"無法執行子程序：{exc}", file=sys.stderr)
+        return subprocess.CompletedProcess(command, 1, stdout="", stderr="")
+
+
 def _run_m1():
-    pytest_result = subprocess.run(
+    pytest_result = _run_command(
         [sys.executable, "-m", "pytest", "--version"],
         cwd=PROJECT_ROOT,
         check=False,
     )
-    preflight_result = subprocess.run(
+    preflight_result = _run_command(
         [sys.executable, str(PROJECT_ROOT / "scripts" / "preflight.py"), "--json"],
         cwd=PROJECT_ROOT,
         check=False,
@@ -129,7 +137,7 @@ def _run_pytest(test_set, tests):
     command = [sys.executable, "-m", "pytest", *tests, "-q"]
     if test_set != "M6":
         command.append("--no-cov")
-    return subprocess.run(command, cwd=PROJECT_ROOT, check=False).returncode
+    return _run_command(command, cwd=PROJECT_ROOT, check=False).returncode
 
 
 def main(argv=None):

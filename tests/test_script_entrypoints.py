@@ -11,7 +11,7 @@ import sys
 from types import SimpleNamespace
 import warnings
 
-from pathlib import Path
+from pathlib import Path, PurePosixPath, PureWindowsPath
 
 import pytest
 
@@ -173,6 +173,26 @@ def test_test_matrix_runs_every_supported_combination_and_reports_runtime(
     assert all(command[0] == sys.executable for command in calls)
 
 
+def test_test_matrix_returns_first_failed_test_set_and_continues(monkeypatch, capsys):
+    import scripts.run_test_matrix as matrix
+
+    calls = []
+    exit_codes = {"M3": 5, "M5": 8}
+
+    def fake_run_pytest(test_set, tests):
+        calls.append((test_set, tests))
+        return exit_codes.get(test_set, 0)
+
+    monkeypatch.setattr(matrix, "_runtime", lambda: ("Linux", "3.11.9", "3.11"))
+    monkeypatch.setattr(matrix, "_run_m1", lambda: 0)
+    monkeypatch.setattr(matrix, "_run_pytest", fake_run_pytest)
+
+    assert matrix.main(["--platform", "Linux", "--python-version", "3.11"]) == 5
+    rows = _matrix_rows(capsys.readouterr().out)
+    assert [row["exit_code"] for row in rows] == [0, 0, 5, 0, 8, 0, 5]
+    assert calls == list(matrix.PYTEST_SETS)
+
+
 def test_test_matrix_rejects_runtime_version_mismatch(monkeypatch, capsys):
     import scripts.run_test_matrix as matrix
 
@@ -186,6 +206,23 @@ def test_test_matrix_rejects_runtime_version_mismatch(monkeypatch, capsys):
     assert matrix.main(["--platform", "Windows", "--python-version", "3.12"]) == 2
     rows = _matrix_rows(capsys.readouterr().out)
     assert [(row["test_set"], row["exit_code"]) for row in rows] == [("M1", 2), ("ALL", 2)]
+
+
+def test_test_matrix_rejects_invalid_python_version(monkeypatch, capsys):
+    import scripts.run_test_matrix as matrix
+
+    monkeypatch.setattr(matrix, "_runtime", lambda: ("Windows", "3.11.9", "3.11"))
+    monkeypatch.setattr(
+        matrix.subprocess,
+        "run",
+        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("不應執行測試")),
+    )
+
+    with pytest.raises(SystemExit) as exc_info:
+        matrix.main(["--platform", "Windows", "--python-version", "3.13"])
+
+    assert exc_info.value.code == 2
+    assert "invalid choice: '3.13'" in capsys.readouterr().err
 
 
 def test_test_matrix_entrypoint_propagates_unsupported_runtime_combination():
@@ -215,6 +252,37 @@ def test_test_matrix_preflight_invalid_output_propagates_failure(stdout, returnc
     result = subprocess.CompletedProcess(["preflight"], returncode, stdout, "")
 
     assert matrix._preflight_exit_code(result) == returncode
+
+
+def test_test_matrix_subprocess_start_error_becomes_failure(monkeypatch, capsys):
+    import scripts.run_test_matrix as matrix
+
+    monkeypatch.setattr(
+        matrix.subprocess,
+        "run",
+        lambda *args, **kwargs: (_ for _ in ()).throw(OSError("找不到執行檔")),
+    )
+
+    assert matrix._run_pytest("M2", ("tests/test_cross_platform.py",)) == 1
+    assert "無法執行子程序：找不到執行檔" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize("path_type", (PurePosixPath, PureWindowsPath))
+def test_test_matrix_writes_report_with_platform_path_parts(
+    monkeypatch, tmp_path, capsys, path_type
+):
+    import scripts.run_test_matrix as matrix
+
+    relative = path_type("矩陣 結果") / "nested" / "matrix.jsonl"
+    report_path = tmp_path.joinpath(*relative.parts)
+    monkeypatch.setenv("CI_MATRIX_ID", "W311")
+    monkeypatch.setenv("CI_MATRIX_REPORT_PATH", str(report_path))
+
+    matrix._emit("Windows", "3.11.9", "M2", ("tests/test_cross_platform.py",), 0)
+
+    row = json.loads(report_path.read_text(encoding="utf-8"))
+    assert row == _matrix_rows(capsys.readouterr().out)[0]
+    assert row["matrix_id"] == "W311"
 
 
 @pytest.mark.parametrize(
