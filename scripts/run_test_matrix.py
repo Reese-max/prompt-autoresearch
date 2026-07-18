@@ -4,6 +4,7 @@
 import argparse
 import json
 import platform
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -64,7 +65,9 @@ def _runtime():
 
 
 def _emit(platform_name, python_version, test_set, tests, exit_code):
+    matrix_id = os.environ.get("CI_MATRIX_ID", "local")
     result = {
+        "matrix_id": matrix_id,
         "platform": platform_name,
         "python_version": python_version,
         "test_set": test_set,
@@ -72,6 +75,12 @@ def _emit(platform_name, python_version, test_set, tests, exit_code):
         "exit_code": exit_code,
     }
     print(f"MATRIX_RESULT {json.dumps(result, ensure_ascii=False)}", flush=True)
+    report_path = os.environ.get("CI_MATRIX_REPORT_PATH")
+    if report_path:
+        path = Path(report_path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("a", encoding="utf-8") as handle:
+            handle.write(f"{json.dumps(result, ensure_ascii=False)}\n")
 
 
 def _preflight_exit_code(result):
