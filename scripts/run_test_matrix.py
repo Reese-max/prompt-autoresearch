@@ -15,7 +15,13 @@ SUPPORTED_PLATFORMS = ("Linux", "macOS", "Windows")
 SUPPORTED_PYTHON_VERSIONS = ("3.10", "3.11", "3.12")
 M1_TESTS = ("runtime", "pytest --version", "scripts/preflight.py --json")
 PYTEST_SETS = (
-    ("M2", ("tests/test_cross_platform.py",)),
+    (
+        "M2",
+        (
+            "tests/test_cross_platform.py",
+            "tests/test_cross_platform_error_handling.py",
+        ),
+    ),
     (
         "M3",
         (
