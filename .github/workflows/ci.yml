@@ -241,3 +241,26 @@ jobs:
           path: |
             coverage.xml
             htmlcov/
+
+  # 合併必要檢查（stable check name）：
+  # - 供 branch protection / rulesets 設為 required status check
+  # - 任一 OS × Python 矩陣格失敗、取消或跳過時，本 job 失敗並阻擋合併
+  # - fail-fast: false 仍讓其餘格跑完；本 gate 以彙總結果判定
+  test-matrix-required:
+    name: test-matrix-required
+    if: always()
+    needs: [test]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require all OS × Python matrix jobs to pass
+        shell: bash
+        env:
+          MATRIX_RESULT: ${{ needs.test.result }}
+        run: |
+          set -euo pipefail
+          echo "test matrix aggregate result: ${MATRIX_RESULT}"
+          if [ "${MATRIX_RESULT}" != "success" ]; then
+            echo "::error::test-matrix-required failed (result=${MATRIX_RESULT}). Any OS or Python version combination failure blocks merge."
+            exit 1
+          fi
+          echo "All matrix combinations passed; merge gate open."
