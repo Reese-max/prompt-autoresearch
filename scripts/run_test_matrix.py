@@ -20,6 +20,7 @@ PYTEST_SETS = (
         (
             "tests/test_cross_platform.py",
             "tests/test_cross_platform_error_handling.py",
+            "tests/test_core_flow_e2e.py",
         ),
     ),
     (

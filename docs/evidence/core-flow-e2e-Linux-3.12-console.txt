@@ -1,0 +1,127 @@
+
+[95m??閰摯憿澈: /tmp/core-flow-e2e-atkipsh5/頛詨 鞈?/憿澈.jsonl (??1 憿?銝西??瑁?蝺? 1, prompt_hash=c01e2ce7e27e)[0m
+ [1/1] 憿?: 1 (獢?憿? -> 蝮賢?: 79 (?箇?: 55, 撠?: 15, 憸券: 9) | 蝻粹: F03
+
+[92m閰摯摰?嚗?: 0.00 蝘?(蝝?0.0 ??)??[0m
+
+[95m??閰摯憿澈: /tmp/core-flow-e2e-atkipsh5/頛詨 鞈?/憿澈.jsonl (??1 憿?銝西??瑁?蝺? 1, prompt_hash=c01e2ce7e27e)[0m
+ [1/1] 憿?: 1 (獢?憿? -> 蝮賢?: 79 (?箇?: 55, 撠?: 15, 憸券: 9) | 蝻粹: F03
+
+[92m閰摯摰?嚗?: 0.00 蝘?(蝝?0.0 ??)??[0m
+
+[92m[靽?] ???勗?撌脫??摮 runs/20260719_072952/ ??runs/latest/[0m
+CORE_FLOW_E2E_SUMMARY {"platform": "Linux", "python_version": "3.12.3", "comparable_digest": "1cb2551633b57a0440842185e5311842ff6ba4a1abeaa1591fd32d74092e84ab", "spec_ok": true, "spec_failures": [], "exit_code": 0, "evaluation_digest": "9947b3d8fbab4fcebfb974f8bd38425a6b68d871c2a0db335825b43aaf5b1baa", "average_score": 79.0, "gatekeeper_passed": true}
+{
+  "runtime": {
+    "platform": "Linux",
+    "system": "Linux",
+    "release": "5.15.167.4-microsoft-standard-WSL2",
+    "python_version": "3.12.3",
+    "python_minor": "3.12",
+    "sys_platform": "linux",
+    "executable": "/usr/bin/python3",
+    "hostname": "HPZBOOKG10",
+    "cwd": "/mnt/d/Users/Administrator/Desktop/autodev-ng/data/prompt-autoresearch/worktrees/f59a8744"
+  },
+  "comparable_digest": "1cb2551633b57a0440842185e5311842ff6ba4a1abeaa1591fd32d74092e84ab",
+  "spec_ok": true,
+  "spec_failures": [],
+  "comparable": {
+    "schema_version": 1,
+    "flow": "core_evaluation_e2e",
+    "expected": {
+      "prompt_hash": "c01e2ce7e27e3ac7a48ee6e651f4b3d83a9a4709f08dc327de6f79b8e099d78a",
+      "total_questions": 1,
+      "average_score": 79.0,
+      "word_count_pass_rate": 100.0,
+      "risk_perfect_rate": 0.0,
+      "error_count": 0,
+      "total_score": 79,
+      "failures": [
+        "F03"
+      ],
+      "char_count": 960,
+      "gatekeeper_passed": true,
+      "gatekeeper_char_count": 128
+    },
+    "gatekeeper": {
+      "valid_prompt": {
+        "passed": true,
+        "char_count": 128,
+        "violation_rules": [],
+        "reject_count": 0
+      },
+      "short_prompt": {
+        "passed": false,
+        "char_count": 1,
+        "violation_rules": [
+          "R01_LENGTH_TOO_SHORT",
+          "R03_NO_ANTI_QUESTION",
+          "R04_NO_ANTI_FABRICATION",
+          "R05_NO_EXPERT_ROLE",
+          "R06_NO_COMPARE_CRITERIA",
+          "R07_NO_LEGAL_DIFFERENTIATION",
+          "R08_NO_DIRECT_OUTPUT"
+        ],
+        "reject_count": 3
+      }
+    },
+    "evaluation": {
+      "summary": {
+        "prompt_file": "頛詨 鞈?/?內閰?md",
+        "question_file": "頛詨 鞈?/憿澈.jsonl",
+        "prompt_hash": "c01e2ce7e27e3ac7a48ee6e651f4b3d83a9a4709f08dc327de6f79b8e099d78a",
+        "total_questions": 1,
+        "average_score": 79.0,
+        "word_count_pass_rate": 100.0,
+        "risk_perfect_rate": 0.0,
+        "error_count": 0
+      },
+      "results": [
+        {
+          "id": 1,
+          "type": "獢?憿?,
+          "question": "隢牧???輯???閬辣??,
+          "answer": "蝚砌?銵葉?n蝚砌?銵?mixed English\n蝚砌?銵葉?n蝚砌?銵?mixed English\n蝚砌?銵葉?n蝚砌?銵?mixed English\n蝚砌?銵葉?n蝚砌?銵?mixed English\n蝚砌?銵葉?n蝚砌?銵?mixed English\n蝚砌?銵葉?n蝚砌?銵?mixed English\n蝚砌?銵葉?n蝚砌?銵?mixed English\n蝚砌?銵葉?n蝚砌?銵?mixed English\n蝚砌?銵葉?n蝚砌?銵?mixed English\n蝚砌?銵葉?n蝚砌?銵?mixed English\n蝚砌?銵葉?n蝚砌?銵?mixed English\n蝚砌?銵葉?n蝚砌?銵?mixed English\n蝚砌?銵葉?n蝚砌?銵?mixed English\n蝚砌?銵葉?n蝚砌?銵?mixed English\n蝚砌?銵葉?n蝚砌?銵?mixed English\n蝚砌?銵葉?n蝚砌?銵?mixed English\n蝚砌?銵葉?n蝚砌?銵?mixed English\n蝚砌?銵葉?n蝚砌?銵?mixed English\n蝚砌?銵葉?n蝚砌?銵?mixed English\n蝚砌?銵葉?n蝚砌?銵?mixed English\n蝚砌?銵葉?n蝚砌?銵?mixed English\n蝚砌?銵葉?n蝚砌?銵?mixed English\n蝚砌?銵葉?n蝚砌?銵?mixed English\n蝚砌?銵葉?n蝚砌?銵?mixed English\n蝚砌?銵葉?n蝚砌?銵?mixed English\n蝚砌?銵葉?n蝚砌?銵?mixed English\n蝚砌?銵葉?n蝚砌?銵?mixed English\n蝚砌?銵葉?n蝚砌?銵?mixed English\n蝚砌?銵葉?n蝚砌?銵?mixed English\n蝚砌?銵葉?n蝚砌?銵?mixed English\n蝚砌?銵葉?n蝚砌?銵?mixed English\n蝚砌?銵葉?n蝚砌?銵?mixed English\n蝚砌?銵葉?n蝚砌?銵?mixed English\n蝚砌?銵葉?n蝚砌?銵?mixed English\n蝚砌?銵葉?n蝚砌?銵?mixed English\n蝚砌?銵葉?n蝚砌?銵?mixed English\n蝚砌?銵葉?n蝚砌?銵?mixed English\n蝚砌?銵葉?n蝚砌?銵?mixed English\n蝚砌?銵葉?n蝚砌?銵?mixed English\n蝚砌?銵葉?n蝚砌?銵?mixed English\n",
+          "char_count": 960,
+          "prompt_hash": "c01e2ce7e27e3ac7a48ee6e651f4b3d83a9a4709f08dc327de6f79b8e099d78a",
+          "question_file": "頛詨 鞈?/憿澈.jsonl",
+          "general_score": 55,
+          "type_specific_score": 15,
+          "risk_score": 9,
+          "total_score": 79,
+          "failures": [
+            "F03"
+          ],
+          "critique": "隢?撘瑟????
+        }
+      ],
+      "repeat_identical": true,
+      "latest_symlink_ok": true,
+      "canonical_digest": "9947b3d8fbab4fcebfb974f8bd38425a6b68d871c2a0db335825b43aaf5b1baa",
+      "artifact_flags": {
+        "details.jsonl": {
+          "exists": true,
+          "has_bom": false,
+          "utf8_ok": true
+        },
+        "summary.json": {
+          "exists": true,
+          "has_bom": false,
+          "utf8_ok": true
+        },
+        "summary.md": {
+          "exists": true,
+          "has_bom": false,
+          "utf8_ok": true
+        },
+        "results.tsv": {
+          "exists": true,
+          "has_bom": false,
+          "contains_score_79": true
+        }
+      }
+    }
+  },
+  "exit_code": 0
+}
