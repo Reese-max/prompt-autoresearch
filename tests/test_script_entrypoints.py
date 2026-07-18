@@ -8,9 +8,12 @@ import os
 import runpy
 import subprocess
 import sys
+from types import SimpleNamespace
 import warnings
 
 from pathlib import Path
+
+import pytest
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
@@ -110,10 +113,41 @@ def _matrix_rows(output):
     ]
 
 
-def test_test_matrix_runs_every_set_and_reports_runtime(monkeypatch, capsys):
+@pytest.mark.parametrize(
+    ("system_name", "full_version", "major", "minor", "expected"),
+    [
+        ("Darwin", "3.10.14", 3, 10, ("macOS", "3.10.14", "3.10")),
+        ("Linux", "3.11.9", 3, 11, ("Linux", "3.11.9", "3.11")),
+        ("Windows", "3.12.4", 3, 12, ("Windows", "3.12.4", "3.12")),
+    ],
+)
+def test_test_matrix_runtime_normalizes_platform_and_version(
+    monkeypatch, system_name, full_version, major, minor, expected
+):
+    import scripts.run_test_matrix as matrix
+
+    monkeypatch.setattr(matrix.platform, "system", lambda: system_name)
+    monkeypatch.setattr(matrix.platform, "python_version", lambda: full_version)
+    monkeypatch.setattr(matrix.sys, "version_info", SimpleNamespace(major=major, minor=minor))
+
+    assert matrix._runtime() == expected
+
+
+@pytest.mark.parametrize(
+    ("runtime_platform", "runtime_minor"),
+    [
+        (platform_name, python_minor)
+        for platform_name in ("Linux", "macOS", "Windows")
+        for python_minor in ("3.10", "3.11", "3.12")
+    ],
+)
+def test_test_matrix_runs_every_supported_combination_and_reports_runtime(
+    monkeypatch, capsys, runtime_platform, runtime_minor
+):
     import scripts.run_test_matrix as matrix
 
     calls = []
+    full_version = f"{runtime_minor}.9"
     missing_key = {
         "errors": [{"name": "MINIMAX_API_KEY"}],
         "checks": [{"name": "Python version", "passed": True}],
@@ -125,21 +159,21 @@ def test_test_matrix_runs_every_set_and_reports_runtime(monkeypatch, capsys):
             return subprocess.CompletedProcess(command, 1, json.dumps(missing_key), "")
         return subprocess.CompletedProcess(command, 0, "", "")
 
-    monkeypatch.setattr(matrix, "_runtime", lambda: ("Windows", "3.11.9", "3.11"))
+    monkeypatch.setattr(matrix, "_runtime", lambda: (runtime_platform, full_version, runtime_minor))
     monkeypatch.setattr(matrix.subprocess, "run", fake_run)
 
-    assert matrix.main(["--platform", "Windows", "--python-version", "3.11"]) == 0
+    assert matrix.main(["--platform", runtime_platform, "--python-version", runtime_minor]) == 0
     rows = _matrix_rows(capsys.readouterr().out)
 
     assert [row["test_set"] for row in rows] == ["M1", "M2", "M3", "M4", "M5", "M6", "ALL"]
-    assert all(row["platform"] == "Windows" for row in rows)
-    assert all(row["python_version"] == "3.11.9" for row in rows)
+    assert all(row["platform"] == runtime_platform for row in rows)
+    assert all(row["python_version"] == full_version for row in rows)
     assert all(row["exit_code"] == 0 for row in rows)
     assert len(calls) == 7
     assert all(command[0] == sys.executable for command in calls)
 
 
-def test_test_matrix_rejects_runtime_mismatch(monkeypatch, capsys):
+def test_test_matrix_rejects_runtime_version_mismatch(monkeypatch, capsys):
     import scripts.run_test_matrix as matrix
 
     monkeypatch.setattr(matrix, "_runtime", lambda: ("Windows", "3.11.9", "3.11"))
@@ -149,9 +183,64 @@ def test_test_matrix_rejects_runtime_mismatch(monkeypatch, capsys):
         lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("不應執行測試")),
     )
 
-    assert matrix.main(["--platform", "Linux", "--python-version", "3.11"]) == 2
+    assert matrix.main(["--platform", "Windows", "--python-version", "3.12"]) == 2
     rows = _matrix_rows(capsys.readouterr().out)
     assert [(row["test_set"], row["exit_code"]) for row in rows] == [("M1", 2), ("ALL", 2)]
+
+
+def test_test_matrix_entrypoint_propagates_unsupported_runtime_combination():
+    import scripts.run_test_matrix as matrix
+
+    actual_platform, _, actual_minor = matrix._runtime()
+    requested_platform = next(name for name in matrix.SUPPORTED_PLATFORMS if name != actual_platform)
+    requested_minor = next(version for version in matrix.SUPPORTED_PYTHON_VERSIONS if version != actual_minor)
+
+    output = run_module_capture_output(
+        "scripts.run_test_matrix",
+        ["--platform", requested_platform, "--python-version", requested_minor],
+    )
+
+    assert output["exit_code"] == 2
+    assert [(row["test_set"], row["exit_code"]) for row in _matrix_rows(output["out"])] == [
+        ("M1", 2),
+        ("ALL", 2),
+    ]
+    assert "執行環境不符" in output["err"]
+
+
+@pytest.mark.parametrize(("stdout", "returncode"), [(None, 7), ("not-json", 8)])
+def test_test_matrix_preflight_invalid_output_propagates_failure(stdout, returncode):
+    import scripts.run_test_matrix as matrix
+
+    result = subprocess.CompletedProcess(["preflight"], returncode, stdout, "")
+
+    assert matrix._preflight_exit_code(result) == returncode
+
+
+@pytest.mark.parametrize(
+    ("stdout", "stderr", "expected_stdout", "expected_stderr"),
+    [
+        ("", "preflight warning", "", "preflight warning\n"),
+        ("{}\n", "preflight warning\n", "{}\n", "preflight warning\n"),
+    ],
+)
+def test_test_matrix_m1_forwards_preflight_output_once(
+    monkeypatch, capsys, stdout, stderr, expected_stdout, expected_stderr
+):
+    import scripts.run_test_matrix as matrix
+
+    results = iter(
+        [
+            subprocess.CompletedProcess(["pytest"], 0, "", ""),
+            subprocess.CompletedProcess(["preflight"], 0, stdout, stderr),
+        ]
+    )
+    monkeypatch.setattr(matrix.subprocess, "run", lambda *args, **kwargs: next(results))
+
+    assert matrix._run_m1() == 0
+    captured = capsys.readouterr()
+    assert captured.out == expected_stdout
+    assert captured.err == expected_stderr
 
 
 def test_test_matrix_does_not_hide_other_preflight_errors(monkeypatch, capsys):
