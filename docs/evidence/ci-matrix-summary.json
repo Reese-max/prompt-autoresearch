@@ -1,0 +1,105 @@
+{
+  "recorded_at": "2026-07-19",
+  "ci_workflow": ".github/workflows/ci.yml",
+  "ci_matrix_coverage": [
+    {
+      "id": "L310",
+      "platform": "Linux",
+      "os": "ubuntu-latest",
+      "python": "3.10"
+    },
+    {
+      "id": "L311",
+      "platform": "Linux",
+      "os": "ubuntu-latest",
+      "python": "3.11"
+    },
+    {
+      "id": "L312",
+      "platform": "Linux",
+      "os": "ubuntu-latest",
+      "python": "3.12"
+    },
+    {
+      "id": "M310",
+      "platform": "macOS",
+      "os": "macos-latest",
+      "python": "3.10"
+    },
+    {
+      "id": "M311",
+      "platform": "macOS",
+      "os": "macos-latest",
+      "python": "3.11"
+    },
+    {
+      "id": "M312",
+      "platform": "macOS",
+      "os": "macos-latest",
+      "python": "3.12"
+    },
+    {
+      "id": "W310",
+      "platform": "Windows",
+      "os": "windows-latest",
+      "python": "3.10"
+    },
+    {
+      "id": "W311",
+      "platform": "Windows",
+      "os": "windows-latest",
+      "python": "3.11"
+    },
+    {
+      "id": "W312",
+      "platform": "Windows",
+      "os": "windows-latest",
+      "python": "3.12"
+    }
+  ],
+  "local_verified_runs": [
+    {
+      "platform": "Windows",
+      "matrix_id": "W311",
+      "command": "python scripts/run_test_matrix.py --platform Windows --python-version 3.11",
+      "exit_code": 0,
+      "status": "PASS",
+      "test_results": {
+        "M1": 0,
+        "M2": 0,
+        "M3": 0,
+        "M4": 0,
+        "M5": 0,
+        "M6": 0,
+        "ALL": 0,
+        "m6_summary": "632 passed, 2 skipped"
+      },
+      "evidence": {
+        "jsonl": "docs/evidence/matrix-Windows-3.11-result.jsonl",
+        "console": "docs/evidence/matrix-Windows-3.11-console.txt"
+      }
+    },
+    {
+      "platform": "Linux",
+      "matrix_id": "L312",
+      "command": "python3 scripts/run_test_matrix.py --platform Linux --python-version 3.12",
+      "exit_code": 1,
+      "status": "FAIL_M1_PREFLIGHT_ONLY",
+      "test_results": {
+        "M1": 1,
+        "M2": 0,
+        "M3": 0,
+        "M4": 0,
+        "M5": 0,
+        "M6": 0,
+        "ALL": 1,
+        "m6_summary": "634 passed",
+        "note": "M1 preflight path issue on WSL; pytest M2-M6 all pass"
+      },
+      "evidence": {
+        "jsonl": "docs/evidence/matrix-Linux-3.12-result.jsonl",
+        "console": "docs/evidence/matrix-Linux-3.12-console.txt"
+      }
+    }
+  ]
+}

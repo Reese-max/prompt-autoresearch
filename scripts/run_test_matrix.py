@@ -70,7 +70,7 @@ def _runtime():
     )
 
 
-def _emit(platform_name, python_version, test_set, tests, exit_code):
+def _emit(platform_name, python_version, test_set, tests, exit_code, command=None):
     matrix_id = os.environ.get("CI_MATRIX_ID", "local")
     result = {
         "matrix_id": matrix_id,
@@ -79,6 +79,12 @@ def _emit(platform_name, python_version, test_set, tests, exit_code):
         "test_set": test_set,
         "tests": list(tests),
         "exit_code": exit_code,
+        # 契約：平台名稱、執行指令、退出碼、測試結果（test_set/tests）
+        "command": command
+        or os.environ.get(
+            "CI_MATRIX_COMMAND",
+            f"python scripts/run_test_matrix.py --platform {platform_name}",
+        ),
     }
     print(f"MATRIX_RESULT {json.dumps(result, ensure_ascii=False)}", flush=True)
     report_path = os.environ.get("CI_MATRIX_REPORT_PATH")
@@ -153,9 +159,15 @@ def main(argv=None):
     parser.add_argument("--python-version", required=True, choices=SUPPORTED_PYTHON_VERSIONS)
     args = parser.parse_args(argv)
 
+    command = (
+        f"python scripts/run_test_matrix.py --platform {args.platform} "
+        f"--python-version {args.python_version}"
+    )
+    os.environ["CI_MATRIX_COMMAND"] = command
+
     if args.platform != actual_platform or args.python_version != actual_minor:
-        _emit(actual_platform, actual_version, "M1", M1_TESTS, 2)
-        _emit(actual_platform, actual_version, "ALL", ("M1",), 2)
+        _emit(actual_platform, actual_version, "M1", M1_TESTS, 2, command=command)
+        _emit(actual_platform, actual_version, "ALL", ("M1",), 2, command=command)
         print(
             f"執行環境不符：指定 {args.platform}/Python {args.python_version}，"
             f"實際 {actual_platform}/Python {actual_version}",
@@ -166,15 +178,29 @@ def main(argv=None):
     results = []
     m1_code = _run_m1()
     results.append(m1_code)
-    _emit(actual_platform, actual_version, "M1", M1_TESTS, m1_code)
+    _emit(actual_platform, actual_version, "M1", M1_TESTS, m1_code, command=command)
 
     for test_set, tests in PYTEST_SETS:
         code = _run_pytest(test_set, tests)
         results.append(code)
-        _emit(actual_platform, actual_version, test_set, tests or ("tests/",), code)
+        _emit(
+            actual_platform,
+            actual_version,
+            test_set,
+            tests or ("tests/",),
+            code,
+            command=command,
+        )
 
     overall = next((code for code in results if code), 0)
-    _emit(actual_platform, actual_version, "ALL", ("M1", *(name for name, _ in PYTEST_SETS)), overall)
+    _emit(
+        actual_platform,
+        actual_version,
+        "ALL",
+        ("M1", *(name for name, _ in PYTEST_SETS)),
+        overall,
+        command=command,
+    )
     return overall
 
 
