@@ -11,7 +11,7 @@ import os
 import platform
 import re
 import sys
-from pathlib import Path
+from pathlib import Path, PurePosixPath, PureWindowsPath
 
 import pytest
 
@@ -31,6 +31,10 @@ UNICODE_PROMPT = (
 UNICODE_PAYLOAD = {"key": "中文值", "nested": {"路徑": "a/b/c", "數字": 42}}
 
 PLATFORM = platform.system()  # "Windows", "Linux", "Darwin"
+PLATFORM_PATH_TYPES = (
+    pytest.param(PurePosixPath, id="posix"),
+    pytest.param(PureWindowsPath, id="windows"),
+)
 
 
 # ---------------------------------------------------------------------------
@@ -103,6 +107,47 @@ class TestFileIORoundTrip:
         # 應可被 UTF-8 解碼
         decoded = raw.decode("utf-8")
         assert json.loads(decoded) == UNICODE_PAYLOAD
+
+    @pytest.mark.parametrize("path_type", PLATFORM_PATH_TYPES)
+    def test_platform_path_forms_have_same_unicode_round_trip(self, tmp_path, path_type):
+        relative = path_type("資料") / "nested" / "output.txt"
+        path = tmp_path.joinpath(*relative.parts)
+        content = "第一行中文\n第二行 mixed English 混合"
+
+        io.write_file(str(path), content)
+
+        assert io.load_file(str(path)) == content
+
+    @pytest.mark.parametrize(
+        ("path_type", "newline"),
+        [
+            pytest.param(PurePosixPath, "\n", id="posix-lf"),
+            pytest.param(PureWindowsPath, "\r\n", id="windows-crlf"),
+        ],
+    )
+    def test_platform_path_newline_and_utf8_have_same_output(
+        self, tmp_path, path_type, newline
+    ):
+        relative = path_type("資料") / "input.txt"
+        path = tmp_path.joinpath(*relative.parts)
+        io.ensure_dir(str(path.parent))
+        path.write_bytes(f"第一行{newline}第二行".encode("utf-8"))
+
+        result = io.load_file(str(path))
+
+        assert type(result) is str
+        assert result == "第一行\n第二行"
+
+    @pytest.mark.parametrize("path_type", PLATFORM_PATH_TYPES)
+    def test_platform_path_write_error_has_same_exception_type(self, tmp_path, path_type):
+        relative = path_type("資料") / "output.txt"
+        parent_file = tmp_path / relative.parts[0]
+        parent_file.write_text("not a directory", encoding="utf-8")
+
+        with pytest.raises(FileExistsError) as exc_info:
+            io.write_file(str(tmp_path.joinpath(*relative.parts)), "content")
+
+        assert type(exc_info.value) is FileExistsError
 
 
 # ---------------------------------------------------------------------------
