@@ -1,5 +1,6 @@
 import subprocess
 from pathlib import Path, PurePosixPath, PureWindowsPath
+import pytest
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -93,3 +94,33 @@ def test_diff_paths_handles_platform_paths_unicode_and_line_endings(monkeypatch)
             },
         )
     ]
+
+
+def test_simulate_linux_macos_git_failure_and_success():
+    """精簡 pytest 子集：模擬 Linux/macOS 環境下 git 失敗/成功輸出，
+    確認 RuntimeError 與成功路徑可穩定重現並修正。
+    這是任務要求的最小新增，僅新增此測試，不影響其他行為。
+    """
+    import subprocess
+    from unittest.mock import patch
+
+    # 模擬 Linux/macOS 失敗輸出 (非0 退出碼)
+    with patch("subprocess.run") as mock_run:
+        mock_run.return_value = subprocess.CompletedProcess(
+            args=["git", "status", "--porcelain", "-uno"],
+            returncode=128,
+            stdout="",
+            stderr="fatal: not a git repository",
+        )
+        with pytest.raises(RuntimeError, match="無法讀取 git 狀態"):
+            _diff_paths()
+
+    # 模擬 Linux/macOS 成功輸出 (含 POSIX 路徑)
+    with patch("subprocess.run") as mock_run:
+        mock_run.return_value = subprocess.CompletedProcess(
+            args=["git", "status", "--porcelain", "-uno"],
+            returncode=0,
+            stdout=" M lib/資料.py\n?? tests/讀取.txt\n",
+            stderr="",
+        )
+        assert _diff_paths() == ["lib/資料.py", "tests/讀取.txt"]
