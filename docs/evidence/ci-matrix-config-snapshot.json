@@ -1,0 +1,29 @@
+{
+  "source": ".github/workflows/ci.yml",
+  "workflow_name": "CI",
+  "captured_at": "2026-07-19",
+  "note": "此檔為 CI 矩陣設定快照，證明流水線會為每個 OS×Python 組合開獨立 job；設定本身不是執行成功證明。",
+  "matrix_jobs": [
+    {"id": "L310", "runs_on": "ubuntu-latest", "platform": "Linux", "python_version": "3.10", "coverage_gate": false},
+    {"id": "L311", "runs_on": "ubuntu-latest", "platform": "Linux", "python_version": "3.11", "coverage_gate": true},
+    {"id": "L312", "runs_on": "ubuntu-latest", "platform": "Linux", "python_version": "3.12", "coverage_gate": false},
+    {"id": "M310", "runs_on": "macos-latest", "platform": "macOS", "python_version": "3.10", "coverage_gate": false},
+    {"id": "M311", "runs_on": "macos-latest", "platform": "macOS", "python_version": "3.11", "coverage_gate": false},
+    {"id": "M312", "runs_on": "macos-latest", "platform": "macOS", "python_version": "3.12", "coverage_gate": false},
+    {"id": "W310", "runs_on": "windows-latest", "platform": "Windows", "python_version": "3.10", "coverage_gate": false},
+    {"id": "W311", "runs_on": "windows-latest", "platform": "Windows", "python_version": "3.11", "coverage_gate": false},
+    {"id": "W312", "runs_on": "windows-latest", "platform": "Windows", "python_version": "3.12", "coverage_gate": false}
+  ],
+  "per_job_evidence_contract": {
+    "log_markers": ["MATRIX_ENV", "MATRIX_TARGET_RESULT", "MATRIX_TARGET_FAIL", "MATRIX_RESULT"],
+    "artifact_name_template": "ci-matrix-evidence-${{ matrix.id }}",
+    "report_file_template": "matrix-${{ matrix.id }}.jsonl",
+    "test_command_template": "python scripts/run_test_matrix.py --platform <platform> --python-version <python_version>",
+    "required_gate_job": "test-matrix-required"
+  },
+  "why_single_exit_or_coverage_is_insufficient": [
+    "單一本機 exit=0 只證明一個 (OS, Python) 組合",
+    "coverage.xml / htmlcov 只反映產生該報告的那一個執行環境",
+    "必須以 9 個 matrix job 各自的 MATRIX_TARGET_RESULT（或 artifact jsonl）對齊需求，才算流水線全量證明"
+  ]
+}
