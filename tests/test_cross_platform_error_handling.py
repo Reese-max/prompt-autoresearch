@@ -15,6 +15,7 @@
 """
 from __future__ import annotations
 
+import errno
 import json
 import os
 import platform
@@ -140,6 +141,15 @@ class TestInvalidInputErrors:
         assert code == 1
         assert "用法:" in stdout
 
+    def test_test_matrix_invalid_platform_exits_two_with_argparse_message(self, capsys):
+        import scripts.run_test_matrix as matrix
+
+        with pytest.raises(SystemExit) as excinfo:
+            matrix.main(["--platform", "Plan9", "--python-version", "3.11"])
+
+        assert excinfo.value.code == 2
+        assert "invalid choice: 'Plan9'" in capsys.readouterr().err
+
     def test_invalid_env_config_raises_value_error_not_silent(self, monkeypatch):
         """格式異常環境變數必須被驗證擋下，不可默默接受。"""
         config._CONFIG = None
@@ -212,6 +222,19 @@ class TestMissingFileErrors:
         bad = tmp_path / "bad.json"
         bad.write_text("{not-json", encoding="utf-8")
         assert io.load_json(str(bad), default={"fallback": True}) == {"fallback": True}
+
+    def test_write_file_parent_file_is_path_error(self, tmp_path):
+        parent = tmp_path / "既存檔案"
+        parent.write_text("not a directory", encoding="utf-8")
+        target = parent / "output.txt"
+
+        with pytest.raises(FileExistsError) as excinfo:
+            io.write_file(str(target), "content")
+
+        error = excinfo.value
+        assert type(error) is FileExistsError
+        assert error.errno == errno.EEXIST
+        assert parent.name in str(error)
 
 
 # ---------------------------------------------------------------------------
