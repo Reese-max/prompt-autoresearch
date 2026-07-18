@@ -9,6 +9,18 @@ import lib.api as api
 import lib.config as config
 
 
+CONFIG_ENV_KEYS = (
+    "MINIMAX_API_KEY",
+    "AUTORESEARCH_API_URL",
+    "AUTORESEARCH_API_MODEL",
+    "AUTORESEARCH_API_TIMEOUT",
+    "AUTORESEARCH_SMOKE_PARALLEL",
+    "AUTORESEARCH_DEV_PARALLEL",
+    "AUTORESEARCH_HOLDOUT_PARALLEL",
+    "AUTORESEARCH_MAX_CANDIDATE_LENGTH",
+)
+
+
 class FakeHTTPResponse:
     def __init__(self, body):
         self._body = body
@@ -27,6 +39,8 @@ class FakeHTTPResponse:
 def api_consumer(monkeypatch, tmp_path):
     monkeypatch.setattr(config, "_CONFIG", None)
     monkeypatch.setattr(config, "_CONFIG_PATH", str(tmp_path / "config.json"))
+    for key in CONFIG_ENV_KEYS:
+        monkeypatch.delenv(key, raising=False)
     monkeypatch.setenv("MINIMAX_API_KEY", "test-key")
     monkeypatch.setattr(api, "_semaphore", None)
     monkeypatch.setattr(api, "_last_call_ts", 0.0)

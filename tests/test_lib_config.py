@@ -80,7 +80,7 @@ def test_load_config_file_merge_overrides_defaults(tmp_path):
     assert cfg["extra"]["enabled"] is True
 
 
-def test_environment_variables_override_file_and_types(tmp_path):
+def test_environment_variables_override_file_and_types(tmp_path, monkeypatch):
     config_file = tmp_path / "config.json"
     config_file.write_text(
         json.dumps(
@@ -105,7 +105,7 @@ def test_environment_variables_override_file_and_types(tmp_path):
         "AUTORESEARCH_SMOKE_PARALLEL": "18",
         "AUTORESEARCH_MAX_CANDIDATE_LENGTH": "777.7",
     }.items():
-        config.os.environ[key] = value
+        monkeypatch.setenv(key, value)
 
     cfg = config.get_all()
 
@@ -161,7 +161,7 @@ def test_get_section_and_cache_hit_without_reload(tmp_path):
     assert first["parallel"]["smoke"] == 3
 
 
-def test_reload_after_cache_cleared_and_error_branch_for_invalid_json(tmp_path):
+def test_reload_after_cache_cleared_and_error_branch_for_invalid_json(tmp_path, monkeypatch):
     config_file = tmp_path / "config.json"
     config_file.write_text(
         json.dumps(
@@ -183,7 +183,7 @@ def test_reload_after_cache_cleared_and_error_branch_for_invalid_json(tmp_path):
     # 先清掉快取，且設定檔改為不合法 JSON，確認重載走 fallback。
     config_file.write_text("{invalid-json", encoding="utf-8")
     config._CONFIG = None
-    config.os.environ["AUTORESEARCH_DEV_PARALLEL"] = "33"
+    monkeypatch.setenv("AUTORESEARCH_DEV_PARALLEL", "33")
 
     fallback = config.get_all()
     assert fallback["parallel"]["dev"] == 33

@@ -30,20 +30,20 @@ def _clean_config_state(tmp_path, monkeypatch):
     monkeypatch.setattr(config, "_CONFIG", None)
 
 
-def test_failed_config_load_cannot_stale_cache_when_env_fixed_later():
+def test_failed_config_load_cannot_stale_cache_when_env_fixed_later(monkeypatch):
     """驗證載入失敗後，修正環境變數時可立即重載，不會卡在舊快取。"""
     env_key = "AUTORESEARCH_API_TIMEOUT"
-    config.os.environ[env_key] = "bad-number"
+    monkeypatch.setenv(env_key, "bad-number")
 
     with pytest.raises(ValueError, match=env_key):
         config.get_all()
 
-    config.os.environ[env_key] = "75"
+    monkeypatch.setenv(env_key, "75")
     cfg = config.get_all()
     assert cfg["api"]["timeout"] == 75
 
 
-def test_failed_config_load_with_valid_file_then_invalid_env_then_fixed_env_uses_file_and_env():
+def test_failed_config_load_with_valid_file_then_invalid_env_then_fixed_env_uses_file_and_env(monkeypatch):
     """失敗時回補 `config.json` 有效值、再修正 env，最後應能重讀並套用 env。"""
     config_file = Path(config._CONFIG_PATH)
     config_file.write_text(
@@ -52,9 +52,9 @@ def test_failed_config_load_with_valid_file_then_invalid_env_then_fixed_env_uses
     )
 
     with pytest.raises(ValueError):
-        config.os.environ["AUTORESEARCH_API_TIMEOUT"] = "not-a-number"
+        monkeypatch.setenv("AUTORESEARCH_API_TIMEOUT", "not-a-number")
         config.get_all()
 
-    config.os.environ["AUTORESEARCH_API_TIMEOUT"] = "99"
+    monkeypatch.setenv("AUTORESEARCH_API_TIMEOUT", "99")
     cfg = config.get_all()
     assert cfg["api"]["timeout"] == 99
