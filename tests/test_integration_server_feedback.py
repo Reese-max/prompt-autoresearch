@@ -142,6 +142,59 @@ def test_malformed_feedback_row_maps_to_500(env):
     assert data["error"].startswith("分析失敗")
 
 
+@pytest.mark.parametrize(
+    ("path", "failed_step", "error", "fallback"),
+    [
+        (
+            "/api/feedback/summary",
+            "load_feedback",
+            OSError("回饋讀取失敗"),
+            {"message": "回饋分析模組不可用", "total_feedback": 0},
+        ),
+        (
+            "/api/feedback/weak-areas",
+            "analyze_feedback_by_hash",
+            ValueError("弱點分析失敗"),
+            {"weak_dimensions": [], "weak_types": []},
+        ),
+        (
+            "/api/feedback/hints",
+            "get_weak_areas",
+            RuntimeError("建議產生失敗"),
+            {"hints": []},
+        ),
+    ],
+    ids=["summary-read", "weak-areas-analysis", "hints-generation"],
+)
+def test_feedback_core_failures_reach_http_error_or_endpoint_fallback(
+    env, monkeypatch, path, failed_step, error, fallback
+):
+    """真實回饋鏈任一核心步驟失敗時，HTTP 層必須回傳完整契約。"""
+    calls = []
+
+    def fail(*args, **kwargs):
+        calls.append((args, kwargs))
+        raise error
+
+    monkeypatch.setattr(feedback, failed_step, fail)
+
+    status, headers, payload = get_json(path)
+
+    assert status == 500
+    assert headers["content-type"] == "application/json; charset=utf-8"
+    assert payload == {"error": f"分析失敗: {error}"}
+    assert calls == [((), {})]
+    assert not (env / "feedback.jsonl").exists()
+
+    monkeypatch.setattr(server, "_feedback_module", {})
+    fallback_status, fallback_headers, fallback_payload = get_json(path)
+
+    assert fallback_status == 200
+    assert fallback_headers["content-type"] == "application/json; charset=utf-8"
+    assert fallback_payload == fallback
+    assert calls == [((), {})]
+
+
 # --- 4. server 寫入 ↔ continuous_optimizer 讀取（共享儲存契約） ---
 
 def test_server_feedback_visible_to_optimizer_threshold(env):
