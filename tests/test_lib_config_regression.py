@@ -149,6 +149,38 @@ def test_invalid_default_max_candidate_length_zero_raises(monkeypatch):
         config.get_all()
 
 
+# ── 缺失環境變數回退預設值路徑：monkeypatch _DEFAULTS 為非法值後呼叫 get()，驗證同一套合法性檢查仍生效 ──
+
+def test_get_with_invalid_default_api_timeout_zero_raises(monkeypatch):
+    """monkeypatch _DEFAULTS 設 api.timeout=0，缺環境變數覆蓋時呼叫 get() 必須被驗證攔截。"""
+    modified = copy.deepcopy(config._DEFAULTS)
+    modified["api"]["timeout"] = 0
+    monkeypatch.setattr(config, "_DEFAULTS", modified)
+
+    with pytest.raises(ValueError, match="api.timeout"):
+        config.get("api", "timeout")
+
+
+def test_get_with_invalid_default_parallel_smoke_negative_raises(monkeypatch):
+    """monkeypatch _DEFAULTS 設 parallel.smoke=-1，缺環境變數覆蓋時呼叫 get() 必須被驗證攔截。"""
+    modified = copy.deepcopy(config._DEFAULTS)
+    modified["parallel"]["smoke"] = -1
+    monkeypatch.setattr(config, "_DEFAULTS", modified)
+
+    with pytest.raises(ValueError, match="parallel.smoke"):
+        config.get("parallel", "smoke")
+
+
+def test_get_with_invalid_default_max_candidate_length_zero_raises(monkeypatch):
+    """monkeypatch _DEFAULTS 設 thresholds.max_candidate_length=0，缺環境變數覆蓋時呼叫 get() 必須被驗證攔截。"""
+    modified = copy.deepcopy(config._DEFAULTS)
+    modified["thresholds"]["max_candidate_length"] = 0
+    monkeypatch.setattr(config, "_DEFAULTS", modified)
+
+    with pytest.raises(ValueError, match="thresholds.max_candidate_length"):
+        config.get("thresholds", "max_candidate_length")
+
+
 # ── L166 路徑覆蓋：_STRING_SCHEMA 值為非字串型別時必須拒絕 ──────────────
 
 
