@@ -47,7 +47,37 @@ python -m pytest tests/ -q --no-cov -rs
 
 目前僅剩平台條件 skip（Windows `chmod`／非 Windows `GIT_DIR`），與設定解析無關。
 
+## 本次無篩選重跑（2026-07-19）
+
+受影響 config 子集以相同命令連續執行兩次，未使用 `-k`、`--deselect` 或其他篩選：
+
+```text
+python -m pytest tests/test_lib_config.py tests/test_lib_config_regression.py tests/test_lib_config_cache_stability.py tests/test_config_semantic.py tests/test_config_special_branch.py tests/test_config_mixed_parameterized.py tests/test_config_integration.py -q --no-cov -rs
+```
+
+兩次結果均為：
+
+```text
+278 passed
+```
+
+因此 config 測試中的原排除案例已可直接執行，且不依賴 skip／deselect。
+
+全量驗證同樣未使用 `--deselect`：
+
+```text
+python -m pytest tests/ -q --no-cov -rs
+837 passed, 2 skipped in 30.02s
+```
+
+本次保留的 2 個 skip 及適用範圍如下，均不經過 `lib.config.get()`／`validate_config()`：
+
+| 測試 | 可驗證排除依據 | 適用範圍 |
+|---|---|---|
+| `tests/test_cross_platform_error_handling.py::TestPermissionErrors::test_write_into_readonly_directory_raises_oserror` | Windows 對目錄 `chmod` 的唯讀語意與 POSIX 不一致；同檔唯讀案例仍覆蓋可攜的 `OSError` 契約 | 僅 Windows 目錄權限行為 |
+| `tests/test_product_diff_audit.py::test_git_status_kwargs_sets_env_for_windows_gitdir` | 案例只驗證非 Windows 程序啟動時的 `GIT_DIR`／`GIT_WORK_TREE` 注入 | 僅非 Windows |
+
 ## 最小改動說明
 
-- **程式／測試**：不需修改。清單內無可移除的 config 相關 skip，且負面案例已具備明確 `ValueError` 斷言。
+- **程式／測試**：不需修改。config 子集已連續兩次無篩選通過；清單內無可移除的 config 相關 skip，且負面案例已具備明確 `ValueError` 斷言。
 - **本檔**：記錄對清單的篩選結果與驗收輸出，滿足「調查類必須落檔 commit」要求。
