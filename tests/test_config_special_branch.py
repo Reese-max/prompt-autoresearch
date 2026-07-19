@@ -90,19 +90,20 @@ def test_zero_or_negative_env_var_raises_value_error(monkeypatch):
 
 
 @pytest.mark.parametrize(
-    ("env_key", "value"),
+    ("env_key", "key", "value"),
     [
-        pytest.param("AUTORESEARCH_API_URL", "", id="url-empty"),
-        pytest.param("AUTORESEARCH_API_URL", "   ", id="url-whitespace"),
-        pytest.param("AUTORESEARCH_API_MODEL", "", id="model-empty"),
-        pytest.param("AUTORESEARCH_API_MODEL", "   ", id="model-whitespace"),
+        pytest.param("AUTORESEARCH_API_URL", "url", "", id="url-empty"),
+        pytest.param("AUTORESEARCH_API_URL", "url", "   ", id="url-whitespace"),
+        pytest.param("AUTORESEARCH_API_MODEL", "model", "", id="model-empty"),
+        pytest.param("AUTORESEARCH_API_MODEL", "model", "   ", id="model-whitespace"),
     ],
 )
-def test_blank_api_string_env_vars_raise_value_error(monkeypatch, env_key, value):
+def test_blank_api_string_env_vars_raise_value_error(monkeypatch, env_key, key, value):
     """C13: API URL／MODEL 為空字串或純空白 → ValueError。"""
     monkeypatch.setenv(env_key, value)
+    config._CONFIG = None
     with pytest.raises(ValueError) as exc:
-        config.get_all()
+        config.get("api", key)
     assert env_key in str(exc.value)
     assert "不可為空字串" in str(exc.value)
 
@@ -113,14 +114,31 @@ def test_blank_api_string_env_vars_raise_value_error(monkeypatch, env_key, value
         pytest.param("ftp://example.com", id="ftp"),
         pytest.param("example.com/api", id="missing-protocol"),
         pytest.param("mailto:user@example.com", id="non-http-scheme"),
+        pytest.param("http://", id="http-missing-host"),
+        pytest.param("https://", id="https-missing-host"),
     ],
 )
 def test_invalid_api_url_format_env_var_raises_value_error(monkeypatch, bad_url):
-    """C14: URL 格式非法（非 http／https）→ ValueError。"""
+    """C14: 非 HTTP(S) 或缺少主機的 URL → ValueError。"""
     monkeypatch.setenv("AUTORESEARCH_API_URL", bad_url)
+    config._CONFIG = None
     with pytest.raises(ValueError) as exc:
-        config.get_all()
+        config.get("api", "url")
     assert "必須為有效的 http:// 或 https:// URL" in str(exc.value)
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        pytest.param("http://example.com/v1", id="http"),
+        pytest.param("https://example.com/v1", id="https"),
+    ],
+)
+def test_valid_http_api_url_env_var_is_accepted(monkeypatch, url):
+    """合法 HTTP(S) URL 可透過 get() 讀取。"""
+    monkeypatch.setenv("AUTORESEARCH_API_URL", url)
+    config._CONFIG = None
+    assert config.get("api", "url") == url
 
 
 def test_config_json_wrong_type_for_numeric_override_validated(tmp_path, monkeypatch):

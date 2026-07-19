@@ -12,6 +12,7 @@ import copy
 import json
 import math
 import os
+from urllib.parse import urlparse
 
 _CONFIG = None
 _CONFIG_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "config.json")
@@ -176,7 +177,11 @@ def validate_config(cfg):
                 f"設定值 {dotted_key} 不可為空字串或純空白"
             )
         if "url_prefixes" in rules:
-            if not any(value.startswith(p) for p in rules["url_prefixes"]):
+            try:
+                hostname = urlparse(value).hostname
+            except ValueError:
+                hostname = None
+            if not any(value.startswith(p) for p in rules["url_prefixes"]) or not hostname:
                 raise ValueError(
                     f"設定值 {dotted_key}={value!r} 必須為有效的 http:// 或 https:// URL"
                 )
