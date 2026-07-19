@@ -423,10 +423,7 @@ def _cleanup_old_archives():
     )
     while len(archives) > max_versions:
         old = archives.pop(0)
-        try:
-            os.remove(os.path.join(ARCHIVE_DIR, old))
-        except OSError:
-            pass
+        os.remove(os.path.join(ARCHIVE_DIR, old))
 
 def run_opt_pass(smoke_parallel=None, dev_parallel=None, holdout_parallel=None, force_direction=None, avoid_failures=None):
     smoke_parallel = smoke_parallel or int_env("AUTORESEARCH_SMOKE_PARALLEL", DEFAULT_SMOKE_PARALLEL)
