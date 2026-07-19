@@ -38,6 +38,10 @@ import lib.io as io
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 PLATFORM = platform.system()  # Windows / Linux / Darwin
+IS_ROOT = False
+if hasattr(os, "getuid"):
+    IS_ROOT = (os.getuid() == 0)
+
 
 
 # ---------------------------------------------------------------------------
@@ -244,6 +248,8 @@ class TestPermissionErrors:
     """權限不足時應拋出 OSError 子類（PermissionError 或 Windows 對等）。"""
 
     def test_write_to_readonly_file_raises_oserror(self, tmp_path):
+        if IS_ROOT:
+            pytest.skip("Running as root (uid 0) bypasses permission checks")
         path = tmp_path / "readonly.txt"
         path.write_text("original", encoding="utf-8")
         restore, mode = _make_unreadable(path)
@@ -270,6 +276,8 @@ class TestPermissionErrors:
             restore()
 
     def test_write_into_readonly_directory_raises_oserror(self, tmp_path):
+        if IS_ROOT:
+            pytest.skip("Running as root (uid 0) bypasses permission checks")
         if PLATFORM == "Windows":
             pytest.skip("Windows 對目錄 chmod 行為不一致，改由唯讀檔案例覆蓋")
 
@@ -287,6 +295,8 @@ class TestPermissionErrors:
 
     def test_permission_error_type_is_stable_across_path_forms(self, tmp_path):
         """路徑含空白／非 ASCII 時，權限錯誤型別仍應為 OSError 子類。"""
+        if IS_ROOT:
+            pytest.skip("Running as root (uid 0) bypasses permission checks")
         path = tmp_path / "權限 目錄" / "locked file.txt"
         path.parent.mkdir(parents=True)
         path.write_text("data", encoding="utf-8")
@@ -452,17 +462,18 @@ class TestErrorContractSummary:
         assert code == 1 and "找不到檔案" in stdout
 
         # 權限不足
-        path = tmp_path / "ro.txt"
-        path.write_text("x", encoding="utf-8")
-        restore, mode = _make_unreadable(path)
-        try:
-            with pytest.raises(OSError):
-                if mode == "write":
-                    io.write_file(str(path), "y")
-                else:
-                    io.load_file(str(path))
-        finally:
-            restore()
+        if not IS_ROOT:
+            path = tmp_path / "ro.txt"
+            path.write_text("x", encoding="utf-8")
+            restore, mode = _make_unreadable(path)
+            try:
+                with pytest.raises(OSError):
+                    if mode == "write":
+                        io.write_file(str(path), "y")
+                    else:
+                        io.load_file(str(path))
+            finally:
+                restore()
 
         # 外部程序
         import scripts.run_test_matrix as matrix
