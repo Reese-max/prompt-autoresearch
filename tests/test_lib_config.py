@@ -853,34 +853,52 @@ def test_config_json_invalid_numeric_rejected(field, template, val_name, val, tm
     config._CONFIG = None
 
 
-def test_validate_config_direct_nan_inf_rejected():
-    """直接呼叫 validate_config 傳入 nan/inf/-inf 必須被拒絕（覆蓋無 env var 的欄位）。"""
-    import copy
-    import math
-    for field, template in _POSITIVE_FIELDS_NO_ENV:
-        for val_name, val in [("nan", float("nan")), ("inf", float("inf")), ("-inf", float("-inf"))]:
-            cfg = copy.deepcopy(config._DEFAULTS)
-            parts = field.split(".")
-            d = cfg
-            for p in parts[:-1]:
-                d = d[p]
-            d[parts[-1]] = val
-            with pytest.raises(ValueError, match=field.replace(".", r"\.") + r".*不允許 NaN 或 inf"):
-                config.validate_config(cfg)
+# 所有 _POSITIVE_KEYS：逐一參數化驗證 validate_config 對非法值拋 ValueError
+_ALL_POSITIVE_FIELDS = [
+    "api.timeout",
+    "api.retry",
+    "api.rate_limit.max_concurrent",
+    "api.rate_limit.min_interval_ms",
+    "parallel.smoke",
+    "parallel.dev",
+    "parallel.holdout",
+    "thresholds.max_candidate_length",
+    "archive.max_versions",
+    "multi_candidate.count",
+]
+
+_VALIDATE_CONFIG_INVALID_VALUES = [
+    ("zero", 0, r"必須為正數"),
+    ("negative", -1, r"必須為正數"),
+    ("nan", float("nan"), r"不允許 NaN 或 inf"),
+    ("inf", float("inf"), r"不允許 NaN 或 inf"),
+    ("-inf", float("-inf"), r"不允許 NaN 或 inf"),
+]
 
 
-def test_validate_config_direct_zero_negative_rejected():
-    """直接呼叫 validate_config 傳入 0/負數必須被拒絕（覆蓋所有 _POSITIVE_KEYS）。"""
+def _set_dotted_key(cfg, dotted_key, value):
+    """在深拷貝的 cfg 上設定 dotted key 的值。"""
     import copy
-    # Use field names (second element of tuples) for both lists
-    field_names = [f for _, f in _POSITIVE_FIELDS_WITH_ENV] + [f for f, _ in _POSITIVE_FIELDS_NO_ENV]
-    for field in field_names:
-        for val in [0, -1, -100]:
-            cfg = copy.deepcopy(config._DEFAULTS)
-            parts = field.split(".")
-            d = cfg
-            for p in parts[:-1]:
-                d = d[p]
-            d[parts[-1]] = val
-            with pytest.raises(ValueError, match=field.replace(".", r"\.") + r".*必須為正數"):
-                config.validate_config(cfg)
+    cfg = copy.deepcopy(cfg)
+    parts = dotted_key.split(".")
+    d = cfg
+    for p in parts[:-1]:
+        d = d[p]
+    d[parts[-1]] = value
+    return cfg
+
+
+@pytest.mark.parametrize("field", _ALL_POSITIVE_FIELDS)
+@pytest.mark.parametrize(
+    "val_name,val,err_pat",
+    _VALIDATE_CONFIG_INVALID_VALUES,
+    ids=[v[0] for v in _VALIDATE_CONFIG_INVALID_VALUES],
+)
+def test_validate_config_rejects_invalid_positive_field(field, val_name, val, err_pat):
+    """直接呼叫 validate_config：每個正數欄位對 0/負數/NaN/+inf/-inf 必須拋 ValueError。
+
+    參數化確保 pytest 對「欄位 × 非法值」逐一報告，而非僅有整體通過數。
+    """
+    cfg = _set_dotted_key(config._DEFAULTS, field, val)
+    with pytest.raises(ValueError, match=field.replace(".", r"\.") + r".*" + err_pat):
+        config.validate_config(cfg)
