@@ -132,6 +132,7 @@ def test_blank_api_string_env_vars_raise_value_error(monkeypatch, env_key, key, 
         pytest.param("https://", id="https-missing-host"),
         pytest.param("http:///api", id="http-missing-host-with-path"),
         pytest.param("https:///api", id="https-missing-host-with-path"),
+        pytest.param("https://[broken", id="malformed-host"),
     ],
 )
 def test_invalid_api_url_format_env_var_raises_value_error(monkeypatch, bad_url):
