@@ -129,6 +129,31 @@ def _patch_default_value(cfg, dotted_key, value):
     return cfg
 
 
+@pytest.mark.parametrize(
+    "section,key,dotted_key,env_key,bad_value",
+    [
+        ("api", "timeout", "api.timeout", "AUTORESEARCH_API_TIMEOUT", float("nan")),
+        ("api", "url", "api.url", "AUTORESEARCH_API_URL", "ftp://invalid"),
+    ],
+)
+def test_missing_env_fallback_and_invalid_default_share_validation_path(
+    monkeypatch, section, key, dotted_key, env_key, bad_value
+):
+    """同一路徑先確認缺值回退可用，再確認非法回退值會被驗證拒絕。"""
+    monkeypatch.delenv(env_key, raising=False)
+    assert config.get(section, key) == config._get_config_value(config._DEFAULTS, dotted_key)
+
+    monkeypatch.setattr(config, "_CONFIG", None)
+    monkeypatch.setattr(
+        config,
+        "_DEFAULTS",
+        _patch_default_value(config._DEFAULTS, dotted_key, bad_value),
+    )
+
+    with pytest.raises(ValueError, match=dotted_key.replace(".", "\\.")):
+        config.get(section, key)
+
+
 _INVALID_DEFAULT_SCENARIOS = [
     ("api", "timeout", "api.timeout", "AUTORESEARCH_API_TIMEOUT", float("nan")),
     ("api", "retry", "api.retry", None, float("nan")),
