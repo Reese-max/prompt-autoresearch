@@ -265,3 +265,40 @@ def test_get_all_returns_isolated_mutable_views():
     assert cfg2["api"]["timeout"] == config._DEFAULTS["api"]["timeout"]
     assert cfg2["api"]["rate_limit"]["max_concurrent"] == config._DEFAULTS["api"]["rate_limit"]["max_concurrent"]
     assert cfg2["multi_candidate"]["temperatures"] == config._DEFAULTS["multi_candidate"]["temperatures"]
+
+
+@pytest.mark.parametrize(
+    "dotted_key,bad_value,env_key",
+    [
+        ("api.timeout", float("nan"), "AUTORESEARCH_API_TIMEOUT"),
+        ("api.timeout", -1, "AUTORESEARCH_API_TIMEOUT"),
+        ("api.url", "ftp://invalid", "AUTORESEARCH_API_URL"),
+        ("api.url", "", "AUTORESEARCH_API_URL"),
+        ("api.model", "", "AUTORESEARCH_API_MODEL"),
+        ("parallel.smoke", 0, "AUTORESEARCH_SMOKE_PARALLEL"),
+        ("parallel.dev", -10, "AUTORESEARCH_DEV_PARALLEL"),
+        ("parallel.holdout", float("inf"), "AUTORESEARCH_HOLDOUT_PARALLEL"),
+        ("thresholds.max_candidate_length", 0, "AUTORESEARCH_MAX_CANDIDATE_LENGTH"),
+    ],
+)
+def test_fallback_path_invalid_defaults_get_all_raises_value_error(monkeypatch, dotted_key, bad_value, env_key):
+    """
+    新增預設值回退路徑測試：移除對應環境變數、重置 _CONFIG、
+    以 monkeypatch 將 _DEFAULTS 中上述數值、URL 與 model 欄位改成非法值，
+    斷言 get_all() 仍經同一套驗證並拋出 ValueError。
+    """
+    # 移除對應環境變數
+    for key in CONFIG_ENV_KEYS:
+        monkeypatch.delenv(key, raising=False)
+
+    # 重置 _CONFIG 快取
+    monkeypatch.setattr(config, "_CONFIG", None)
+
+    # 以 monkeypatch 將 _DEFAULTS 中對應欄位改成非法值
+    modified_defaults = _patch_default_value(config._DEFAULTS, dotted_key, bad_value)
+    monkeypatch.setattr(config, "_DEFAULTS", modified_defaults)
+
+    # 斷言 get_all() 仍經同一套驗證並拋出 ValueError
+    with pytest.raises(ValueError, match=dotted_key.replace(".", "\\.")):
+        config.get_all()
+
