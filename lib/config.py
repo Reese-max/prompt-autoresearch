@@ -242,7 +242,10 @@ def get(section, key=None, default=None):
 
 def get_section(section):
     cfg = _load_config()
-    return dict(cfg.get(section, {}))
+    section_data = cfg.get(section, {})
+    if not isinstance(section_data, dict):
+        return {}
+    return dict(section_data)
 
 
 def get_all():

@@ -162,6 +162,18 @@ def test_get_section_and_cache_hit_without_reload(tmp_path):
     assert first["parallel"]["smoke"] == 3
 
 
+def test_get_section_with_non_dict_section_returns_empty_dict(tmp_path):
+    """lib/config.py get_section 應在 section 非 dict 時返回空 dict，避免 ValueError。"""
+    config_file = tmp_path / "config.json"
+    config_file.write_text(
+        json.dumps({"api": "invalid"}, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+    _set_config_path(config_file)
+
+    section = config.get_section("api")
+
+    assert section == {}
 def test_reload_after_cache_cleared_and_error_branch_for_invalid_json(tmp_path, monkeypatch):
     config_file = tmp_path / "config.json"
     config_file.write_text(

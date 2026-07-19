@@ -1,0 +1,62 @@
+F                                                                        [100%]
+================================== FAILURES ===================================
+__________ test_get_section_with_non_dict_section_returns_empty_dict __________
+
+tmp_path = WindowsPath('C:/Users/Administrator/AppData/Local/Temp/pytest-of-Administrator/pytest-2530/test_get_section_with_non_dict0')
+
+    def test_get_section_with_non_dict_section_returns_empty_dict(tmp_path):
+        """lib/config.py get_section ���b section �D dict �ɪ�^�� dict�A�קK ValueError�C"""
+        config_file = tmp_path / "config.json"
+        config_file.write_text(
+            json.dumps({"api": "invalid"}, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+        _set_config_path(config_file)
+    
+>       section = config.get_section("api")
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests\test_lib_config.py:174: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+section = 'api'
+
+    def get_section(section):
+        cfg = _load_config()
+>       return dict(cfg.get(section, {}))
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       ValueError: dictionary update sequence element #0 has length 1; 2 is required
+
+lib\config.py:245: ValueError
+=============================== tests coverage ================================
+_______________ coverage: platform win32, python 3.11.9-final-0 _______________
+
+Name                                       Stmts   Miss Branch BrPart  Cover   Missing
+--------------------------------------------------------------------------------------
+api\__init__.py                                0      0      0      0   100%
+api\continuous_optimizer.py                   82     82     16      0     0%   13-169
+api\feedback.py                               85     85     36      0     0%   13-198
+api\server.py                                219    219     46      0     0%   23-396
+lib\__init__.py                                0      0      0      0   100%
+lib\api.py                                    63     63     20      0     0%   10-114
+lib\config.py                                107     41     54     10    58%   59, 63->70, 68-69, 72-75, 82, 155, 159, 163, 172, 176, 182-183, 185, 204-226, 231-240, 249
+lib\io.py                                     47     47     14      0     0%   7-80
+lib\metrics.py                                13     13      2      0     0%   11-62
+scripts\__init__.py                            0      0      0      0   100%
+scripts\analyze_runs.py                       92     92     42      0     0%   5-138
+scripts\backfill_candidate_scorecards.py      66     66     22      0     0%   12-125
+scripts\compare_runs.py                      159    159     56      0     0%   7-254
+scripts\evaluate.py                          250    250     68      0     0%   6-482
+scripts\evaluate_routed.py                   110    110     26      0     0%   8-176
+scripts\experiment_report.py                 167    167     68      0     0%   12-284
+scripts\gatekeeper.py                         82     82     48      0     0%   7-191
+scripts\generate_questions.py                 21     21      8      0     0%   7-471
+scripts\leaderboard.py                        43     43     18      0     0%   8-74
+scripts\preflight.py                          93     93     26      0     0%   6-146
+scripts\run_core_flow_e2e.py                 158    158     42      0     0%   19-442
+scripts\run_test_matrix.py                    80     80     16      0     0%   4-209
+--------------------------------------------------------------------------------------
+TOTAL                                       1937   1871    628     10     4%
+=========================== short test summary info ===========================
+FAILED tests/test_lib_config.py::test_get_section_with_non_dict_section_returns_empty_dict
+1 failed, 139 deselected in 0.61s
