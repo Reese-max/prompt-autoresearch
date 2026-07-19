@@ -247,9 +247,9 @@ def get(section, key=None, default=None):
     if key is None or isinstance(key, (dict, list)):
         if key is not None and default is None:
             default = key  # get("section", {}) → default={}
-        return section_data if section_data else default
-    if isinstance(section_data, dict):
-        return section_data.get(key, default)
+        return copy.deepcopy(section_data) if section_data else default
+    if isinstance(section_data, dict) and key in section_data:
+        return copy.deepcopy(section_data[key])
     return default
 
 
@@ -258,7 +258,7 @@ def get_section(section):
     section_data = cfg.get(section, {})
     if not isinstance(section_data, dict):
         return {}
-    return dict(section_data)
+    return copy.deepcopy(section_data)
 
 
 def get_all():

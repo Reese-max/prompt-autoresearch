@@ -1,0 +1,13 @@
+diff --git a/lib/config.py b/lib/config.py
+--- a/lib/config.py
++++ b/lib/config.py
+@@ -250,3 +250,3 @@
+-        return section_data if section_data else default
+-    if isinstance(section_data, dict):
+-        return section_data.get(key, default)
++        return copy.deepcopy(section_data) if section_data else default
++    if isinstance(section_data, dict) and key in section_data:
++        return copy.deepcopy(section_data[key])
+@@ -261 +261 @@
+-    return dict(section_data)
++    return copy.deepcopy(section_data)

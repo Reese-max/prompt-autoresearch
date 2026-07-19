@@ -1,0 +1,46 @@
+FFF                                                                      [100%]
+================================== FAILURES ===================================
+_______ test_get_section_nested_mutation_does_not_change_cached_config ________
+
+    def test_get_section_nested_mutation_does_not_change_cached_config():
+        section = config.get_section("api")
+
+        section["rate_limit"]["max_concurrent"] = 0
+
+>       assert config.get_section("api")["rate_limit"]["max_concurrent"] == 8
+E       assert 0 == 8
+
+tests\test_config_accessor_isolation.py:11: AssertionError
+________ test_get_section_value_mutation_does_not_change_cached_config ________
+
+    def test_get_section_value_mutation_does_not_change_cached_config():
+        temperatures = config.get("multi_candidate", "temperatures")
+
+        temperatures.append(1.1)
+
+>       assert config.get("multi_candidate", "temperatures") == [0.5, 0.7, 0.9]
+E       assert [0.5, 0.7, 0.9, 1.1] == [0.5, 0.7, 0.9]
+E
+E         Left contains one more item: 1.1
+E         Use -v to get more diff
+
+tests\test_config_accessor_isolation.py:19: AssertionError
+________ test_get_whole_section_mutation_does_not_change_cached_config ________
+
+    def test_get_whole_section_mutation_does_not_change_cached_config():
+        section = config.get("multi_candidate")
+
+        section["temperatures"].append(1.1)
+
+>       assert config.get("multi_candidate")["temperatures"] == [0.5, 0.7, 0.9]
+E       assert [0.5, 0.7, 0.9, 1.1] == [0.5, 0.7, 0.9]
+E
+E         Left contains one more item: 1.1
+E         Use -v to get more diff
+
+tests\test_config_accessor_isolation.py:27: AssertionError
+=========================== short test summary info ===========================
+FAILED tests/test_config_accessor_isolation.py::test_get_section_nested_mutation_does_not_change_cached_config
+FAILED tests/test_config_accessor_isolation.py::test_get_section_value_mutation_does_not_change_cached_config
+FAILED tests/test_config_accessor_isolation.py::test_get_whole_section_mutation_does_not_change_cached_config
+3 failed in 0.30s
