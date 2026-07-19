@@ -938,3 +938,75 @@ def test_validate_config_rejects_invalid_positive_field(field, val_name, val, er
     cfg = _set_dotted_key(config._DEFAULTS, field, val)
     with pytest.raises(ValueError, match=field.replace(".", r"\.") + r".*" + err_pat):
         config.validate_config(cfg)
+
+
+def test_api_string_env_vars_validation_specific(tmp_path, monkeypatch):
+    """新增 API 字串環境變數測試：
+    AUTORESEARCH_API_URL 與 AUTORESEARCH_API_MODEL 為空字串或純空白時必須拋 ValueError；
+    URL 非 http:// 或 https://、缺少合法主機時亦須拒絕，並涵蓋合法 HTTP/HTTPS URL。
+    """
+    # 1. AUTORESEARCH_API_URL 為空字串
+    _set_config_path(tmp_path / "not-exist.json")
+    config._CONFIG = None
+    monkeypatch.setenv("AUTORESEARCH_API_URL", "")
+    with pytest.raises(ValueError, match="AUTORESEARCH_API_URL.*不可為空字串"):
+        config.get_all()
+
+    # 2. AUTORESEARCH_API_URL 為純空白
+    config._CONFIG = None
+    monkeypatch.setenv("AUTORESEARCH_API_URL", "   ")
+    with pytest.raises(ValueError, match="AUTORESEARCH_API_URL.*不可為空字串"):
+        config.get_all()
+
+    # 3. AUTORESEARCH_API_MODEL 為空字串
+    config._CONFIG = None
+    monkeypatch.delenv("AUTORESEARCH_API_URL", raising=False)
+    monkeypatch.setenv("AUTORESEARCH_API_MODEL", "")
+    with pytest.raises(ValueError, match="AUTORESEARCH_API_MODEL.*不可為空字串"):
+        config.get_all()
+
+    # 4. AUTORESEARCH_API_MODEL 為純空白
+    config._CONFIG = None
+    monkeypatch.setenv("AUTORESEARCH_API_MODEL", "   ")
+    with pytest.raises(ValueError, match="AUTORESEARCH_API_MODEL.*不可為空字串"):
+        config.get_all()
+
+    # 5. AUTORESEARCH_API_URL 非 http:// 或 https://
+    config._CONFIG = None
+    monkeypatch.delenv("AUTORESEARCH_API_MODEL", raising=False)
+    monkeypatch.setenv("AUTORESEARCH_API_URL", "ftp://example.com/api")
+    with pytest.raises(ValueError, match="api.url.*必須為有效的 http:// 或 https:// URL"):
+        config.get_all()
+
+    # 6. AUTORESEARCH_API_URL 缺少合法主機 (hostname)
+    # 案例一：http://
+    config._CONFIG = None
+    monkeypatch.setenv("AUTORESEARCH_API_URL", "http://")
+    with pytest.raises(ValueError, match="api.url.*必須為有效的 http:// 或 https:// URL"):
+        config.get_all()
+
+    # 案例二：https:///path
+    config._CONFIG = None
+    monkeypatch.setenv("AUTORESEARCH_API_URL", "https:///path")
+    with pytest.raises(ValueError, match="api.url.*必須為有效的 http:// 或 https:// URL"):
+        config.get_all()
+
+    # 案例三：https://[broken
+    config._CONFIG = None
+    monkeypatch.setenv("AUTORESEARCH_API_URL", "https://[broken")
+    with pytest.raises(ValueError, match="api.url.*必須為有效的 http:// 或 https:// URL"):
+        config.get_all()
+
+    # 7. 合法 HTTP/HTTPS URL
+    # 案例一：http
+    config._CONFIG = None
+    monkeypatch.setenv("AUTORESEARCH_API_URL", "http://localhost:8080/v1")
+    cfg = config.get_all()
+    assert cfg["api"]["url"] == "http://localhost:8080/v1"
+
+    # 案例二：https
+    config._CONFIG = None
+    monkeypatch.setenv("AUTORESEARCH_API_URL", "https://api.minimaxi.chat/v1/chat")
+    cfg = config.get_all()
+    assert cfg["api"]["url"] == "https://api.minimaxi.chat/v1/chat"
+
