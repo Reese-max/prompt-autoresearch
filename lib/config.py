@@ -57,14 +57,15 @@ def _load_config():
     if _CONFIG is not None:
         return _CONFIG
     _CONFIG = copy.deepcopy(_DEFAULTS)
-    if os.path.exists(_CONFIG_PATH):
-        try:
-            with open(_CONFIG_PATH, "r", encoding="utf-8") as f:
-                user_cfg = json.load(f)
-            _deep_merge(_CONFIG, user_cfg)
-        except Exception:
-            pass
     try:
+        validate_config(_CONFIG)
+        if os.path.exists(_CONFIG_PATH):
+            try:
+                with open(_CONFIG_PATH, "r", encoding="utf-8") as f:
+                    user_cfg = json.load(f)
+                _deep_merge(_CONFIG, user_cfg)
+            except Exception:
+                pass
         _apply_env_overrides(_CONFIG)
         validate_config(_CONFIG)
     except Exception:
@@ -132,19 +133,24 @@ _STRING_SCHEMA = {
     "api.model": {"min_length": 1},
 }
 
+_MISSING = object()
+
+
+def _get_config_value(cfg, dotted_key):
+    value = cfg
+    for part in dotted_key.split("."):
+        if not isinstance(value, dict) or part not in value:
+            return _MISSING
+        value = value[part]
+    return value
+
 
 def validate_config(cfg):
     for dotted_key, expected_types in _NUMERIC_SCHEMA.items():
-        parts = dotted_key.split(".")
-        value = cfg
-        for part in parts:
-            if not isinstance(value, dict):
-                value = {}
-                break
-            value = value.get(part, {})
-        if value == {}:
+        value = _get_config_value(cfg, dotted_key)
+        if value is _MISSING:
             continue
-        if not isinstance(value, expected_types):
+        if isinstance(value, bool) or not isinstance(value, expected_types):
             raise ValueError(
                 f"設定值 {dotted_key}={value!r} 型別不符，期望 {expected_types}"
             )
@@ -158,14 +164,8 @@ def validate_config(cfg):
             )
 
     for dotted_key, rules in _STRING_SCHEMA.items():
-        parts = dotted_key.split(".")
-        value = cfg
-        for part in parts:
-            if not isinstance(value, dict):
-                value = None
-                break
-            value = value.get(part)
-        if value is None:
+        value = _get_config_value(cfg, dotted_key)
+        if value is _MISSING:
             continue
         if not isinstance(value, str):
             raise ValueError(
