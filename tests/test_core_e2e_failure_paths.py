@@ -1,7 +1,10 @@
 # -*- coding: utf-8 -*-
 """核心鏈路的參數化負向契約：錯誤回應、例外與失敗後狀態。"""
+import importlib.util
 import json
+import runpy
 import subprocess
+import sys
 import threading
 from pathlib import Path
 
@@ -293,3 +296,71 @@ def test_core_e2e_spec_failure_returns_exit_one_and_restores_cwd(
     assert summary["spec_failures"] == [expected_key]
     assert summary["exit_code"] == 1
     assert Path.cwd() == original_cwd
+
+
+def test_core_e2e_import_adds_missing_project_root_to_sys_path():
+    import scripts.run_core_flow_e2e as e2e
+
+    original_path = sys.path[:]
+    sys.path[:] = [entry for entry in sys.path if entry != str(e2e.PROJECT_ROOT)]
+    try:
+        spec = importlib.util.spec_from_file_location(
+            "core_flow_import_probe", str(Path(e2e.__file__).resolve())
+        )
+        assert spec is not None and spec.loader is not None
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        assert sys.path[0] == str(e2e.PROJECT_ROOT)
+        assert module.PROJECT_ROOT == e2e.PROJECT_ROOT
+    finally:
+        sys.path[:] = original_path
+
+
+def test_core_e2e_darwin_platform_label_returns_macos(monkeypatch):
+    import scripts.run_core_flow_e2e as e2e
+
+    monkeypatch.setattr(e2e.platform, "system", lambda: "Darwin")
+
+    assert e2e._platform_label() == "macOS"
+
+
+def test_core_e2e_portable_path_without_input_marker_returns_basename():
+    import scripts.run_core_flow_e2e as e2e
+
+    assert e2e._portable_path("outside/summary.json") == "summary.json"
+
+
+def test_core_e2e_unexpected_temperature_raises_assertion_with_message(
+    tmp_path, monkeypatch
+):
+    import scripts.run_core_flow_e2e as e2e
+
+    monkeypatch.chdir(tmp_path)
+
+    def invoke_unexpected_temperature(*_args, **_kwargs):
+        return e2e.evaluate.call_minimax("system", "user", temperature=0.9)
+
+    monkeypatch.setattr(e2e.evaluate, "run_evaluation", invoke_unexpected_temperature)
+
+    with pytest.raises(AssertionError) as excinfo:
+        e2e._run_core_evaluation(tmp_path)
+
+    assert type(excinfo.value) is AssertionError
+    assert str(excinfo.value) == "unexpected temperature=0.9"
+
+
+def test_core_e2e_module_entrypoint_exits_with_return_code(
+    monkeypatch, capsys
+):
+    import scripts.run_core_flow_e2e as e2e
+
+    monkeypatch.setattr(sys, "argv", ["scripts/run_core_flow_e2e.py", "--quiet"])
+
+    with pytest.raises(SystemExit) as excinfo:
+        runpy.run_path(str(Path(e2e.__file__).resolve()), run_name="__main__")
+
+    assert type(excinfo.value) is SystemExit
+    assert excinfo.value.code == 0
+    summary = json.loads(capsys.readouterr().out.strip().splitlines()[-1])
+    assert summary["spec_ok"] is True
+    assert summary["exit_code"] == 0
