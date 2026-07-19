@@ -507,12 +507,13 @@ def test_env_override_section_created_when_missing_from_cfg(monkeypatch):
     [
         ("nan", "浮點非數"),
         ("inf", "無限大"),
+        ("-inf", "負無限大"),
         ("-1", "負數"),
         ("0", "零"),
         ("", "空字串"),
         ("   ", "純空白"),
     ],
-    ids=["nan", "inf", "negative", "zero", "empty-string", "whitespace"],
+    ids=["nan", "inf", "neg-inf", "negative", "zero", "empty-string", "whitespace"],
 )
 def test_invalid_api_timeout_env_var_raises_value_error(monkeypatch, bad_value, description):
     """設定 AUTORESEARCH_API_TIMEOUT 為各種格式錯誤值後重置 _CONFIG，
