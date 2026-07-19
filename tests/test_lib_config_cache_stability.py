@@ -58,3 +58,24 @@ def test_failed_config_load_with_valid_file_then_invalid_env_then_fixed_env_uses
     monkeypatch.setenv("AUTORESEARCH_API_TIMEOUT", "99")
     cfg = config.get_all()
     assert cfg["api"]["timeout"] == 99
+
+
+def test_get_missing_value_fallback_revalidates_after_cache_reset():
+    """先命中快取，再重載時仍須先驗證設定，不能直接回傳缺值預設。"""
+    config_file = Path(config._CONFIG_PATH)
+    config_file.write_text(
+        json.dumps({"multi_candidate": {"count": 2}}),
+        encoding="utf-8",
+    )
+    fallback = object()
+    assert config.get("missing", "key", fallback) is fallback
+
+    config_file.write_text(
+        json.dumps({"multi_candidate": {"count": False}}),
+        encoding="utf-8",
+    )
+    assert config.get("missing", "key", fallback) is fallback
+
+    config._CONFIG = None
+    with pytest.raises(ValueError, match=r"multi_candidate\.count=False.*型別不符"):
+        config.get("missing", "key", fallback)
