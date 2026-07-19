@@ -10,6 +10,51 @@ import pytest
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 
+@pytest.mark.parametrize(
+    ("result_question", "summary_prompt", "summary_question"),
+    [
+        (False, True, True),
+        (True, False, True),
+        (True, True, False),
+        (True, True, True),
+    ],
+    ids=["149-to-151", "152-to-154", "154-to-156", "paths-present"],
+)
+def test_strip_volatile_optional_path_branches(
+    result_question, summary_prompt, summary_question
+):
+    import scripts.run_core_flow_e2e as e2e
+
+    summary = {"total_questions": 1}
+    result = {"id": 1, "failures": ["F01"]}
+    if result_question:
+        result["question_file"] = "root/輸入 資料/題庫.jsonl"
+    if summary_prompt:
+        summary["prompt_file"] = "root/輸入 資料/提示詞.md"
+    if summary_question:
+        summary["question_file"] = "root/輸入 資料/題庫.jsonl"
+
+    clean_summary, clean_results = e2e._strip_volatile(summary, [result])
+
+    assert ("question_file" in clean_results[0]) is result_question
+    assert ("prompt_file" in clean_summary) is summary_prompt
+    assert ("question_file" in clean_summary) is summary_question
+
+
+@pytest.mark.parametrize("cache_enabled", [True, False], ids=["cache-present", "202-to-206"])
+def test_core_evaluation_cache_directory_branches(tmp_path, monkeypatch, cache_enabled):
+    import scripts.run_core_flow_e2e as e2e
+
+    monkeypatch.chdir(tmp_path)
+    if not cache_enabled:
+        monkeypatch.setattr(e2e.evaluate, "save_cached_result", lambda *_args: None)
+
+    result = e2e._run_core_evaluation(tmp_path)
+
+    assert result["repeat_identical"] is True
+    assert (tmp_path / ".cache").exists() is cache_enabled
+
+
 def test_run_core_flow_e2e_spec_ok_and_stable_digest():
     import scripts.run_core_flow_e2e as e2e
 
