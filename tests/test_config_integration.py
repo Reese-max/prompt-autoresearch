@@ -20,6 +20,16 @@ CONFIG_ENV_KEYS = (
     "AUTORESEARCH_MAX_CANDIDATE_LENGTH",
 )
 
+NUMERIC_ENV_CONFIG = (
+    ("AUTORESEARCH_API_TIMEOUT", "api", "timeout"),
+    ("AUTORESEARCH_SMOKE_PARALLEL", "parallel", "smoke"),
+    ("AUTORESEARCH_DEV_PARALLEL", "parallel", "dev"),
+    ("AUTORESEARCH_HOLDOUT_PARALLEL", "parallel", "holdout"),
+    ("AUTORESEARCH_MAX_CANDIDATE_LENGTH", "thresholds", "max_candidate_length"),
+)
+
+INVALID_NUMERIC_ENV_VALUES = ("nan", "inf", "-inf", "-1", "0", "", "   ")
+
 
 class FakeHTTPResponse:
     def __init__(self, body):
@@ -54,6 +64,22 @@ def _response():
             ensure_ascii=False,
         ).encode("utf-8")
     )
+
+
+@pytest.mark.parametrize("env_key,section,key", NUMERIC_ENV_CONFIG)
+@pytest.mark.parametrize(
+    "value",
+    INVALID_NUMERIC_ENV_VALUES,
+    ids=["nan", "inf", "neg-inf", "negative", "zero", "empty", "whitespace"],
+)
+def test_invalid_numeric_env_vars_raise_value_error_on_get(
+    api_consumer, monkeypatch, env_key, section, key, value
+):
+    monkeypatch.setenv(env_key, value)
+    config._CONFIG = None
+
+    with pytest.raises(ValueError):
+        config.get(section, key)
 
 
 def test_invalid_env_config_reaches_consumer_as_failure_without_request(api_consumer, monkeypatch, tmp_path):
