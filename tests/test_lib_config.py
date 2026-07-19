@@ -515,6 +515,16 @@ def test_env_override_section_created_when_missing_from_cfg(monkeypatch):
 
 
 @pytest.mark.parametrize(
+    "env_key,section,key",
+    [
+        ("AUTORESEARCH_API_TIMEOUT", "api", "timeout"),
+        ("AUTORESEARCH_SMOKE_PARALLEL", "parallel", "smoke"),
+        ("AUTORESEARCH_DEV_PARALLEL", "parallel", "dev"),
+        ("AUTORESEARCH_HOLDOUT_PARALLEL", "parallel", "holdout"),
+        ("AUTORESEARCH_MAX_CANDIDATE_LENGTH", "thresholds", "max_candidate_length"),
+    ],
+)
+@pytest.mark.parametrize(
     "bad_value,description",
     [
         ("nan", "浮點非數"),
@@ -527,15 +537,16 @@ def test_env_override_section_created_when_missing_from_cfg(monkeypatch):
     ],
     ids=["nan", "inf", "neg-inf", "negative", "zero", "empty-string", "whitespace"],
 )
-def test_invalid_api_timeout_env_var_raises_value_error(monkeypatch, bad_value, description):
-    """設定 AUTORESEARCH_API_TIMEOUT 為各種格式錯誤值後重置 _CONFIG，
-    呼叫 get('api','timeout') 必須全部拋出 ValueError。"""
-    monkeypatch.setenv("AUTORESEARCH_API_TIMEOUT", bad_value)
+def test_invalid_numeric_env_vars_raise_value_error(
+    monkeypatch, env_key, section, key, bad_value, description
+):
+    """每個數值環境變數設為非法值後重置 _CONFIG，get() 必須拋出 ValueError。"""
+    monkeypatch.setenv(env_key, bad_value)
 
     config._CONFIG = None
 
     with pytest.raises(ValueError):
-        config.get("api", "timeout")
+        config.get(section, key)
 
 
 # ── 字串設定驗證：AUTORESEARCH_API_URL / AUTORESEARCH_API_MODEL ──────────
