@@ -119,60 +119,48 @@ def test_file_valid_override_plus_env_invalid_same_key_rejected(tmp_path, monkey
 # ── 場景 5：monkeypatch _DEFAULTS 為非法值，缺失環境變數回退預設後仍被驗證攔截 ──
 
 
-def test_invalid_default_api_timeout_zero_raises(monkeypatch):
-    """monkeypatch _DEFAULTS 設 api.timeout=0，無環境變數覆蓋時 get() 必須驗證攔截。"""
-    modified = copy.deepcopy(config._DEFAULTS)
-    modified["api"]["timeout"] = 0
-    monkeypatch.setattr(config, "_DEFAULTS", modified)
-
-    with pytest.raises(ValueError, match="api.timeout"):
-        config.get_all()
-
-
-def test_invalid_default_parallel_smoke_negative_raises(monkeypatch):
-    """monkeypatch _DEFAULTS 設 parallel.smoke=-1，無環境變數覆蓋時 get() 必須驗證攔截。"""
-    modified = copy.deepcopy(config._DEFAULTS)
-    modified["parallel"]["smoke"] = -1
-    monkeypatch.setattr(config, "_DEFAULTS", modified)
-
-    with pytest.raises(ValueError, match="parallel.smoke"):
-        config.get_all()
+def _patch_default_value(cfg, dotted_key, value):
+    cfg = copy.deepcopy(cfg)
+    target = cfg
+    parts = dotted_key.split(".")
+    for part in parts[:-1]:
+        target = target[part]
+    target[parts[-1]] = value
+    return cfg
 
 
-def test_invalid_default_max_candidate_length_zero_raises(monkeypatch):
-    """monkeypatch _DEFAULTS 設 thresholds.max_candidate_length=0，無環境變數覆蓋時 get() 必須驗證攔截。"""
-    modified = copy.deepcopy(config._DEFAULTS)
-    modified["thresholds"]["max_candidate_length"] = 0
-    monkeypatch.setattr(config, "_DEFAULTS", modified)
+_INVALID_DEFAULT_SCENARIOS = [
+    ("api", "timeout", "api.timeout", "AUTORESEARCH_API_TIMEOUT", float("nan")),
+    ("api", "retry", "api.retry", None, float("nan")),
+    ("api", "rate_limit", "api.rate_limit.max_concurrent", None, float("nan")),
+    ("api", "rate_limit", "api.rate_limit.min_interval_ms", None, float("nan")),
+    ("parallel", "smoke", "parallel.smoke", "AUTORESEARCH_SMOKE_PARALLEL", float("nan")),
+    ("parallel", "dev", "parallel.dev", "AUTORESEARCH_DEV_PARALLEL", float("nan")),
+    ("parallel", "holdout", "parallel.holdout", "AUTORESEARCH_HOLDOUT_PARALLEL", float("nan")),
+    ("thresholds", "max_candidate_length", "thresholds.max_candidate_length", "AUTORESEARCH_MAX_CANDIDATE_LENGTH", float("nan")),
+    ("thresholds", "smoke_allowed_drop", "thresholds.smoke_allowed_drop", None, float("inf")),
+    ("thresholds", "smoke_min_score", "thresholds.smoke_min_score", None, float("inf")),
+    ("thresholds", "dev_min_improvement", "thresholds.dev_min_improvement", None, float("inf")),
+    ("thresholds", "holdout_max_drop", "thresholds.holdout_max_drop", None, float("-inf")),
+    ("thresholds", "type_max_regression", "thresholds.type_max_regression", None, float("inf")),
+    ("thresholds", "word_rate_min", "thresholds.word_rate_min", None, float("-inf")),
+    ("archive", "max_versions", "archive.max_versions", None, float("nan")),
+    ("multi_candidate", "count", "multi_candidate.count", None, float("nan")),
+    ("api", "url", "api.url", "AUTORESEARCH_API_URL", "ftp://invalid"),
+    ("api", "model", "api.model", "AUTORESEARCH_API_MODEL", ""),
+]
 
-    with pytest.raises(ValueError, match="thresholds.max_candidate_length"):
-        config.get_all()
 
-
-# ── 缺失環境變數回退預設值路徑：_DEFAULTS 仍須通過同一套驗證 ──────────
-
-
-@pytest.mark.parametrize(
-    ("env_key", "section", "key", "bad_value"),
-    [
-        ("AUTORESEARCH_API_TIMEOUT", "api", "timeout", 0),
-        ("AUTORESEARCH_SMOKE_PARALLEL", "parallel", "smoke", 0),
-        ("AUTORESEARCH_DEV_PARALLEL", "parallel", "dev", 0),
-        ("AUTORESEARCH_HOLDOUT_PARALLEL", "parallel", "holdout", 0),
-        ("AUTORESEARCH_MAX_CANDIDATE_LENGTH", "thresholds", "max_candidate_length", 0),
-        ("AUTORESEARCH_API_URL", "api", "url", "ftp://invalid"),
-        ("AUTORESEARCH_API_MODEL", "api", "model", ""),
-    ],
-)
-def test_get_rejects_invalid_default_fallback(monkeypatch, env_key, section, key, bad_value):
-    """環境變數缺失時，非法預設值也必須由 get() 的共用驗證攔截。"""
-    monkeypatch.delenv(env_key, raising=False)
-    modified = copy.deepcopy(config._DEFAULTS)
-    modified[section][key] = bad_value
-    monkeypatch.setattr(config, "_DEFAULTS", modified)
+@pytest.mark.parametrize("section,key,dotted_key,env_key,bad_value", _INVALID_DEFAULT_SCENARIOS)
+def test_get_rejects_invalid_default_fallback(monkeypatch, section, key, dotted_key, env_key, bad_value):
+    """缺失對應環境變數時，非法預設值仍應走 get() 共用驗證並拋錯。"""
+    modified_defaults = _patch_default_value(config._DEFAULTS, dotted_key, bad_value)
+    monkeypatch.setattr(config, "_DEFAULTS", modified_defaults)
+    if env_key:
+        monkeypatch.delenv(env_key, raising=False)
     monkeypatch.setattr(config, "_CONFIG", None)
 
-    with pytest.raises(ValueError, match=rf"{section}\.{key}"):
+    with pytest.raises(ValueError, match=dotted_key.replace(".", "\\.")):
         config.get(section, key)
 
 
