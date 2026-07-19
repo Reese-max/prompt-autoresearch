@@ -134,6 +134,10 @@ _STRING_SCHEMA = {
     "api.model": {"min_length": 1},
 }
 
+_BOOLEAN_SCHEMA = frozenset({
+    "multi_candidate.enabled",
+})
+
 _MISSING = object()
 
 
@@ -185,6 +189,15 @@ def validate_config(cfg):
                 raise ValueError(
                     f"設定值 {dotted_key}={value!r} 必須為有效的 http:// 或 https:// URL"
                 )
+
+    for dotted_key in _BOOLEAN_SCHEMA:
+        value = _get_config_value(cfg, dotted_key)
+        if value is _MISSING:
+            continue
+        if not isinstance(value, bool):
+            raise ValueError(
+                f"設定值 {dotted_key}={value!r} 型別不符，期望 bool"
+            )
 
 
 def _apply_env_overrides(cfg):
