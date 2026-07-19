@@ -606,6 +606,18 @@ def test_invalid_api_url_no_protocol_env_var_raises_value_error(tmp_path, monkey
         config.get_all()
 
 
+def test_malformed_ipv6_url_is_rejected_after_urlparse_error():
+    """urlparse 無法解析主機時，validate_config 必須明確拒絕設定。"""
+    bad_url = "https://[broken"
+
+    with pytest.raises(ValueError) as exc_info:
+        config.validate_config({"api": {"url": bad_url}})
+
+    assert str(exc_info.value) == (
+        f"設定值 api.url={bad_url!r} 必須為有效的 http:// 或 https:// URL"
+    )
+
+
 def test_empty_api_url_in_config_json_raises_value_error(tmp_path):
     """config.json 中 api.url 為空字串時，validate_config 必須拒絕。"""
     config_file = tmp_path / "config.json"
