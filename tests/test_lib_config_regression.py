@@ -189,8 +189,33 @@ def test_get_rejects_invalid_default_fallback(monkeypatch, section, key, dotted_
         config.get(section, key)
 
 
-# ── L166 路徑覆蓋：_STRING_SCHEMA 值為非字串型別時必須拒絕 ──────────────
+@pytest.mark.parametrize(
+    "section,key,dotted_key,bad_value",
+    [
+        ("api", "timeout", "api.timeout", float("nan")),
+        ("parallel", "smoke", "parallel.smoke", 0),
+        ("api", "model", "api.model", "   "),
+        ("api", "url", "api.url", "ftp://invalid"),
+    ],
+)
+def test_get_validates_invalid_defaults_after_env_cleared_and_cache_reset(
+    monkeypatch, section, key, dotted_key, bad_value
+):
+    """清除 env 並重置快取後，get() 取到非法 _DEFAULTS 仍需經同一驗證路徑拋錯。"""
+    for env_key in CONFIG_ENV_KEYS:
+        monkeypatch.delenv(env_key, raising=False)
+    monkeypatch.setattr(config, "_CONFIG", None)
+    monkeypatch.setattr(
+        config,
+        "_DEFAULTS",
+        _patch_default_value(config._DEFAULTS, dotted_key, bad_value),
+    )
 
+    with pytest.raises(ValueError, match=dotted_key.replace(".", "\\.")):
+        config.get(section, key)
+
+
+# ── L166 路徑覆蓋：_STRING_SCHEMA 值為非字串型別時必須拒絕 ──────────────
 
 @pytest.mark.parametrize(
     "bad_value",
