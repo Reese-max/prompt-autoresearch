@@ -89,17 +89,35 @@ def test_zero_or_negative_env_var_raises_value_error(monkeypatch):
     assert "必須為正數" in str(exc.value)
 
 
-def test_empty_api_url_env_var_raises_value_error(monkeypatch):
-    """C13: 字串環境變數空值 → ValueError。"""
-    monkeypatch.setenv("AUTORESEARCH_API_URL", "")
+@pytest.mark.parametrize(
+    ("env_key", "value"),
+    [
+        pytest.param("AUTORESEARCH_API_URL", "", id="url-empty"),
+        pytest.param("AUTORESEARCH_API_URL", "   ", id="url-whitespace"),
+        pytest.param("AUTORESEARCH_API_MODEL", "", id="model-empty"),
+        pytest.param("AUTORESEARCH_API_MODEL", "   ", id="model-whitespace"),
+    ],
+)
+def test_blank_api_string_env_vars_raise_value_error(monkeypatch, env_key, value):
+    """C13: API URL／MODEL 為空字串或純空白 → ValueError。"""
+    monkeypatch.setenv(env_key, value)
     with pytest.raises(ValueError) as exc:
         config.get_all()
+    assert env_key in str(exc.value)
     assert "不可為空字串" in str(exc.value)
 
 
-def test_invalid_api_url_format_env_var_raises_value_error(monkeypatch):
-    """C14: URL 格式非法 (非 http/https) → ValueError。"""
-    monkeypatch.setenv("AUTORESEARCH_API_URL", "ftp://example.com")
+@pytest.mark.parametrize(
+    "bad_url",
+    [
+        pytest.param("ftp://example.com", id="ftp"),
+        pytest.param("example.com/api", id="missing-protocol"),
+        pytest.param("mailto:user@example.com", id="non-http-scheme"),
+    ],
+)
+def test_invalid_api_url_format_env_var_raises_value_error(monkeypatch, bad_url):
+    """C14: URL 格式非法（非 http／https）→ ValueError。"""
+    monkeypatch.setenv("AUTORESEARCH_API_URL", bad_url)
     with pytest.raises(ValueError) as exc:
         config.get_all()
     assert "必須為有效的 http:// 或 https:// URL" in str(exc.value)
