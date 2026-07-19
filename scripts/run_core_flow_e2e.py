@@ -390,33 +390,50 @@ def main(argv: list[str] | None = None) -> int:
         "comparable": result["comparable"],
         "exit_code": result["exit_code"],
     }
+    out_path = None
+    out_parent_created = False
 
-    if args.out:
-        out_path = Path(args.out)
-        if not out_path.is_absolute():
-            out_path = PROJECT_ROOT / out_path
-        out_path.parent.mkdir(parents=True, exist_ok=True)
-        out_path.write_text(
-            json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
-            encoding="utf-8",
-        )
+    try:
+        if args.out:
+            out_path = Path(args.out)
+            if not out_path.is_absolute():
+                out_path = PROJECT_ROOT / out_path
+            if not out_path.parent.exists():
+                out_path.parent.mkdir(parents=True, exist_ok=True)
+                out_parent_created = True
+            out_path.write_text(
+                json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
+                encoding="utf-8",
+            )
 
-    summary_line = {
-        "platform": result["runtime"]["platform"],
-        "python_version": result["runtime"]["python_version"],
-        "comparable_digest": result["comparable_digest"],
-        "spec_ok": result["spec_ok"],
-        "spec_failures": result["spec_failures"],
-        "exit_code": result["exit_code"],
-        "evaluation_digest": result["comparable"]["evaluation"]["canonical_digest"],
-        "average_score": result["comparable"]["evaluation"]["summary"]["average_score"],
-        "gatekeeper_passed": result["comparable"]["gatekeeper"]["valid_prompt"]["passed"],
-    }
-    if args.quiet:
-        print(json.dumps(summary_line, ensure_ascii=False), flush=True)
-    else:
-        print("CORE_FLOW_E2E_SUMMARY " + json.dumps(summary_line, ensure_ascii=False), flush=True)
-        print(json.dumps(payload, ensure_ascii=False, indent=2), flush=True)
+        summary_line = {
+            "platform": result["runtime"]["platform"],
+            "python_version": result["runtime"]["python_version"],
+            "comparable_digest": result["comparable_digest"],
+            "spec_ok": result["spec_ok"],
+            "spec_failures": result["spec_failures"],
+            "exit_code": result["exit_code"],
+            "evaluation_digest": result["comparable"]["evaluation"]["canonical_digest"],
+            "average_score": result["comparable"]["evaluation"]["summary"]["average_score"],
+            "gatekeeper_passed": result["comparable"]["gatekeeper"]["valid_prompt"]["passed"],
+        }
+        if args.quiet:
+            print(json.dumps(summary_line, ensure_ascii=False), flush=True)
+        else:
+            print(
+                "CORE_FLOW_E2E_SUMMARY " + json.dumps(summary_line, ensure_ascii=False),
+                flush=True,
+            )
+            print(json.dumps(payload, ensure_ascii=False, indent=2), flush=True)
+    except Exception:
+        if out_path is not None and out_path.exists():
+            out_path.unlink()
+        if out_path is not None and out_parent_created:
+            try:
+                out_path.parent.rmdir()
+            except OSError:
+                pass
+        raise
 
     return result["exit_code"]
 

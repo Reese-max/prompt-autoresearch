@@ -1,11 +1,13 @@
 # -*- coding: utf-8 -*-
 """核心鏈路的參數化負向契約：錯誤回應、例外與失敗後狀態。"""
+import builtins
 import importlib.util
 import json
 import runpy
 import subprocess
 import sys
 import threading
+import tempfile
 from pathlib import Path
 
 import pytest
@@ -295,6 +297,93 @@ def test_core_e2e_spec_failure_returns_exit_one_and_restores_cwd(
     assert summary["spec_ok"] is False
     assert summary["spec_failures"] == [expected_key]
     assert summary["exit_code"] == 1
+    assert Path.cwd() == original_cwd
+
+
+def test_main_core_output_write_exception_cleans_workspace_and_output_file(
+    monkeypatch, tmp_path
+):
+    import scripts.run_core_flow_e2e as e2e
+
+    original_cwd = Path.cwd()
+    probe = {}
+
+    class ProbeTemporaryDirectory:
+        def __init__(self, prefix="core-flow-e2e-"):
+            self.path = Path(tempfile.mkdtemp(prefix=prefix, dir=tmp_path))
+            probe["path"] = self.path
+            probe["entered"] = False
+            probe["exited"] = False
+
+        def __enter__(self):
+            probe["entered"] = True
+            return str(self.path)
+
+        def __exit__(self, exc_type, exc_value, traceback):
+            import shutil
+
+            probe["exited"] = True
+            if self.path.exists():
+                shutil.rmtree(self.path, ignore_errors=True)
+
+    monkeypatch.setattr(e2e.tempfile, "TemporaryDirectory", ProbeTemporaryDirectory)
+
+    original_write_text = e2e.Path.write_text
+
+    def partial_write_then_fail(self, *args, **kwargs):
+        original_write_text(self, *args, **kwargs)
+        probe["wrote"] = True
+        raise RuntimeError("核心步驟輸出寫入失敗")
+
+    monkeypatch.setattr(e2e.Path, "write_text", partial_write_then_fail)
+
+    out_path = tmp_path / "output.json"
+    with pytest.raises(RuntimeError, match="核心步驟輸出寫入失敗"):
+        e2e.main(["--quiet", "--out", str(out_path)])
+
+    assert probe["entered"] is True
+    assert probe["exited"] is True
+    assert not probe["path"].exists()
+    assert not out_path.exists()
+    assert Path.cwd() == original_cwd
+
+
+def test_main_core_summary_print_exception_restores_workflow_state(monkeypatch):
+    import scripts.run_core_flow_e2e as e2e
+
+    original_cwd = Path.cwd()
+    original_print = builtins.print
+
+    result = {
+        "runtime": {"platform": "Windows", "python_version": "3.11.9"},
+        "comparable_digest": "digest" * 8,
+        "spec_ok": True,
+        "spec_failures": [],
+        "comparable": {
+            "evaluation": {
+                "summary": {"average_score": 79.0},
+                "canonical_digest": "canonical" * 8,
+            },
+            "gatekeeper": {"valid_prompt": {"passed": True}},
+        },
+        "exit_code": 0,
+    }
+    monkeypatch.setattr(e2e, "run_e2e", lambda: result)
+
+    calls = {"count": 0}
+
+    def fail_on_second_print(*args, **kwargs):
+        calls["count"] += 1
+        if calls["count"] == 2:
+            raise RuntimeError("核心步驟摘要列印失敗")
+        return original_print(*args, **kwargs)
+
+    monkeypatch.setattr(builtins, "print", fail_on_second_print)
+
+    with pytest.raises(RuntimeError, match="核心步驟摘要列印失敗"):
+        e2e.main([])
+
+    assert calls["count"] == 2
     assert Path.cwd() == original_cwd
 
 
