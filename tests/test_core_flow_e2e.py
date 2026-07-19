@@ -97,3 +97,45 @@ def test_run_core_flow_e2e_cli_writes_out(tmp_path):
     summary = json.loads(proc.stdout.strip().splitlines()[-1])
     assert summary["spec_ok"] is True
     assert summary["comparable_digest"] == payload["comparable_digest"]
+
+
+def test_main_relative_out_creates_missing_parent(monkeypatch, tmp_path, capsys):
+    import scripts.run_core_flow_e2e as e2e
+
+    monkeypatch.setattr(e2e, "PROJECT_ROOT", tmp_path)
+    relative_out = Path("evidence") / "core-flow.json"
+
+    assert e2e.main(["--quiet", "--out", str(relative_out)]) == 0
+
+    payload = json.loads((tmp_path / relative_out).read_text(encoding="utf-8"))
+    summary = json.loads(capsys.readouterr().out.strip().splitlines()[-1])
+    assert payload["spec_ok"] is True
+    assert summary["comparable_digest"] == payload["comparable_digest"]
+
+
+def test_main_cleanup_ignores_created_parent_rmdir_error(monkeypatch, tmp_path):
+    import scripts.run_core_flow_e2e as e2e
+
+    monkeypatch.setattr(e2e, "PROJECT_ROOT", tmp_path)
+    relative_out = Path("evidence") / "core-flow.json"
+    out_path = tmp_path / relative_out
+    original_write_text = e2e.Path.write_text
+    original_rmdir = e2e.Path.rmdir
+
+    def partial_write_then_fail(self, *args, **kwargs):
+        original_write_text(self, *args, **kwargs)
+        raise RuntimeError("核心步驟輸出寫入失敗")
+
+    def fail_only_output_parent_rmdir(self):
+        if self == out_path.parent:
+            raise OSError("輸出目錄仍被使用")
+        return original_rmdir(self)
+
+    monkeypatch.setattr(e2e.Path, "write_text", partial_write_then_fail)
+    monkeypatch.setattr(e2e.Path, "rmdir", fail_only_output_parent_rmdir)
+
+    with pytest.raises(RuntimeError, match="核心步驟輸出寫入失敗"):
+        e2e.main(["--quiet", "--out", str(relative_out)])
+
+    assert not out_path.exists()
+    assert out_path.parent.exists()
