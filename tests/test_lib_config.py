@@ -924,13 +924,13 @@ def _set_dotted_key(cfg, dotted_key, value):
     return cfg
 
 
-@pytest.mark.parametrize("field", _ALL_POSITIVE_FIELDS)
+@pytest.mark.parametrize("field", _ALL_POSITIVE_FIELDS, ids=_ALL_POSITIVE_FIELDS)
 @pytest.mark.parametrize(
     "val_name,val,err_pat",
     _VALIDATE_CONFIG_INVALID_VALUES,
     ids=[v[0] for v in _VALIDATE_CONFIG_INVALID_VALUES],
 )
-def test_validate_config_rejects_invalid_positive_field(field, val_name, val, err_pat):
+def test_validate_config_rejects_each_positive_rule_invalid_value(field, val_name, val, err_pat):
     """直接呼叫 validate_config：每個正數欄位對 0/負數/NaN/+inf/-inf 必須拋 ValueError。
 
     參數化確保 pytest 對「欄位 × 非法值」逐一報告，而非僅有整體通過數。
