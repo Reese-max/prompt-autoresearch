@@ -1,4 +1,5 @@
 import json
+import os
 from pathlib import Path
 
 import pytest
@@ -781,3 +782,105 @@ def test_config_json_wrong_type_for_url_rejected_and_falls_back(tmp_path):
 
     with pytest.raises(ValueError, match="api.url.*型別不符"):
         config.get_all()
+
+
+# ── 參數化負面測試：所有 _POSITIVE_KEYS 欄位在 env var / config.json / _DEFAULTS 出現 nan/inf/0/負數必須拋 ValueError ──
+
+_POSITIVE_FIELDS_WITH_ENV = [
+    ("AUTORESEARCH_API_TIMEOUT", "api.timeout"),
+    ("AUTORESEARCH_SMOKE_PARALLEL", "parallel.smoke"),
+    ("AUTORESEARCH_DEV_PARALLEL", "parallel.dev"),
+    ("AUTORESEARCH_HOLDOUT_PARALLEL", "parallel.holdout"),
+    ("AUTORESEARCH_MAX_CANDIDATE_LENGTH", "thresholds.max_candidate_length"),
+]
+
+_POSITIVE_FIELDS_NO_ENV = [
+    ("api.retry", {"api": {"retry": None}}),
+    ("api.rate_limit.max_concurrent", {"api": {"rate_limit": {"max_concurrent": None}}}),
+    ("api.rate_limit.min_interval_ms", {"api": {"rate_limit": {"min_interval_ms": None}}}),
+    ("archive.max_versions", {"archive": {"max_versions": None}}),
+    ("multi_candidate.count", {"multi_candidate": {"count": None}}),
+]
+
+_INVALID_NUMERIC_VALUES = [
+    ("nan", float("nan")),
+    ("inf", float("inf")),
+    ("-inf", float("-inf")),
+    ("zero", 0),
+    ("negative", -1),
+]
+
+
+@pytest.mark.parametrize("env_key,field", _POSITIVE_FIELDS_WITH_ENV)
+@pytest.mark.parametrize("val_name,val", _INVALID_NUMERIC_VALUES)
+def test_env_var_invalid_numeric_rejected(env_key, field, val_name, val, tmp_path, monkeypatch):
+    """環境變數為 nan/inf/-inf/0/負數時，必須被 validate_config 拒絕。"""
+    _set_config_path(tmp_path / "not-exist.json")
+    config._CONFIG = None
+    if isinstance(val, float) and (val != val or val in (float("inf"), float("-inf"))):
+        env_val = {"nan": "nan", "inf": "inf", "-inf": "-inf"}[val_name]
+    else:
+        env_val = str(val)
+    monkeypatch.setenv(env_key, env_val)
+
+    with pytest.raises(ValueError):
+        config.get_all()
+
+    config._CONFIG = None
+    monkeypatch.delenv(env_key, raising=False)
+
+
+@pytest.mark.parametrize("field,template", _POSITIVE_FIELDS_NO_ENV)
+@pytest.mark.parametrize("val_name,val", [("zero", 0), ("negative", -1)])
+def test_config_json_invalid_numeric_rejected(field, template, val_name, val, tmp_path):
+    """config.json 為 0/負數時，必須被 validate_config 拒絕。"""
+    config._CONFIG = None
+    import copy
+    cfg_data = copy.deepcopy(template)
+    parts = field.split(".")
+    d = cfg_data
+    for p in parts[:-1]:
+        d = d[p]
+    d[parts[-1]] = val
+
+    config_file = tmp_path / "config.json"
+    config_file.write_text(json.dumps(cfg_data), encoding="utf-8")
+    _set_config_path(config_file)
+
+    with pytest.raises(ValueError, match=field.replace(".", r"\.") + r".*必須為正數"):
+        config.get_all()
+
+    config._CONFIG = None
+
+
+def test_validate_config_direct_nan_inf_rejected():
+    """直接呼叫 validate_config 傳入 nan/inf/-inf 必須被拒絕（覆蓋無 env var 的欄位）。"""
+    import copy
+    import math
+    for field, template in _POSITIVE_FIELDS_NO_ENV:
+        for val_name, val in [("nan", float("nan")), ("inf", float("inf")), ("-inf", float("-inf"))]:
+            cfg = copy.deepcopy(config._DEFAULTS)
+            parts = field.split(".")
+            d = cfg
+            for p in parts[:-1]:
+                d = d[p]
+            d[parts[-1]] = val
+            with pytest.raises(ValueError, match=field.replace(".", r"\.") + r".*不允許 NaN 或 inf"):
+                config.validate_config(cfg)
+
+
+def test_validate_config_direct_zero_negative_rejected():
+    """直接呼叫 validate_config 傳入 0/負數必須被拒絕（覆蓋所有 _POSITIVE_KEYS）。"""
+    import copy
+    # Use field names (second element of tuples) for both lists
+    field_names = [f for _, f in _POSITIVE_FIELDS_WITH_ENV] + [f for f, _ in _POSITIVE_FIELDS_NO_ENV]
+    for field in field_names:
+        for val in [0, -1, -100]:
+            cfg = copy.deepcopy(config._DEFAULTS)
+            parts = field.split(".")
+            d = cfg
+            for p in parts[:-1]:
+                d = d[p]
+            d[parts[-1]] = val
+            with pytest.raises(ValueError, match=field.replace(".", r"\.") + r".*必須為正數"):
+                config.validate_config(cfg)
