@@ -81,6 +81,20 @@ def test_nan_inf_env_var_raises_value_error(monkeypatch):
     assert "不允許 NaN 或 inf" in str(exc.value)
 
 
+@pytest.mark.parametrize(
+    "value",
+    ["nan", "inf", "-inf", "-1", "0", "", "   "],
+    ids=["nan", "inf", "neg-inf", "negative", "zero", "empty", "whitespace"],
+)
+def test_api_timeout_invalid_env_values_raise_value_error_on_get(monkeypatch, value):
+    """AUTORESEARCH_API_TIMEOUT 各種非法值經 get() 均應拋出 ValueError。"""
+    monkeypatch.setenv("AUTORESEARCH_API_TIMEOUT", value)
+    config._CONFIG = None
+
+    with pytest.raises(ValueError):
+        config.get("api", "timeout")
+
+
 def test_zero_or_negative_env_var_raises_value_error(monkeypatch):
     """C11: 正數邊界 (0/負數) → ValueError，訊息含「必須為正數」。"""
     monkeypatch.setenv("AUTORESEARCH_MAX_CANDIDATE_LENGTH", "0")
