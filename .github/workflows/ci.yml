@@ -90,8 +90,8 @@ jobs:
             uname -a
             cat /etc/os-release
             python --version
-            printf '%s\n' 'COMMAND=python -m pytest tests/ -q --deselect tests/test_architecture_surface.py::ArchitectureSurfaceTests::test_experiment_report_snapshot_contract'
-            python -m pytest tests/ -q --deselect tests/test_architecture_surface.py::ArchitectureSurfaceTests::test_experiment_report_snapshot_contract
+            printf '%s\n' 'COMMAND=python -m pytest tests/ -q'
+            python -m pytest tests/ -q
             exit_code=$?
             printf 'EXIT_CODE=%s\n' "$exit_code"
             exit "$exit_code"

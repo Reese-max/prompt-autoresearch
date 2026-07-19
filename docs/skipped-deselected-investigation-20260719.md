@@ -1,72 +1,43 @@
-# 2 skipped／1 deselected 測試調查
+# 2 skipped／1 deselected 驗收處理紀錄
 
 日期：2026-07-19
 
 ## 結論
 
-目前的 2 個 skipped 都是明確的平台條件，不是失敗；在同一份 worktree 的 Linux／WSL 執行後均通過。1 個 deselected 是命令列 `--deselect` 暫時排除，直接執行與完整套件執行都通過。沒有修改產品碼、測試碼或 skip 條件。
+三個案例都不在核心 E2E 失敗鏈路：`scripts/run_core_flow_e2e.py` 的測試在
+`tests/test_core_flow_e2e.py`，而下列案例分別是平台相容性與架構快照契約。
 
-| 類型 | 測試 | 條件／來源 | 補跑結果 |
+| 類型 | 測試 | 決策 | 可驗證理由 |
 |---|---|---|---|
-| skipped | `tests/test_product_diff_audit.py::test_git_status_kwargs_sets_env_for_windows_gitdir` | `os.name == "nt"` 時跳過；案例驗證非 Windows 下的 `GIT_DIR`／`GIT_WORK_TREE` 注入 | Linux／Python 3.12.3：`PASSED` |
-| skipped | `tests/test_cross_platform_error_handling.py::TestPermissionErrors::test_write_into_readonly_directory_raises_oserror` | `PLATFORM == "Windows"` 時跳過；目錄 `chmod` 語意在 Windows 不穩定，唯讀檔案例另行覆蓋 | Linux／Python 3.12.3：`PASSED` |
-| deselected | `tests/test_architecture_surface.py::ArchitectureSurfaceTests::test_experiment_report_snapshot_contract` | 僅由 CLI `--deselect` 排除；`pytest.ini` 沒有固定 deselect 設定 | Windows／Python 3.11.9：`PASSED` |
+| deselected | `tests/test_architecture_surface.py::ArchitectureSurfaceTests::test_experiment_report_snapshot_contract` | 移除 L311 的 `--deselect` | 單獨執行通過，且無平台條件；保留排除只會讓專用驗收與預設套件不一致。 |
+| skipped | `tests/test_product_diff_audit.py::test_git_status_kwargs_sets_env_for_windows_gitdir` | 保留 Windows skip | 僅驗證非 Windows 程序的 `GIT_DIR`／`GIT_WORK_TREE` 注入；Linux 分支實跑通過。 |
+| skipped | `tests/test_cross_platform_error_handling.py::TestPermissionErrors::test_write_into_readonly_directory_raises_oserror` | 保留 Windows skip | 僅驗證 POSIX 目錄 `chmod`；Windows 的同檔唯讀檔案例覆蓋可攜的 `OSError` 契約，Linux 分支實跑通過。 |
+
+兩個保留的 skip 都不是核心 E2E 失敗分支，因此不強迫在 Windows 執行不適用的
+平台語意；它們各自在適用的 Linux 路徑已被驗證。
 
 ## 可重現證據
 
-### Windows／Python 3.11.9
-
-完整套件（不排除測試）：
-
 ```text
-python -m pytest tests/ -q --no-cov -rs
-636 passed, 2 skipped in 13.54s
+python -m pytest tests/ -q
+678 passed, 2 skipped in 63.29s
+
+python -m pytest tests/test_architecture_surface.py::ArchitectureSurfaceTests::test_experiment_report_snapshot_contract -q --no-cov
+1 passed in 0.07s
+
+python -m pytest tests/ -q --no-cov -rs --deselect tests/test_architecture_surface.py::ArchitectureSurfaceTests::test_experiment_report_snapshot_contract
+677 passed, 2 skipped, 1 deselected in 26.84s
+
+wsl.exe --cd /mnt/d/Users/Administrator/Desktop/autodev-ng/data/prompt-autoresearch/worktrees/3adecb67 --exec python3 -m pytest tests/test_product_diff_audit.py::test_git_status_kwargs_sets_env_for_windows_gitdir tests/test_cross_platform_error_handling.py::TestPermissionErrors::test_write_into_readonly_directory_raises_oserror -q --no-cov -rs
+2 passed in 1.77s
 ```
 
-兩個 skip 的摘要為：
+Windows skip 摘要由含 `--deselect` 的命令輸出確認：
 
 ```text
-SKIPPED [1] tests\test_cross_platform_error_handling.py:274
-SKIPPED [1] tests\test_product_diff_audit.py:183
+tests\\test_cross_platform_error_handling.py:274: Windows 對目錄 chmod 行為不一致，改由唯讀檔案例覆蓋
+tests\\test_product_diff_audit.py:183: 此案例驗證非 Windows 程序啟動行為
 ```
 
-重現含 1 個 deselected 的歷史命令：
-
-```text
-python -m pytest tests/ -q --no-cov --deselect tests/test_architecture_surface.py::ArchitectureSurfaceTests::test_experiment_report_snapshot_contract -rs
-635 passed, 2 skipped, 1 deselected in 20.63s
-```
-
-直接補跑 deselected 案例：
-
-```text
-python -m pytest tests/test_architecture_surface.py::ArchitectureSurfaceTests::test_experiment_report_snapshot_contract -v --no-cov
-1 passed in 0.09s
-```
-
-### Linux／WSL／Python 3.12.3
-
-直接補跑 Windows 上的兩個 skip 案例：
-
-```text
-wsl.exe --exec python3 -m pytest tests/test_product_diff_audit.py::test_git_status_kwargs_sets_env_for_windows_gitdir tests/test_cross_platform_error_handling.py::TestPermissionErrors::test_write_into_readonly_directory_raises_oserror -v --no-cov -rs
-2 passed in 1.02s
-```
-
-同一份 worktree 的完整套件：
-
-```text
-wsl.exe --exec python3 -m pytest tests/ -q --no-cov -rs
-638 passed in 55.52s
-```
-
-Linux 完整套件沒有 skipped 或 deselected；Windows 的 `636 passed + 2 skipped` 與 Linux 的 `638 passed` 差額正好是兩個平台條件案例，證明它們已由非 Windows 路徑實際覆蓋，而非跨平台測試缺口。
-
-## 判定
-
-- `test_git_status_kwargs_sets_env_for_windows_gitdir` 的非 Windows 分支已在 Linux 執行並通過；Windows 路徑不會錯誤執行不適用的 `GIT_DIR` 注入測試。
-- `test_write_into_readonly_directory_raises_oserror` 的 POSIX 目錄權限分支已在 Linux 執行並通過；Windows 以同檔唯讀檔案例覆蓋可攜的 `OSError` 契約。
-- `test_experiment_report_snapshot_contract` 不是平台專屬測試；Windows 直接執行通過，且 Linux 完整套件也納入收集並通過。
-- `.github/workflows/ci.yml` 的 `Run full automated test suite` 矩陣入口沒有以 `--deselect` 執行；另有 L311 acceptance 步驟明確使用該 CLI 選項。本報告只宣稱本次本機 Windows／WSL 證據，未把它擴寫成九個遠端 runner 都已重跑。
-
-本次調查只更新本報告；未修改 `BACKLOG.md`，也未新增任務。
+L311 現在直接執行 `python -m pytest tests/ -q`，因此不再產生該 deselected
+結果；九格矩陣的 M6 原本也以完整 `tests/` 套件執行。
