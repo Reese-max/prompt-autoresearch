@@ -87,12 +87,14 @@ def test_nan_inf_env_var_raises_value_error(monkeypatch):
     ids=["nan", "inf", "neg-inf", "negative", "zero", "empty", "whitespace"],
 )
 def test_api_timeout_invalid_env_values_raise_value_error_on_get(monkeypatch, value):
-    """AUTORESEARCH_API_TIMEOUT 各種非法值經 get() 均應拋出 ValueError。"""
+    """AUTORESEARCH_API_TIMEOUT 各種非法值經 get() 均應拋出 ValueError，不能回退預設。"""
     monkeypatch.setenv("AUTORESEARCH_API_TIMEOUT", value)
     config._CONFIG = None
 
     with pytest.raises(ValueError):
         config.get("api", "timeout")
+
+    assert config._CONFIG is None, "驗證失敗後 _CONFIG 必須為 None，禁止默默回退到預設值"
 
 
 def test_zero_or_negative_env_var_raises_value_error(monkeypatch):
