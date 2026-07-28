@@ -1,0 +1,78 @@
+{
+  "task": "保存兩次執行完整命令、依賴鎖定檔、環境資訊、輸入雜湊、輸出檔案及差異報告",
+  "timestamp": "20260728-105855",
+  "reproducibility": "REPRODUCIBLE",
+  "environment": {
+    "python": "3.11.9 (tags/v3.11.9:de54cf5, Apr  2 2024, 10:12:12) [MSC v.1938 64 bit (AMD64)]",
+    "executable": "C:\\Users\\Administrator\\AppData\\Local\\hermes\\hermes-agent\\venv\\Scripts\\python.exe",
+    "platform": "Windows-10-10.0.26200-SP0",
+    "arch": "AMD64",
+    "hashseed": "0",
+    "time": "2026-07-28T10:58:55.953001",
+    "commit": "2783c523994edbb4f2dccbca6274c25fd61cca0f"
+  },
+  "dependency_hashes": {
+    "requirements.lock": "63f160bd3d2be5fcef940ffc27965ab0aec374ebff6c52dcdb20cdeeb89922b2"
+  },
+  "source_hash_count": 25,
+  "source_hashes_sample": {
+    "api/__init__.py": "fbf845da479786c49c23526fd26b2de4356af2d11fa03d5f5fa1dcce1d72cd49",
+    "api/continuous_optimizer.py": "b1810d0e98fb5c4329952379a8a93dbbbbac5fe1dbf45296a6c2dc46a538d97e",
+    "api/feedback.py": "9973be5fd7fd5264a320129125d7da88152e9b518a825c90f0844f56481242e7",
+    "api/server.py": "50d0705e6897c8f8d2e0742fde1ef2ee2c819207b14fcf5052a06a5c4d974a1c",
+    "lib/__init__.py": "d1846b937b63fc5b658945b0374af93e45f7b6b06d18c33875e22e17ec482a2c",
+    "lib/api.py": "ded26788c7f64af8824ec6a0941c6abcdca08385e99a151ca9c06cb3c840fad2",
+    "lib/config.py": "59ceef9517834fa4ffce31b22e13362d7bd1c5f9e454474d884c001fe74816c3",
+    "lib/io.py": "8ed3d35f61de99a0801910251522c1c1c9f0209c2794ef6a726422f402020863",
+    "lib/metrics.py": "c1e9ee8a6652db6118a463e4c63c789b31e2126db47c45a04e2cf529426efd0c",
+    "scripts/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "run1": {
+    "exit_code": 0,
+    "summary": "======================= 930 passed, 2 skipped in 49.31s =======================",
+    "cmd": [
+      "C:\\Users\\Administrator\\AppData\\Local\\hermes\\hermes-agent\\venv\\Scripts\\python.exe",
+      "-m",
+      "pytest",
+      "--cov=lib",
+      "--cov=api",
+      "--cov=scripts",
+      "--cov-report=xml",
+      "--cov-report=html",
+      "--cov-fail-under=0"
+    ]
+  },
+  "run2": {
+    "exit_code": 0,
+    "summary": "======================= 930 passed, 2 skipped in 43.44s =======================",
+    "cmd": [
+      "C:\\Users\\Administrator\\AppData\\Local\\hermes\\hermes-agent\\venv\\Scripts\\python.exe",
+      "-m",
+      "pytest",
+      "--cov=lib",
+      "--cov=api",
+      "--cov=scripts",
+      "--cov-report=xml",
+      "--cov-report=html",
+      "--cov-fail-under=0"
+    ]
+  },
+  "comparison": {
+    "exit_code": 0,
+    "report": {
+      "dir_a": "C:\\Users\\ADMINI~1\\AppData\\Local\\Temp\\run1_b7s9396y\\run1",
+      "dir_b": "C:\\Users\\ADMINI~1\\AppData\\Local\\Temp\\run2_qfo8h6g1\\run2",
+      "has_differences": false,
+      "sections": {
+        "coverage": {
+          "identical": true,
+          "message": "coverage identical"
+        },
+        "artifacts": {
+          "identical": true,
+          "diffs": {}
+        }
+      }
+    }
+  }
+}

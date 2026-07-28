@@ -1,0 +1,95 @@
+============================= test session starts =============================
+platform win32 -- Python 3.11.9, pytest-9.1.1, pluggy-1.6.0
+rootdir: D:\Users\Administrator\Desktop\autodev-ng\data\prompt-autoresearch\worktrees\f4b5879b
+configfile: pytest.ini
+testpaths: tests
+plugins: anyio-4.14.2, langsmith-0.8.9, asyncio-1.4.0, cov-7.1.0, split-0.11.0, timeout-2.4.0, xdist-3.8.0
+asyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collected 932 items
+
+tests\test_analyze_runs.py ...............                               [  1%]
+tests\test_api_feedback.py ...................                           [  3%]
+tests\test_api_server.py ..................................              [  7%]
+tests\test_api_server_gaps.py ....                                       [  7%]
+tests\test_architecture_surface.py ......                                [  8%]
+tests\test_assertion_guard.py ...                                        [  8%]
+tests\test_backfill_candidate_scorecards.py .................            [ 10%]
+tests\test_branch_coverage_gaps.py .....                                 [ 11%]
+tests\test_cleanup_regressions.py .....                                  [ 11%]
+tests\test_compare_runs.py .......................                       [ 14%]
+tests\test_compare_test_runs.py ..........................               [ 16%]
+tests\test_config_accessor_isolation.py ...                              [ 17%]
+tests\test_config_boolean_validation.py .....                            [ 17%]
+tests\test_config_integration.py ......................................  [ 21%]
+tests\test_config_mixed_parameterized.py ............                    [ 23%]
+tests\test_config_semantic.py ...................................        [ 26%]
+tests\test_config_special_branch.py ...............................      [ 30%]
+tests\test_continuous_optimizer.py ......                                [ 30%]
+tests\test_core_e2e_failure_paths.py ............................        [ 33%]
+tests\test_core_flow_e2e.py ..........                                   [ 34%]
+tests\test_cross_platform.py ........................................... [ 39%]
+.....................................                                    [ 43%]
+tests\test_cross_platform_error_handling.py .............s.......        [ 45%]
+tests\test_evaluate.py ............................                      [ 48%]
+tests\test_evaluate_routed.py ...............                            [ 50%]
+tests\test_experiment_report.py .......................                  [ 52%]
+tests\test_gatekeeper.py .........................................       [ 57%]
+tests\test_generate_questions.py ..                                      [ 57%]
+tests\test_integration_server_feedback.py ..................             [ 59%]
+tests\test_leaderboard.py ........                                       [ 60%]
+tests\test_lib_api.py .........                                          [ 61%]
+tests\test_lib_api_error_contract.py ......                              [ 61%]
+tests\test_lib_api_external_failures.py ...                              [ 62%]
+tests\test_lib_api_http_status_codes.py ........                         [ 62%]
+tests\test_lib_api_line37_branch.py .                                    [ 63%]
+tests\test_lib_api_positive_verify.py ..........                         [ 64%]
+tests\test_lib_api_rate_wait_branch.py .......                           [ 64%]
+tests\test_lib_config.py ............................................... [ 69%]
+........................................................................ [ 77%]
+....................................................                     [ 83%]
+tests\test_lib_config_cache_stability.py ...                             [ 83%]
+tests\test_lib_config_regression.py .................................... [ 87%]
+..........                                                               [ 88%]
+tests\test_lib_io.py .......                                             [ 89%]
+tests\test_lib_metrics.py .....                                          [ 89%]
+tests\test_preflight.py ................                                 [ 91%]
+tests\test_product_diff_audit.py ...s.                                   [ 92%]
+tests\test_script_entrypoints.py ................................        [ 95%]
+tests\test_untested_entrypoints.py ..................................... [ 99%]
+.....                                                                    [100%]
+
+=============================== tests coverage ================================
+_______________ coverage: platform win32, python 3.11.9-final-0 _______________
+
+Name                                       Stmts   Miss Branch BrPart  Cover   Missing
+--------------------------------------------------------------------------------------
+api\__init__.py                                0      0      0      0   100%
+api\continuous_optimizer.py                   82      0     16      0   100%
+api\feedback.py                               85      0     36      0   100%
+api\server.py                                219      0     46      0   100%
+lib\__init__.py                                0      0      0      0   100%
+lib\api.py                                    63      0     20      0   100%
+lib\config.py                                123      1     68      1    99%   213
+lib\io.py                                     47      0     14      0   100%
+lib\metrics.py                                13      0      2      0   100%
+scripts\__init__.py                            0      0      0      0   100%
+scripts\analyze_runs.py                       92      0     42      0   100%
+scripts\backfill_candidate_scorecards.py      66      0     22      0   100%
+scripts\collect_execution_evidence.py        153    153     40      0     0%   7-240
+scripts\compare_runs.py                      159      0     56      0   100%
+scripts\compare_test_runs.py                 141      6     64      4    95%   89-90, 184, 214-215, 227
+scripts\evaluate.py                          250      0     68      0   100%
+scripts\evaluate_routed.py                   110      0     26      0   100%
+scripts\experiment_report.py                 167      0     68      0   100%
+scripts\gatekeeper.py                         82      0     48      0   100%
+scripts\generate_questions.py                 21      0      8      0   100%
+scripts\leaderboard.py                        43      0     18      0   100%
+scripts\preflight.py                          93      0     26      0   100%
+scripts\run_core_flow_e2e.py                 158      0     42      0   100%
+scripts\run_test_matrix.py                    80      0     16      0   100%
+scripts\verify_reproducibility.py             55     55     18      0     0%   14-120
+--------------------------------------------------------------------------------------
+TOTAL                                       2302    215    764      5    91%
+Coverage HTML written to dir htmlcov
+Coverage XML written to file coverage.xml
+======================= 930 passed, 2 skipped in 43.44s =======================

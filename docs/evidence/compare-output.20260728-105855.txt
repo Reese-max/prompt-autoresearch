@@ -1,0 +1,15 @@
+{
+  "dir_a": "C:\\Users\\ADMINI~1\\AppData\\Local\\Temp\\run1_b7s9396y\\run1",
+  "dir_b": "C:\\Users\\ADMINI~1\\AppData\\Local\\Temp\\run2_qfo8h6g1\\run2",
+  "has_differences": false,
+  "sections": {
+    "coverage": {
+      "identical": true,
+      "message": "coverage identical"
+    },
+    "artifacts": {
+      "identical": true,
+      "diffs": {}
+    }
+  }
+}
