@@ -8,6 +8,8 @@ jobs:
   test:
     name: ${{ matrix.id }} (${{ matrix.os }}, Python ${{ matrix.python_version }})
     runs-on: ${{ matrix.os }}
+    # 矩陣測試為必要檢查，任何組合失敗即阻擋合併，禁止 continue-on-error。
+    continue-on-error: false
     strategy:
       # 任一組合失敗時，該 job 失敗會使整個 workflow 失敗，進而阻擋合併。
       # fail-fast: false 僅讓其餘組合跑完，方便一次看齊所有平台結果。
