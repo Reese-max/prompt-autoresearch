@@ -118,7 +118,7 @@ def _matrix_rows(output):
     [
         ("Darwin", "3.10.14", 3, 10, ("macOS", "3.10.14", "3.10")),
         ("Linux", "3.11.9", 3, 11, ("Linux", "3.11.9", "3.11")),
-        ("macOS", "3.12.4", 3, 12, ("macOS", "3.12.4", "3.12")),
+        ("Windows", "3.12.4", 3, 12, ("Windows", "3.12.4", "3.12")),
     ],
 )
 def test_test_matrix_runtime_normalizes_platform_and_version(
@@ -137,7 +137,7 @@ def test_test_matrix_runtime_normalizes_platform_and_version(
     ("runtime_platform", "runtime_minor"),
     [
         (platform_name, python_minor)
-        for platform_name in ("Linux", "macOS")
+        for platform_name in ("Linux", "macOS", "Windows")
         for python_minor in ("3.10", "3.11", "3.12")
     ],
 )
@@ -196,14 +196,14 @@ def test_test_matrix_returns_first_failed_test_set_and_continues(monkeypatch, ca
 def test_test_matrix_rejects_runtime_version_mismatch(monkeypatch, capsys):
     import scripts.run_test_matrix as matrix
 
-    monkeypatch.setattr(matrix, "_runtime", lambda: ("macOS", "3.11.9", "3.11"))
+    monkeypatch.setattr(matrix, "_runtime", lambda: ("Windows", "3.11.9", "3.11"))
     monkeypatch.setattr(
         matrix.subprocess,
         "run",
         lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("不應執行測試")),
     )
 
-    assert matrix.main(["--platform", "macOS", "--python-version", "3.12"]) == 2
+    assert matrix.main(["--platform", "Windows", "--python-version", "3.12"]) == 2
     rows = _matrix_rows(capsys.readouterr().out)
     assert [(row["test_set"], row["exit_code"]) for row in rows] == [("M1", 2), ("ALL", 2)]
 
@@ -211,7 +211,7 @@ def test_test_matrix_rejects_runtime_version_mismatch(monkeypatch, capsys):
 def test_test_matrix_rejects_invalid_python_version(monkeypatch, capsys):
     import scripts.run_test_matrix as matrix
 
-    monkeypatch.setattr(matrix, "_runtime", lambda: ("macOS", "3.11.9", "3.11"))
+    monkeypatch.setattr(matrix, "_runtime", lambda: ("Windows", "3.11.9", "3.11"))
     monkeypatch.setattr(
         matrix.subprocess,
         "run",
@@ -219,7 +219,7 @@ def test_test_matrix_rejects_invalid_python_version(monkeypatch, capsys):
     )
 
     with pytest.raises(SystemExit) as exc_info:
-        matrix.main(["--platform", "macOS", "--python-version", "3.13"])
+        matrix.main(["--platform", "Windows", "--python-version", "3.13"])
 
     assert exc_info.value.code == 2
     assert "invalid choice: '3.13'" in capsys.readouterr().err
@@ -326,10 +326,10 @@ def test_test_matrix_does_not_hide_other_preflight_errors(monkeypatch, capsys):
             return subprocess.CompletedProcess(command, 1, json.dumps(invalid_preflight), "")
         return subprocess.CompletedProcess(command, 0, "", "")
 
-    monkeypatch.setattr(matrix, "_runtime", lambda: ("macOS", "3.11.9", "3.11"))
+    monkeypatch.setattr(matrix, "_runtime", lambda: ("Windows", "3.11.9", "3.11"))
     monkeypatch.setattr(matrix.subprocess, "run", fake_run)
 
-    assert matrix.main(["--platform", "macOS", "--python-version", "3.11"]) == 1
+    assert matrix.main(["--platform", "Windows", "--python-version", "3.11"]) == 1
     rows = _matrix_rows(capsys.readouterr().out)
     assert rows[0]["test_set"] == "M1" and rows[0]["exit_code"] == 1
     assert rows[-1]["test_set"] == "ALL" and rows[-1]["exit_code"] == 1

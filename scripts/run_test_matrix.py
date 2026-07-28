@@ -11,7 +11,7 @@ from pathlib import Path
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-SUPPORTED_PLATFORMS = ("Linux", "macOS")
+SUPPORTED_PLATFORMS = ("Linux", "macOS", "Windows")
 SUPPORTED_PYTHON_VERSIONS = ("3.10", "3.11", "3.12")
 M1_TESTS = ("runtime", "pytest --version", "scripts/preflight.py --json")
 PYTEST_SETS = (

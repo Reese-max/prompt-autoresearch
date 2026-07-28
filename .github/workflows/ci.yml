@@ -6,13 +6,53 @@ on:
 
 jobs:
   test:
-    name: ${{ matrix.os }}-py${{ matrix.python_version }}
+    name: ${{ matrix.id }} (${{ matrix.os }}, Python ${{ matrix.python_version }})
     runs-on: ${{ matrix.os }}
     strategy:
+      # 任一組合失敗時，該 job 失敗會使整個 workflow 失敗，進而阻擋合併。
+      # fail-fast: false 僅讓其餘組合跑完，方便一次看齊所有平台結果。
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest]
-        python_version: ["3.10", "3.11", "3.12"]
+        include:
+          # Linux × 正式支援之 Python 版本
+          - id: L310
+            os: ubuntu-latest
+            platform: Linux
+            python_version: "3.10"
+          - id: L311
+            os: ubuntu-latest
+            platform: Linux
+            python_version: "3.11"
+          - id: L312
+            os: ubuntu-latest
+            platform: Linux
+            python_version: "3.12"
+          # macOS × 正式支援之 Python 版本
+          - id: M310
+            os: macos-latest
+            platform: macOS
+            python_version: "3.10"
+          - id: M311
+            os: macos-latest
+            platform: macOS
+            python_version: "3.11"
+          - id: M312
+            os: macos-latest
+            platform: macOS
+            python_version: "3.12"
+          # Windows × 正式支援之 Python 版本
+          - id: W310
+            os: windows-latest
+            platform: Windows
+            python_version: "3.10"
+          - id: W311
+            os: windows-latest
+            platform: Windows
+            python_version: "3.11"
+          - id: W312
+            os: windows-latest
+            platform: Windows
+            python_version: "3.12"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -22,5 +62,240 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           python -m pip install -r requirements.txt -r requirements-dev.txt
-      - name: Run tests
-        run: python -m pytest tests/ -q
+          python -m pip check
+      # 每個矩陣目標先輸出可獨立辨識的環境指紋，避免單一成功冒充全量。
+      - name: Record environment (${{ matrix.id }})
+        shell: bash
+        env:
+          CI_MATRIX_ID: ${{ matrix.id }}
+          CI_MATRIX_PLATFORM: ${{ matrix.platform }}
+          CI_MATRIX_PYTHON: ${{ matrix.python_version }}
+          CI_MATRIX_RUNNER_OS: ${{ matrix.os }}
+        run: |
+          python --version
+          python -m pip --version
+          python -c "import json,os,platform,sys; p={'matrix_id':os.environ['CI_MATRIX_ID'],'os':os.environ['CI_MATRIX_PLATFORM'],'runner_os':os.environ['CI_MATRIX_RUNNER_OS'],'python_requested':os.environ['CI_MATRIX_PYTHON'],'python_version':platform.python_version(),'python_executable':sys.executable}; print('MATRIX_ENV '+json.dumps(p,ensure_ascii=False))"
+      - name: Run Linux acceptance command (L311)
+        if: matrix.id == 'L311'
+        shell: bash
+        env:
+          CI_ACCEPTANCE_LOG: acceptance-${{ matrix.id }}-raw.log
+        run: |
+          set +e
+          (
+            printf 'RUNNER_NAME=%s\n' "${RUNNER_NAME:-unknown}"
+            printf 'RUNNER_OS=%s\n' "${RUNNER_OS:-unknown}"
+            printf 'RUNNER_ARCH=%s\n' "${RUNNER_ARCH:-unknown}"
+            printf 'HOSTNAME=%s\n' "${HOSTNAME:-unknown}"
+            uname -a
+            cat /etc/os-release
+            python --version
+            printf '%s\n' 'COMMAND=python -m pytest tests/ -q'
+            python -m pytest tests/ -q
+            exit_code=$?
+            printf 'EXIT_CODE=%s\n' "$exit_code"
+            exit "$exit_code"
+          ) 2>&1 | tee "$CI_ACCEPTANCE_LOG"
+          statuses=("${PIPESTATUS[@]}")
+          set -e
+          if [ "${statuses[1]}" -ne 0 ]; then
+            exit "${statuses[1]}"
+          fi
+          exit "${statuses[0]}"
+      - name: Upload Linux acceptance output (L311)
+        if: always() && matrix.id == 'L311'
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-acceptance-L311
+          path: acceptance-${{ matrix.id }}-raw.log
+          if-no-files-found: error
+      # 每個 OS × Python 組合安裝後執行完整測試套件（M1–M6，含全量 pytest）。
+      - name: Run full automated test suite (${{ matrix.id }})
+        shell: bash
+        env:
+          CI_MATRIX_ID: ${{ matrix.id }}
+          CI_MATRIX_PLATFORM: ${{ matrix.platform }}
+          CI_MATRIX_PYTHON: ${{ matrix.python_version }}
+          CI_MATRIX_RUNNER_OS: ${{ matrix.os }}
+          CI_MATRIX_REPORT_PATH: matrix-${{ matrix.platform }}-${{ matrix.python_version }}.jsonl
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          import platform
+          import subprocess
+          import sys
+
+          matrix_id = os.environ["CI_MATRIX_ID"]
+          platform_name = os.environ["CI_MATRIX_PLATFORM"]
+          python_requested = os.environ["CI_MATRIX_PYTHON"]
+          runner_os = os.environ["CI_MATRIX_RUNNER_OS"]
+          report_path = os.environ.get("CI_MATRIX_REPORT_PATH")
+          test_command = [
+              sys.executable,
+              "scripts/run_test_matrix.py",
+              "--platform",
+              platform_name,
+              "--python-version",
+              python_requested,
+          ]
+          command_display = (
+              f"python scripts/run_test_matrix.py "
+              f"--platform {platform_name} --python-version {python_requested}"
+          )
+          env_payload = {
+              "matrix_id": matrix_id,
+              "os": platform_name,
+              "runner_os": runner_os,
+              "python_requested": python_requested,
+              "python_version": platform.python_version(),
+              "test_command": command_display,
+          }
+          print("MATRIX_ENV " + json.dumps(env_payload, ensure_ascii=False), flush=True)
+          print("TEST_MATRIX_ID=" + matrix_id, flush=True)
+          print("TEST_PLATFORM=" + platform_name, flush=True)
+          print("TEST_PYTHON=" + python_requested, flush=True)
+          print("TEST_COMMAND=" + command_display, flush=True)
+
+          exit_code = subprocess.run(test_command).returncode
+          status = "PASS" if exit_code == 0 else "FAIL"
+          result = {
+              **env_payload,
+              "exit_code": exit_code,
+              "status": status,
+          }
+          print(
+              "MATRIX_TARGET_RESULT " + json.dumps(result, ensure_ascii=False),
+              flush=True,
+          )
+          if exit_code != 0:
+              print(
+                  "MATRIX_TARGET_FAIL "
+                  + json.dumps(
+                      {
+                          "matrix_id": matrix_id,
+                          "os": platform_name,
+                          "python_version": platform.python_version(),
+                          "test_command": command_display,
+                          "exit_code": exit_code,
+                      },
+                      ensure_ascii=False,
+                  ),
+                  flush=True,
+              )
+          if report_path:
+              with open(report_path, "a", encoding="utf-8") as handle:
+                  handle.write(json.dumps(result, ensure_ascii=False) + "\n")
+          raise SystemExit(exit_code)
+          PY
+      - name: Upload CI matrix evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ci-matrix-evidence-${{ matrix.platform }}-${{ matrix.python_version }}-${{ matrix.id }}
+          path: matrix-${{ matrix.platform }}-${{ matrix.python_version }}.jsonl
+          if-no-files-found: warn
+      # 驗收閘門：覆蓋率只計 scripts/ 與 api/，不得混入 lib/ 拉高總覆蓋率。
+      # pytest.ini 的 addopts 含 --cov=lib，故以 -o addopts= 覆蓋後再明確指定範圍。
+      - name: Coverage gate (scripts + api only, >=80%)
+        if: matrix.id == 'L311'
+        shell: bash
+        env:
+          CI_MATRIX_ID: ${{ matrix.id }}
+          CI_MATRIX_PLATFORM: ${{ matrix.platform }}
+          CI_MATRIX_PYTHON: ${{ matrix.python_version }}
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          import platform
+          import subprocess
+          import sys
+
+          matrix_id = os.environ["CI_MATRIX_ID"]
+          platform_name = os.environ["CI_MATRIX_PLATFORM"]
+          command_display = (
+              "python -m pytest tests -o addopts= --cov=scripts --cov=api "
+              "--cov-report=term-missing --cov-report=xml --cov-report=html "
+              "--cov-fail-under=80"
+          )
+          test_command = [
+              sys.executable,
+              "-m",
+              "pytest",
+              "tests",
+              "-o",
+              "addopts=",
+              "--cov=scripts",
+              "--cov=api",
+              "--cov-report=term-missing",
+              "--cov-report=xml",
+              "--cov-report=html",
+              "--cov-fail-under=80",
+          ]
+          print(
+              "MATRIX_ENV "
+              + json.dumps(
+                  {
+                      "matrix_id": matrix_id,
+                      "os": platform_name,
+                      "python_version": platform.python_version(),
+                      "test_command": command_display,
+                      "step": "coverage_gate",
+                  },
+                  ensure_ascii=False,
+              ),
+              flush=True,
+          )
+          exit_code = subprocess.run(test_command).returncode
+          result = {
+              "matrix_id": matrix_id,
+              "os": platform_name,
+              "python_version": platform.python_version(),
+              "test_command": command_display,
+              "step": "coverage_gate",
+              "exit_code": exit_code,
+              "status": "PASS" if exit_code == 0 else "FAIL",
+          }
+          print(
+              "MATRIX_TARGET_RESULT " + json.dumps(result, ensure_ascii=False),
+              flush=True,
+          )
+          if exit_code != 0:
+              print(
+                  "MATRIX_TARGET_FAIL " + json.dumps(result, ensure_ascii=False),
+                  flush=True,
+              )
+          raise SystemExit(exit_code)
+          PY
+      - name: Upload coverage reports
+        if: always() && matrix.id == 'L311'
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-reports-${{ matrix.id }}
+          path: |
+            coverage.xml
+            htmlcov/
+
+  # 合併必要檢查（stable check name）：
+  # - 供 branch protection / rulesets 設為 required status check
+  # - 任一 OS × Python 矩陣格失敗、取消或跳過時，本 job 失敗並阻擋合併
+  # - fail-fast: false 仍讓其餘格跑完；本 gate 以彙總結果判定
+  test-matrix-required:
+    name: test-matrix-required
+    if: always()
+    needs: [test]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require all OS × Python matrix jobs to pass
+        shell: bash
+        env:
+          MATRIX_RESULT: ${{ needs.test.result }}
+        run: |
+          set -euo pipefail
+          echo "test matrix aggregate result: ${MATRIX_RESULT}"
+          if [ "${MATRIX_RESULT}" != "success" ]; then
+            echo "::error::test-matrix-required failed (result=${MATRIX_RESULT}). Any OS or Python version combination failure blocks merge."
+            exit 1
+          fi
+          echo "All matrix combinations passed; merge gate open."
