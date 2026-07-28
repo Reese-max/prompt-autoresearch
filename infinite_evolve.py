@@ -11,6 +11,7 @@ infinite_evolve.py — Prompt AutoResearch 長跑演化控制器。
 import argparse
 import json
 import os
+import platform
 import subprocess
 import sys
 import time
@@ -193,6 +194,7 @@ def parse_args(argv=None):
     parser.add_argument("--round-timeout-seconds", type=int, default=3600)
     parser.add_argument("--route-timeout-seconds", type=int, default=1800)
     parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument("--retry-after-no-improve", type=int, default=3, help="達到 no_improve_limit 後的重試次數；0 表示停用。")
     args = parser.parse_args(argv)
     args.smoke_parallel = args.smoke_parallel or args.parallel
     args.dev_parallel = args.dev_parallel or args.parallel
@@ -207,6 +209,7 @@ def main(argv=None):
     print("  Prompt AutoResearch — 長跑自動演化")
     print(f"  max_rounds={args.max_rounds}, smoke={args.smoke_parallel}, dev={args.dev_parallel}, holdout={args.holdout_parallel}")
     print(f"  no_improve_limit={args.no_improve_limit}, same_failure_limit={args.same_failure_limit}, route_every={args.route_every}")
+    print(f"  retry_after_no_improve={args.retry_after_no_improve}")
     if args.budget_usd:
         print(f"  budget_usd={args.budget_usd}, estimated_cost_per_call={args.estimated_cost_per_call}")
     print(f"{C_PURPLE}============================================================{C_RESET}")
@@ -241,6 +244,8 @@ def main(argv=None):
     estimated_calls_total = 0
     estimated_cost_total = 0.0
     successful_promotions = 0
+    retry_count = 0
+    retry_mode = False
 
     append_jsonl(
         LOG_PATH,
@@ -351,7 +356,52 @@ def main(argv=None):
 
         stop_reason = ""
         if args.no_improve_limit and no_improve_count >= args.no_improve_limit:
-            stop_reason = f"連續 {no_improve_count} 輪未晉升"
+            if not retry_mode and args.retry_after_no_improve > 0:
+                # 進入重試模式
+                retry_mode = True
+                retry_count = 0
+                print(f"{C_YELLOW}🔄 連續 {no_improve_count} 輪未晉升，進入重試模式（最多 {args.retry_after_no_improve} 次）{C_RESET}")
+                # 調整變異策略：強制避開當前主要失敗碼
+                if failure_code:
+                    avoid_failures_next = [failure_code]
+                    print(f"{C_YELLOW}重試策略：下輪將避開主要失敗碼 {failure_code}{C_RESET}")
+                else:
+                    # 若無明確失敗碼，隨機選擇一個方向嘗試
+                    args.force_direction = ""
+                no_improve_count = 0  # 重置計數以允許重試
+                append_jsonl(
+                    LOG_PATH,
+                    {
+                        "event": "retry_mode_entered",
+                        "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
+                        "round": round_no,
+                        "reason": f"連續 {no_improve_count} 輪未晉升",
+                        "dominant_failure": failure_code,
+                        "max_retries": args.retry_after_no_improve,
+                    },
+                )
+            elif retry_mode:
+                retry_count += 1
+                if retry_count >= args.retry_after_no_improve:
+                    stop_reason = f"連續 {no_improve_count} 輪未晉升，重試 {retry_count} 次仍無改善"
+                else:
+                    # 繼續重試，調整策略
+                    print(f"{C_YELLOW}🔄 重試 {retry_count}/{args.retry_after_no_improve} 仍無改善，調整變異方向{C_RESET}")
+                    if failure_code:
+                        avoid_failures_next = [failure_code]
+                    no_improve_count = 0
+                    append_jsonl(
+                        LOG_PATH,
+                        {
+                            "event": "retry_adjust",
+                            "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
+                            "round": round_no,
+                            "retry_count": retry_count,
+                            "dominant_failure": failure_code,
+                        },
+                    )
+            else:
+                stop_reason = f"連續 {no_improve_count} 輪未晉升"
         elif args.same_failure_limit and same_failure_count >= args.same_failure_limit:
             stop_reason = f"主要失敗碼 {failure_code} 連續 {same_failure_count} 輪未解"
         elif args.budget_usd and args.estimated_cost_per_call and estimated_cost_total >= args.budget_usd:
@@ -359,6 +409,52 @@ def main(argv=None):
 
         if stop_reason:
             print(f"{C_YELLOW}⏹️ 停止條件觸發：{stop_reason}{C_RESET}")
+            
+            # 若為重試耗盡，寫入結構化結論與證據
+            if retry_mode and retry_count >= args.retry_after_no_improve:
+                convergence_report = {
+                    "event": "converged_to_baseline",
+                    "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
+                    "round": round_no,
+                    "reason": stop_reason,
+                    "successful_promotions": successful_promotions,
+                    "best_score": best_score,
+                    "baseline_dev_score": baseline_dev_score(),
+                    "no_improve_count": no_improve_count,
+                    "retry_count": retry_count,
+                    "dominant_failure": failure_code,
+                    "same_failure_count": same_failure_count,
+                    "estimated_api_calls_total": estimated_calls_total,
+                    "estimated_cost_total": estimated_cost_total,
+                    "elapsed_seconds": time.time() - started,
+                    "conclusion": "已收斂於 baseline，重試仍無改善",
+                    # 環境資訊用於同-seed 比對
+                    "environment": {
+                        "python": sys.version,
+                        "executable": sys.executable,
+                        "platform": platform.platform(),
+                        "arch": platform.machine(),
+                        "hashseed": os.environ.get("PYTHONHASHSEED", "not set"),
+                    },
+                }
+                
+                # 收集同-seed 比對證據
+                if dev_run:
+                    convergence_report["latest_dev_run"] = dev_run
+                    convergence_report["latest_dev_summary"] = dev_summary
+                if latest_run:
+                    convergence_report["latest_run"] = latest_run
+                    convergence_report["latest_summary"] = latest_summary
+                
+                # 寫入結構化結論檔案
+                conclusion_path = f"docs/convergence_report_{time.strftime('%Y%m%d_%H%M%S')}.json"
+                os.makedirs("docs", exist_ok=True)
+                with open(conclusion_path, "w", encoding="utf-8") as f:
+                    json.dump(convergence_report, f, ensure_ascii=False, indent=2)
+                print(f"{C_CYAN}收斂報告已寫入：{conclusion_path}{C_RESET}")
+                
+                append_jsonl(LOG_PATH, convergence_report)
+            
             append_jsonl(
                 LOG_PATH,
                 {
@@ -371,6 +467,8 @@ def main(argv=None):
                     "estimated_api_calls_total": estimated_calls_total,
                     "estimated_cost_total": estimated_cost_total,
                     "elapsed_seconds": time.time() - started,
+                    "retry_mode": retry_mode,
+                    "retry_count": retry_count,
                 },
             )
             break
