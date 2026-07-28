@@ -1,0 +1,61 @@
+stage: RED
+test_commit: d85feae6758b02c6648260b2409ec5762f4a3aa3
+implementation: reverse-applied docs/evidence/config-invalid-timeout-cache-reset.patch
+command: python -m pytest --no-cov --color=no -q --tb=short tests/test_config_special_branch.py::test_api_timeout_invalid_env_values_raise_value_error_on_get
+python: 3.11.9
+pytest: 9.1.1
+exit_code: 1
+
+FFFFFFF                                                                  [100%]
+================================== FAILURES ===================================
+______ test_api_timeout_invalid_env_values_raise_value_error_on_get[nan] ______
+tests\test_config_special_branch.py:97: in test_api_timeout_invalid_env_values_raise_value_error_on_get
+    assert config._CONFIG is None, "驗證失敗後 _CONFIG 必須為 None，禁止默默回退到預設值"
+E   AssertionError: 驗證失敗後 _CONFIG 必須為 None，禁止默默回退到預設值
+E   assert {'api': {'url': 'https://api.minimaxi.chat/v1/text/chatcompletion_v2', 'model': 'MiniMax-M2.7', 'timeout': nan, 'retry...ke_allowed_drop': 2.0, 'smoke_min_score': 75.0, 'dev_min_improvement': 1.0, ...}, 'archive': {'max_versions': 20}, ...} is None
+E    +  where {'api': {'url': 'https://api.minimaxi.chat/v1/text/chatcompletion_v2', 'model': 'MiniMax-M2.7', 'timeout': nan, 'retry...ke_allowed_drop': 2.0, 'smoke_min_score': 75.0, 'dev_min_improvement': 1.0, ...}, 'archive': {'max_versions': 20}, ...} = config._CONFIG
+______ test_api_timeout_invalid_env_values_raise_value_error_on_get[inf] ______
+tests\test_config_special_branch.py:97: in test_api_timeout_invalid_env_values_raise_value_error_on_get
+    assert config._CONFIG is None, "驗證失敗後 _CONFIG 必須為 None，禁止默默回退到預設值"
+E   AssertionError: 驗證失敗後 _CONFIG 必須為 None，禁止默默回退到預設值
+E   assert {'api': {'url': 'https://api.minimaxi.chat/v1/text/chatcompletion_v2', 'model': 'MiniMax-M2.7', 'timeout': inf, 'retry...ke_allowed_drop': 2.0, 'smoke_min_score': 75.0, 'dev_min_improvement': 1.0, ...}, 'archive': {'max_versions': 20}, ...} is None
+E    +  where {'api': {'url': 'https://api.minimaxi.chat/v1/text/chatcompletion_v2', 'model': 'MiniMax-M2.7', 'timeout': inf, 'retry...ke_allowed_drop': 2.0, 'smoke_min_score': 75.0, 'dev_min_improvement': 1.0, ...}, 'archive': {'max_versions': 20}, ...} = config._CONFIG
+____ test_api_timeout_invalid_env_values_raise_value_error_on_get[neg-inf] ____
+tests\test_config_special_branch.py:97: in test_api_timeout_invalid_env_values_raise_value_error_on_get
+    assert config._CONFIG is None, "驗證失敗後 _CONFIG 必須為 None，禁止默默回退到預設值"
+E   AssertionError: 驗證失敗後 _CONFIG 必須為 None，禁止默默回退到預設值
+E   assert {'api': {'url': 'https://api.minimaxi.chat/v1/text/chatcompletion_v2', 'model': 'MiniMax-M2.7', 'timeout': -inf, 'retr...ke_allowed_drop': 2.0, 'smoke_min_score': 75.0, 'dev_min_improvement': 1.0, ...}, 'archive': {'max_versions': 20}, ...} is None
+E    +  where {'api': {'url': 'https://api.minimaxi.chat/v1/text/chatcompletion_v2', 'model': 'MiniMax-M2.7', 'timeout': -inf, 'retr...ke_allowed_drop': 2.0, 'smoke_min_score': 75.0, 'dev_min_improvement': 1.0, ...}, 'archive': {'max_versions': 20}, ...} = config._CONFIG
+___ test_api_timeout_invalid_env_values_raise_value_error_on_get[negative] ____
+tests\test_config_special_branch.py:97: in test_api_timeout_invalid_env_values_raise_value_error_on_get
+    assert config._CONFIG is None, "驗證失敗後 _CONFIG 必須為 None，禁止默默回退到預設值"
+E   AssertionError: 驗證失敗後 _CONFIG 必須為 None，禁止默默回退到預設值
+E   assert {'api': {'url': 'https://api.minimaxi.chat/v1/text/chatcompletion_v2', 'model': 'MiniMax-M2.7', 'timeout': -1, 'retry'...ke_allowed_drop': 2.0, 'smoke_min_score': 75.0, 'dev_min_improvement': 1.0, ...}, 'archive': {'max_versions': 20}, ...} is None
+E    +  where {'api': {'url': 'https://api.minimaxi.chat/v1/text/chatcompletion_v2', 'model': 'MiniMax-M2.7', 'timeout': -1, 'retry'...ke_allowed_drop': 2.0, 'smoke_min_score': 75.0, 'dev_min_improvement': 1.0, ...}, 'archive': {'max_versions': 20}, ...} = config._CONFIG
+_____ test_api_timeout_invalid_env_values_raise_value_error_on_get[zero] ______
+tests\test_config_special_branch.py:97: in test_api_timeout_invalid_env_values_raise_value_error_on_get
+    assert config._CONFIG is None, "驗證失敗後 _CONFIG 必須為 None，禁止默默回退到預設值"
+E   AssertionError: 驗證失敗後 _CONFIG 必須為 None，禁止默默回退到預設值
+E   assert {'api': {'url': 'https://api.minimaxi.chat/v1/text/chatcompletion_v2', 'model': 'MiniMax-M2.7', 'timeout': 0, 'retry':...ke_allowed_drop': 2.0, 'smoke_min_score': 75.0, 'dev_min_improvement': 1.0, ...}, 'archive': {'max_versions': 20}, ...} is None
+E    +  where {'api': {'url': 'https://api.minimaxi.chat/v1/text/chatcompletion_v2', 'model': 'MiniMax-M2.7', 'timeout': 0, 'retry':...ke_allowed_drop': 2.0, 'smoke_min_score': 75.0, 'dev_min_improvement': 1.0, ...}, 'archive': {'max_versions': 20}, ...} = config._CONFIG
+_____ test_api_timeout_invalid_env_values_raise_value_error_on_get[empty] _____
+tests\test_config_special_branch.py:97: in test_api_timeout_invalid_env_values_raise_value_error_on_get
+    assert config._CONFIG is None, "驗證失敗後 _CONFIG 必須為 None，禁止默默回退到預設值"
+E   AssertionError: 驗證失敗後 _CONFIG 必須為 None，禁止默默回退到預設值
+E   assert {'api': {'url': 'https://api.minimaxi.chat/v1/text/chatcompletion_v2', 'model': 'MiniMax-M2.7', 'timeout': 180, 'retry...ke_allowed_drop': 2.0, 'smoke_min_score': 75.0, 'dev_min_improvement': 1.0, ...}, 'archive': {'max_versions': 20}, ...} is None
+E    +  where {'api': {'url': 'https://api.minimaxi.chat/v1/text/chatcompletion_v2', 'model': 'MiniMax-M2.7', 'timeout': 180, 'retry...ke_allowed_drop': 2.0, 'smoke_min_score': 75.0, 'dev_min_improvement': 1.0, ...}, 'archive': {'max_versions': 20}, ...} = config._CONFIG
+__ test_api_timeout_invalid_env_values_raise_value_error_on_get[whitespace] ___
+tests\test_config_special_branch.py:97: in test_api_timeout_invalid_env_values_raise_value_error_on_get
+    assert config._CONFIG is None, "驗證失敗後 _CONFIG 必須為 None，禁止默默回退到預設值"
+E   AssertionError: 驗證失敗後 _CONFIG 必須為 None，禁止默默回退到預設值
+E   assert {'api': {'url': 'https://api.minimaxi.chat/v1/text/chatcompletion_v2', 'model': 'MiniMax-M2.7', 'timeout': 180, 'retry...ke_allowed_drop': 2.0, 'smoke_min_score': 75.0, 'dev_min_improvement': 1.0, ...}, 'archive': {'max_versions': 20}, ...} is None
+E    +  where {'api': {'url': 'https://api.minimaxi.chat/v1/text/chatcompletion_v2', 'model': 'MiniMax-M2.7', 'timeout': 180, 'retry...ke_allowed_drop': 2.0, 'smoke_min_score': 75.0, 'dev_min_improvement': 1.0, ...}, 'archive': {'max_versions': 20}, ...} = config._CONFIG
+=========================== short test summary info ===========================
+FAILED tests/test_config_special_branch.py::test_api_timeout_invalid_env_values_raise_value_error_on_get[nan]
+FAILED tests/test_config_special_branch.py::test_api_timeout_invalid_env_values_raise_value_error_on_get[inf]
+FAILED tests/test_config_special_branch.py::test_api_timeout_invalid_env_values_raise_value_error_on_get[neg-inf]
+FAILED tests/test_config_special_branch.py::test_api_timeout_invalid_env_values_raise_value_error_on_get[negative]
+FAILED tests/test_config_special_branch.py::test_api_timeout_invalid_env_values_raise_value_error_on_get[zero]
+FAILED tests/test_config_special_branch.py::test_api_timeout_invalid_env_values_raise_value_error_on_get[empty]
+FAILED tests/test_config_special_branch.py::test_api_timeout_invalid_env_values_raise_value_error_on_get[whitespace]
+7 failed in 1.59s
