@@ -186,6 +186,75 @@ def test_compare_different_class_coverage(tmp_path):
     assert not cov["identical"]
 
 
+def test_compare_class_diffs_present_in_package_diffs(tmp_path):
+    """class_diffs 經計算後應寫入 package_diffs 輸出，而非遺失。
+    目前 class_diffs 在 compare_test_runs 中被計算但從未附加到 pkg_diffs[pkg]，
+    導致比對結果不一致：coverage 判定為不一致（identical=False），
+    但 class 層級差異無法從報告中觀察到——可重複的不一致案例。"""
+    write_coverage(tmp_path / "a", SAMPLE_COVERAGE_XML)
+    write_coverage(tmp_path / "b", SAMPLE_COVERAGE_XML_V2)
+    report = ctr.compare_test_runs(str(tmp_path / "a"), str(tmp_path / "b"))
+    cov = report["sections"]["coverage"]
+    assert cov["identical"] is False
+    pkg_diffs = cov.get("package_diffs", {})
+    assert "scripts" in pkg_diffs
+    scripts_pkg = pkg_diffs["scripts"]
+    assert "class_diffs" in scripts_pkg, (
+        "class_diffs 應出現在 package_diffs[\"scripts\"] 中，"
+        "但目前被計算後未附加——觀察到不一致行為"
+    )
+    names = {c["name"] for c in scripts_pkg["class_diffs"]}
+    assert "foo.py" in names
+    assert "bar.py" in names
+
+
+def test_compare_class_diffs_only_class_level(tmp_path):
+    """即使 package 層級 rate 相同，class 層級差異仍應在輸出中可見。"""
+    same_pkg_xml = """<?xml version="1.0" ?>
+<coverage version="7.14.1" timestamp="3000" lines-valid="100" lines-covered="85" line-rate="0.85" branches-valid="40" branches-covered="32" branch-rate="0.8" complexity="0">
+  <packages>
+    <package name="lib" line-rate="0.85" branch-rate="0.8" complexity="0">
+      <classes>
+        <class name="a.py" filename="a.py" complexity="0" line-rate="0.9" branch-rate="0.8">
+          <methods/><lines/>
+        </class>
+        <class name="b.py" filename="b.py" complexity="0" line-rate="0.8" branch-rate="0.8">
+          <methods/><lines/>
+        </class>
+      </classes>
+    </package>
+  </packages>
+</coverage>"""
+    same_pkg_xml_v2 = """<?xml version="1.0" ?>
+<coverage version="7.14.1" timestamp="3001" lines-valid="100" lines-covered="85" line-rate="0.85" branches-valid="40" branches-covered="32" branch-rate="0.8" complexity="0">
+  <packages>
+    <package name="lib" line-rate="0.85" branch-rate="0.8" complexity="0">
+      <classes>
+        <class name="a.py" filename="a.py" complexity="0" line-rate="0.7" branch-rate="0.8">
+          <methods/><lines/>
+        </class>
+        <class name="b.py" filename="b.py" complexity="0" line-rate="1.0" branch-rate="0.8">
+          <methods/><lines/>
+        </class>
+      </classes>
+    </package>
+  </packages>
+</coverage>"""
+    write_coverage(tmp_path / "a", same_pkg_xml)
+    write_coverage(tmp_path / "b", same_pkg_xml_v2)
+    report = ctr.compare_test_runs(str(tmp_path / "a"), str(tmp_path / "b"))
+    cov = report["sections"]["coverage"]
+    pkg_diffs = cov.get("package_diffs", {})
+    assert "lib" in pkg_diffs
+    lib_pkg = pkg_diffs["lib"]
+    assert "class_diffs" in lib_pkg, (
+        "package rate 相同但 class rate 不同時，class_diffs 應仍出現在輸出中"
+    )
+    names = {c["name"] for c in lib_pkg["class_diffs"]}
+    assert "a.py" in names
+    assert "b.py" in names
+
+
 def test_compare_missing_coverage_in_one(tmp_path):
     tmp_path_a = tmp_path / "a"
     tmp_path_b = tmp_path / "b"

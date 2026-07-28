@@ -133,6 +133,14 @@ def compare_test_runs(dir_a, dir_b, artifact_globs=None):
                     })
                     identical = False
 
+            if class_diffs:
+                if pkg not in pkg_diffs:
+                    pkg_diffs[pkg] = {
+                        "line_rate": {"a": pa["line_rate"], "b": pb["line_rate"]},
+                        "branch_rate": {"a": pa["branch_rate"], "b": pb["branch_rate"]},
+                    }
+                pkg_diffs[pkg]["class_diffs"] = class_diffs
+
         entry = {"identical": identical}
         if coverage_diffs:
             entry["summary_diffs"] = coverage_diffs
