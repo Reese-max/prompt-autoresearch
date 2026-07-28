@@ -153,6 +153,24 @@ def test_generic_exception_after_rate_wait_wrapped_with_context(
     )
 
 
+def test_connection_error_after_rate_wait_translated_to_api_error(
+    _rate_limit_env, _mock_urlopen
+):
+    """_rate_wait 真實執行後 urlopen 拋 ConnectionError → 轉譯為 APIError。"""
+    original = ConnectionError("connection failed")
+    _mock_urlopen.side_effect = original
+
+    with pytest.raises(api.APIError) as excinfo:
+        api.call_minimax("system", "user")
+
+    err = excinfo.value
+    assert "連線失敗" in str(err)
+    assert "ConnectionError" in str(err)
+    assert "retry=" in str(err)
+    assert isinstance(err, RuntimeError)
+    assert err.__cause__ is original
+
+
 def test_retry_zero_after_rate_wait_still_makes_request(
     _rate_limit_env, _mock_urlopen, monkeypatch
 ):
