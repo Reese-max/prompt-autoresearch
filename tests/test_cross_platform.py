@@ -504,7 +504,89 @@ class TestGatekeeperCrossPlatform:
 
 
 # ---------------------------------------------------------------------------
-# 6. Config 路徑解析：_CONFIG_PATH 在所有平台上指向有效路徑
+# 6. 暫存目錄行為：含空白與 Unicode 的路徑在暫存目錄中正常運作
+# ---------------------------------------------------------------------------
+class TestTempDirectoryBehavior:
+    """暫存目錄行為測試，確保含空白與 Unicode 的路徑在暫存環境中正常運作。"""
+
+    def test_temp_dir_with_spaces_creates_and_writes(self, tmp_path):
+        """含空白的暫存目錄應能正常建立檔案並讀寫。"""
+        space_dir = tmp_path / "my temp dir"
+        space_dir.mkdir()
+        test_file = space_dir / "test.txt"
+        content = "測試內容"
+        io.write_file(str(test_file), content)
+        assert test_file.exists()
+        assert io.load_file(str(test_file)) == content
+
+    def test_temp_dir_with_unicode_creates_and_writes(self, tmp_path):
+        """含 Unicode 的暫存目錄應能正常建立檔案並讀寫。"""
+        unicode_dir = tmp_path / "測試目錄"
+        unicode_dir.mkdir()
+        test_file = unicode_dir / "檔案.txt"
+        content = "中文內容"
+        io.write_file(str(test_file), content)
+        assert test_file.exists()
+        assert io.load_file(str(test_file)) == content
+
+    def test_temp_dir_nested_with_spaces_and_unicode(self, tmp_path):
+        """巢狀暫存目錄含空白與 Unicode 應正常運作。"""
+        nested = tmp_path / "temp space" / "中文 層" / "deep"
+        io.ensure_dir(str(nested))
+        assert nested.is_dir()
+        test_file = nested / "output.json"
+        payload = {"路徑": str(nested), "名稱": "測試"}
+        io.write_json(str(test_file), payload)
+        assert io.load_json(str(test_file)) == payload
+
+    def test_temp_dir_normalize_path_with_spaces_and_unicode(self, tmp_path):
+        """暫存目錄路徑經 normalize_path 處理後應保持一致。"""
+        space_dir = tmp_path / "my temp dir"
+        unicode_dir = space_dir / "中文目錄"
+        io.ensure_dir(str(unicode_dir))
+        
+        # 建立測試檔案
+        test_file = unicode_dir / "test.txt"
+        io.write_file(str(test_file), "content")
+        
+        # 取得相對路徑並正規化
+        rel_path = os.path.relpath(str(test_file), str(tmp_path))
+        normalized = io.normalize_path(rel_path)
+        
+        # 正規化後應使用 / 分隔符且保留空白與 Unicode
+        assert "\\" not in normalized
+        assert "my temp dir" in normalized
+        assert "中文目錄" in normalized
+
+    def test_temp_dir_jsonl_with_spaces_and_unicode(self, tmp_path):
+        """JSONL 檔案在含空白與 Unicode 的暫存目錄中應正常運作。"""
+        log_dir = tmp_path / "log files" / "日誌"
+        io.ensure_dir(str(log_dir))
+        log_file = log_dir / "events.jsonl"
+        
+        rows = [
+            {"id": 1, "訊息": "測試"},
+            {"id": 2, "路徑": str(log_dir)},
+        ]
+        for row in rows:
+            io.append_jsonl(str(log_file), row)
+        
+        loaded = io.read_jsonl(str(log_file))
+        assert loaded == rows
+
+    def test_temp_dir_ensure_dir_idempotent_with_spaces_and_unicode(self, tmp_path):
+        """ensure_dir 在含空白與 Unicode 的路徑上應具冪等性。"""
+        target = tmp_path / "a b" / "中文 c" / "nested"
+        io.ensure_dir(str(target))
+        assert target.is_dir()
+        
+        # 重複呼叫應不報錯
+        io.ensure_dir(str(target))
+        assert target.is_dir()
+
+
+# ---------------------------------------------------------------------------
+# 7. Config 路徑解析：_CONFIG_PATH 在所有平台上指向有效路徑
 # ---------------------------------------------------------------------------
 class TestConfigPathResolution:
     """lib.config._CONFIG_PATH 應在所有平台上解析為專案根目錄下的 config.json。"""
