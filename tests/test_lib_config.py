@@ -104,7 +104,7 @@ def test_environment_variables_override_file_and_types(tmp_path, monkeypatch):
         "AUTORESEARCH_API_MODEL": "MiniMax-M2.9",
         "AUTORESEARCH_API_TIMEOUT": "75",
         "AUTORESEARCH_SMOKE_PARALLEL": "18",
-        "AUTORESEARCH_MAX_CANDIDATE_LENGTH": "777.7",
+        "AUTORESEARCH_MAX_CANDIDATE_LENGTH": "777",
     }.items():
         monkeypatch.setenv(key, value)
 
@@ -117,8 +117,8 @@ def test_environment_variables_override_file_and_types(tmp_path, monkeypatch):
     assert isinstance(cfg["api"]["timeout"], int)
     assert cfg["parallel"]["smoke"] == 18
     assert isinstance(cfg["parallel"]["smoke"], int)
-    assert cfg["thresholds"]["max_candidate_length"] == 777.7
-    assert isinstance(cfg["thresholds"]["max_candidate_length"], float)
+    assert cfg["thresholds"]["max_candidate_length"] == 777
+    assert isinstance(cfg["thresholds"]["max_candidate_length"], int)
 
 
 def test_get_section_and_cache_hit_without_reload(tmp_path):
@@ -903,6 +903,15 @@ _ALL_POSITIVE_FIELDS = [
     "multi_candidate.count",
 ]
 
+# 正整數欄位（需要額外檢查整數型別）
+_POSITIVE_INTEGER_FIELDS = [
+    "api.timeout",
+    "parallel.smoke",
+    "parallel.dev",
+    "parallel.holdout",
+    "thresholds.max_candidate_length",
+]
+
 _VALIDATE_CONFIG_INVALID_VALUES = [
     ("zero", 0, r"必須為正數"),
     ("negative", -1, r"必須為正數"),
@@ -936,8 +945,23 @@ def test_validate_config_rejects_each_positive_rule_invalid_value(field, val_nam
     參數化確保 pytest 對「欄位 × 非法值」逐一報告，而非僅有整體通過數。
     """
     cfg = _set_dotted_key(config._DEFAULTS, field, val)
-    with pytest.raises(ValueError, match=field.replace(".", r"\.") + r".*" + err_pat):
+    # 正整數欄位使用「必須為正整數」錯誤訊息，其他欄位使用「必須為正數」
+    if field in _POSITIVE_INTEGER_FIELDS and val_name in ("zero", "negative"):
+        expected_err = r"必須為正整數"
+    elif val_name in ("zero", "negative"):
+        expected_err = r"必須為正數"
+    else:
+        expected_err = err_pat
+    with pytest.raises(ValueError, match=field.replace(".", r"\.") + r".*" + expected_err):
         config.validate_config(cfg)
+
+
+def test_positive_integer_fields_reject_float_values():
+    """正整數欄位不接受浮點數值。"""
+    for field in _POSITIVE_INTEGER_FIELDS:
+        cfg = _set_dotted_key(config._DEFAULTS, field, 1.5)
+        with pytest.raises(ValueError, match=field.replace(".", r"\.") + r".*必須為整數"):
+            config.validate_config(cfg)
 
 
 def test_api_string_env_vars_validation_specific(tmp_path, monkeypatch):

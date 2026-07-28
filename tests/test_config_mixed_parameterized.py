@@ -61,12 +61,12 @@ def clean_config_state(monkeypatch, tmp_path):
             None,
         ),
         # 4. 合法邊界值 (Valid boundary values)
-        # 4a. Float values for timeout
+        # 4a. Integer values for timeout (must be positive integer)
         (
             {"api": {"timeout": 300}},
-            {"AUTORESEARCH_API_TIMEOUT": "0.5"},
+            {"AUTORESEARCH_API_TIMEOUT": "1"},
             None,
-            {"api": {"timeout": 0.5}},
+            {"api": {"timeout": 1}},
         ),
         # 4b. Positive integers
         (
@@ -86,13 +86,13 @@ def clean_config_state(monkeypatch, tmp_path):
         (
             {"thresholds": {"max_candidate_length": 500}},
             {"AUTORESEARCH_MAX_CANDIDATE_LENGTH": "0"},
-            "必須為正數",
+            "必須為正整數",
             None,
         ),
         (
             {"thresholds": {"max_candidate_length": 500}},
             {"AUTORESEARCH_MAX_CANDIDATE_LENGTH": "-10"},
-            "必須為正數",
+            "必須為正整數",
             None,
         ),
         # 6. 極端非 HTTP/HTTPS URL

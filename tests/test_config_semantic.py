@@ -74,7 +74,7 @@ class TestExceptionMessages:
     def test_zero_positive_key_message_includes_must_be_positive(self, tmp_path):
         f = tmp_path / "config.json"
         f.write_text(json.dumps({"parallel": {"smoke": 0}}), encoding="utf-8")
-        with pytest.raises(ValueError, match=r"parallel\.smoke=.+必須為正數"):
+        with pytest.raises(ValueError, match=r"parallel\.smoke=.+必須為正整數"):
             config.get_all()
 
     def test_string_type_mismatch_message_for_url(self, tmp_path):

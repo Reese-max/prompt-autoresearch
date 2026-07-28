@@ -96,11 +96,11 @@ def test_api_timeout_invalid_env_values_raise_value_error_on_get(monkeypatch, va
 
 
 def test_zero_or_negative_env_var_raises_value_error(monkeypatch):
-    """C11: 正數邊界 (0/負數) → ValueError，訊息含「必須為正數」。"""
+    """C11: 正數邊界 (0/負數) → ValueError，訊息含「必須為正整數」。"""
     monkeypatch.setenv("AUTORESEARCH_MAX_CANDIDATE_LENGTH", "0")
     with pytest.raises(ValueError) as exc:
         config.get_all()
-    assert "必須為正數" in str(exc.value)
+    assert "必須為正整數" in str(exc.value)
 
 
 @pytest.mark.parametrize(

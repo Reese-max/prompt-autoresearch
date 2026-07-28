@@ -129,6 +129,14 @@ _POSITIVE_KEYS = frozenset({
     "multi_candidate.count",
 })
 
+_POSITIVE_INTEGER_KEYS = frozenset({
+    "api.timeout",
+    "parallel.smoke",
+    "parallel.dev",
+    "parallel.holdout",
+    "thresholds.max_candidate_length",
+})
+
 _STRING_SCHEMA = {
     "api.url": {"min_length": 1, "url_prefixes": ("http://", "https://")},
     "api.model": {"min_length": 1},
@@ -163,7 +171,16 @@ def validate_config(cfg):
             raise ValueError(
                 f"設定值 {dotted_key}={value!r} 不允許 NaN 或 inf"
             )
-        if dotted_key in _POSITIVE_KEYS and value <= 0:
+        if dotted_key in _POSITIVE_INTEGER_KEYS:
+            if not isinstance(value, int):
+                raise ValueError(
+                    f"設定值 {dotted_key}={value!r} 必須為整數"
+                )
+            if value <= 0:
+                raise ValueError(
+                    f"設定值 {dotted_key}={value!r} 必須為正整數"
+                )
+        elif dotted_key in _POSITIVE_KEYS and value <= 0:
             raise ValueError(
                 f"設定值 {dotted_key}={value!r} 必須為正數"
             )
