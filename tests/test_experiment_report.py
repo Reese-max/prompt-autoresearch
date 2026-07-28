@@ -193,6 +193,93 @@ def test_list_runs_handles_null_fields(sandbox):
     assert rows[0]["dataset"] == "unknown"
 
 
+def test_list_runs_rejects_non_dict_summary(sandbox):
+    """summary.json 不是 dict 時應拋出 ValueError"""
+    run_dir = sandbox / "runs" / "20260105-badtype"
+    run_dir.mkdir(parents=True)
+    (run_dir / "summary.json").write_text('["not", "a", "dict"]', encoding="utf-8")
+    
+    with pytest.raises(ValueError) as exc_info:
+        er.list_runs()
+    assert "summary.json 必須是 dict" in str(exc_info.value)
+    assert "20260105-badtype" in str(exc_info.value)
+
+
+def test_list_runs_rejects_missing_required_field(sandbox):
+    """缺少必要欄位 average_score 時應拋出 ValueError"""
+    write_run(sandbox, "20260106-missing", {
+        "question_file": "data/dev_questions.jsonl",
+        # 缺少 average_score
+    })
+    
+    with pytest.raises(ValueError) as exc_info:
+        er.list_runs()
+    assert "缺少必要欄位 'average_score'" in str(exc_info.value)
+    assert "20260106-missing" in str(exc_info.value)
+
+
+def test_list_runs_rejects_non_numeric_score(sandbox):
+    """average_score 不是數值時應拋出 ValueError"""
+    write_run(sandbox, "20260107-nan", {
+        "question_file": "data/dev_questions.jsonl",
+        "average_score": "not-a-number",
+    })
+    
+    with pytest.raises(ValueError) as exc_info:
+        er.list_runs()
+    assert "average_score 必須是數值" in str(exc_info.value)
+    assert "20260107-nan" in str(exc_info.value)
+
+
+def test_list_runs_rejects_negative_score(sandbox):
+    """average_score 為負值時應拋出 ValueError"""
+    write_run(sandbox, "20260108-negative", {
+        "question_file": "data/dev_questions.jsonl",
+        "average_score": -5.0,
+    })
+    
+    with pytest.raises(ValueError) as exc_info:
+        er.list_runs()
+    assert "average_score 必須非負值" in str(exc_info.value)
+    assert "20260108-negative" in str(exc_info.value)
+
+
+def test_list_runs_accepts_zero_score(sandbox):
+    """average_score 為 0 時應被接受（邊界值）"""
+    write_run(sandbox, "20260109-zero", {
+        "question_file": "data/dev_questions.jsonl",
+        "average_score": 0.0,
+    })
+    
+    rows = er.list_runs()
+    assert len(rows) == 1
+    assert rows[0]["score"] == 0.0
+
+
+def test_list_runs_accepts_string_numeric_score(sandbox):
+    """average_score 為字串數值時應被接受並轉換"""
+    write_run(sandbox, "20260110-stringnum", {
+        "question_file": "data/dev_questions.jsonl",
+        "average_score": "85.5",
+    })
+    
+    rows = er.list_runs()
+    assert len(rows) == 1
+    assert rows[0]["score"] == 85.5
+
+
+def test_list_runs_accepts_integer_score(sandbox):
+    """average_score 為整數時應被接受"""
+    write_run(sandbox, "20260111-int", {
+        "question_file": "data/dev_questions.jsonl",
+        "average_score": 90,
+    })
+    
+    rows = er.list_runs()
+    assert len(rows) == 1
+    assert rows[0]["score"] == 90.0
+
+
 # ---------- build_report ----------
 
 def test_build_report_empty(sandbox):

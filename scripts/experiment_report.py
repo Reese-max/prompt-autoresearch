@@ -62,6 +62,29 @@ def parse_decision(text):
     return data
 
 
+def validate_summary(summary, run_name):
+    """驗證 summary.json 結構合法性，拋出 ValueError 若結構非法。"""
+    if not isinstance(summary, dict):
+        raise ValueError(f"Run {run_name}: summary.json 必須是 dict，實際類型 {type(summary).__name__}")
+    
+    # 檢查必要欄位是否存在（允許值為 None，由後續轉換處理）
+    required_fields = ["average_score"]
+    for field in required_fields:
+        if field not in summary:
+            raise ValueError(f"Run {run_name}: 缺少必要欄位 '{field}'")
+    
+    # 檢查 average_score 是否為數值且非負值（若不為 None）
+    score = summary.get("average_score")
+    if score is not None:
+        try:
+            score_value = float(score)
+        except (TypeError, ValueError) as e:
+            raise ValueError(f"Run {run_name}: average_score 必須是數值，實際值 {score!r}") from e
+        
+        if score_value < 0:
+            raise ValueError(f"Run {run_name}: average_score 必須非負值，實際值 {score_value}")
+
+
 def list_runs():
     rows = []
     if not os.path.isdir(RUNS_DIR):
@@ -73,6 +96,7 @@ def list_runs():
         summary = load_json(os.path.join(run_dir, "summary.json"))
         if not summary:
             continue
+        validate_summary(summary, name)
         decision_text = read_text(os.path.join(run_dir, "decision.md"))
         decision = parse_decision(decision_text)
         question_file = summary.get("question_file", "")
