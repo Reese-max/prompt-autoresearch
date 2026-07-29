@@ -1,0 +1,37 @@
+{
+  "candidate_path": "prompts/candidates/candidate_1785342770_2.md",
+  "direction": "D03【採分點外露】",
+  "target_failures": [
+    "F03"
+  ],
+  "hypothesis": "本輪方向：D03【採分點外露】。假設：針對 F03 做單點微調，可改善對應低分題型，同時不犧牲其他題型、風險控制與每日懶人版精簡度。",
+  "temperature": 0.9,
+  "candidate_index": 2,
+  "candidate_length": 437,
+  "countermeasures_injected": [
+    "F03"
+  ],
+  "status": "rejected_smoke",
+  "reject_reasons": [
+    "score=46.67 < 75.00",
+    "drop=44.83 > 2.00",
+    "字數合格率 0.0% < 70%",
+    "風險滿分率 50.0% < 100%",
+    "評估錯誤 3 筆"
+  ],
+  "updated_at": "2026-07-30 00:36:28",
+  "gatekeeper": {
+    "passed": true,
+    "violations": []
+  },
+  "smoke": {
+    "passed": false,
+    "run": "runs\\20260730_003628",
+    "score": 46.666666666666664,
+    "drop": 44.833333333333336,
+    "word_count_pass_rate": 0.0,
+    "risk_perfect_rate": 50.0,
+    "error_count": 3,
+    "returncode": 0
+  }
+}

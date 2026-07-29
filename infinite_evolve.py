@@ -257,7 +257,7 @@ def main(argv=None):
         },
     )
 
-    from run_opt import run_opt_pass, LAST_ROUND_COUNTERMEASURES
+    import run_opt as _run_opt
 
     for round_no in range(1, args.max_rounds + 1):
         print(f"\n{C_PURPLE}{'=' * 64}{C_RESET}")
@@ -275,14 +275,14 @@ def main(argv=None):
             avoid_failures_next = []
             if round_avoid_failures:
                 print(f"{C_YELLOW}本輪方向避開：{', '.join(round_avoid_failures)}{C_RESET}")
-            success = run_opt_pass(
+            success = _run_opt.run_opt_pass(
                 smoke_parallel=args.smoke_parallel,
                 dev_parallel=args.dev_parallel,
                 holdout_parallel=args.holdout_parallel,
                 force_direction=args.force_direction,
                 avoid_failures=round_avoid_failures,
             )
-            countermeasures_injected = list(LAST_ROUND_COUNTERMEASURES)
+            countermeasures_injected = list(_run_opt.LAST_ROUND_COUNTERMEASURES)
         except Exception as exc:
             success = False
             error = str(exc)

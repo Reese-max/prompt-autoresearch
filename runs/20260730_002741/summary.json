@@ -1,0 +1,28 @@
+{
+  "timestamp": "2026-07-30 00:27:41",
+  "prompt_file": "prompts/current.md",
+  "question_file": "questions/smoke.jsonl",
+  "prompt_hash": "2d5bc70a9e03ff057ba91731c91ae75444f94afe917de5b446d5aa9e208c021d",
+  "elapsed_seconds": 66.84199905395508,
+  "total_questions": 6,
+  "average_score": 92.0,
+  "type_averages": {
+    "說明題": 93.0,
+    "評析題": 92.0,
+    "實務應用題": 94.0,
+    "比較題": 89.0,
+    "法律法理題": 89.0,
+    "法律案例題": 95.0
+  },
+  "failure_counts": {
+    "F04": 6,
+    "F11": 1,
+    "F03": 1
+  },
+  "word_count_pass_rate": 0.0,
+  "risk_perfect_rate": 100.0,
+  "char_count": 446,
+  "cache_hit_count": 0,
+  "error_count": 0,
+  "estimated_api_calls": 12
+}

@@ -1,0 +1,37 @@
+{
+  "candidate_path": "prompts/candidates/candidate_1785343002_0.md",
+  "direction": "D04【具體化與佐證】",
+  "target_failures": [
+    "F04"
+  ],
+  "hypothesis": "本輪方向：D04【具體化與佐證】。假設：針對 F04 做單點微調，可改善對應低分題型，同時不犧牲其他題型、風險控制與每日懶人版精簡度。",
+  "temperature": 0.5,
+  "candidate_index": 0,
+  "candidate_length": 462,
+  "countermeasures_injected": [
+    "F04"
+  ],
+  "status": "rejected_smoke",
+  "reject_reasons": [
+    "score=61.17 < 75.00",
+    "drop=30.33 > 2.00",
+    "字數合格率 0.0% < 70%",
+    "風險滿分率 66.7% < 100%",
+    "評估錯誤 2 筆"
+  ],
+  "updated_at": "2026-07-30 00:38:14",
+  "gatekeeper": {
+    "passed": true,
+    "violations": []
+  },
+  "smoke": {
+    "passed": false,
+    "run": "runs\\20260730_003814",
+    "score": 61.166666666666664,
+    "drop": 30.333333333333336,
+    "word_count_pass_rate": 0.0,
+    "risk_perfect_rate": 66.66666666666666,
+    "error_count": 2,
+    "returncode": 0
+  }
+}
