@@ -85,13 +85,13 @@ def compare(new_dir, base_dir, mode=None):
     fail_new = {}
     for q in new_data.values():
         for f in q.get("failures", []):
-            if f:
+            if isinstance(f, str) and f:
                 fail_new[f] = fail_new.get(f, 0) + 1
                 
     fail_base = {}
     for q in base_data.values():
         for f in q.get("failures", []):
-            if f:
+            if isinstance(f, str) and f:
                 fail_base[f] = fail_base.get(f, 0) + 1
                 
     # 字數與風險率
@@ -122,10 +122,9 @@ def compare(new_dir, base_dir, mode=None):
         
     # 多目標指標 (#6) - 提前計算
     type_scores_list = list(avg_type_new.values())
-    type_variance = (
-        math.sqrt(sum((s - avg_new) ** 2 for s in type_scores_list) / len(type_scores_list))
-        if type_scores_list else 0.0
-    )
+    type_variance = 0.0
+    if type_scores_list:
+        type_variance = math.sqrt(sum((s - avg_new) ** 2 for s in type_scores_list) / len(type_scores_list))
     worst_type = min(avg_type_new.items(), key=lambda x: x[1]) if avg_type_new else ("N/A", 0)
     worst_type_name, worst_type_score = worst_type
 

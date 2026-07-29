@@ -242,7 +242,7 @@ def collect_recent_failure_trend(question_file="questions/dev.jsonl", limit=4):
         runs.append(run_dir)
         for row in rows:
             for code in row.get("failures", []):
-                if code:
+                if isinstance(code, str) and code:
                     counts[code] = counts.get(code, 0) + 1
         if len(runs) >= limit:
             break

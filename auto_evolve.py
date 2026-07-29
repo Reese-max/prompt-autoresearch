@@ -181,7 +181,8 @@ def main():
             meta = load_json("prompts/baseline.meta.json")
             if meta.get("dev_avg") is not None:
                 holdout_avg = meta.get('holdout_avg')
-                print(f"🏆 當前冠軍基線: dev={meta.get('dev_avg'):.2f}, holdout={holdout_avg:.2f if holdout_avg is not None else 'N/A'}, run={meta.get('dev_run')}")
+                holdout_display = f"{holdout_avg:.2f}" if holdout_avg is not None else "N/A"
+                print(f"🏆 當前冠軍基線: dev={meta.get('dev_avg'):.2f}, holdout={holdout_display}, run={meta.get('dev_run')}")
             else:
                 tsv_lines = load_file("results.tsv").strip().split("\n")
                 if tsv_lines:
