@@ -11,6 +11,8 @@ import os
 import sys
 import time
 import subprocess
+import json
+import platform
 
 from lib.io import load_json
 from lib.metrics import record_event
@@ -30,6 +32,38 @@ C_YELLOW = "\033[93m"
 C_RED    = "\033[91m"
 C_PURPLE = "\033[95m"
 C_RESET  = "\033[0m"
+
+LOG_PATH = "evolution_log.jsonl"
+BASELINE_META_PATH = "prompts/baseline.meta.json"
+
+# no_improve 控制流參數（可被測試覆寫）
+NO_IMPROVE_LIMIT = 10
+RETRY_AFTER_NO_IMPROVE = 3
+
+
+def load_json(path, default=None):
+    if default is None:
+        default = {}
+    if not os.path.exists(path):
+        return default
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return default
+
+
+def append_jsonl(path, payload):
+    with open(path, "a", encoding="utf-8") as f:
+        f.write(json.dumps(payload, ensure_ascii=False) + "\n")
+
+
+def baseline_dev_score():
+    meta = load_json(BASELINE_META_PATH, {})
+    try:
+        return float(meta.get("dev_avg") or 0.0)
+    except (TypeError, ValueError):
+        return 0.0
 
 def parse_args(argv):
     generations = 10
@@ -71,10 +105,26 @@ def main():
     preflight = subprocess.run(preflight_cmd)
     if preflight.returncode != 0:
         print(f"{C_RED}❌ Preflight 未通過，已停止演化。{C_RESET}")
-        sys.exit(preflight.returncode)
+        return preflight.returncode
 
     consecutive_errors = 0
     MAX_CONSECUTIVE_ERRORS = 5
+
+    # no_improve 控制流參數
+    no_improve_count = 0
+    retry_count = 0
+    retry_mode = False
+    best_score = baseline_dev_score()
+
+    append_jsonl(
+        LOG_PATH,
+        {
+            "event": "start",
+            "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
+            "generations": generations,
+            "baseline_dev_score": best_score,
+        },
+    )
 
     for gen in range(1, generations + 1):
         gen_start = time.time()
@@ -83,14 +133,21 @@ def main():
         print(f"{C_PURPLE}{'='*60}{C_RESET}")
 
         total_attempts += 1
+        before_baseline = baseline_dev_score()
 
         try:
             success = run_opt_pass(**parallel_config)
             consecutive_errors = 0
-            if success:
+            after_baseline = baseline_dev_score()
+            promoted = after_baseline > before_baseline
+
+            if promoted:
                 successful_evolutions += 1
+                best_score = after_baseline
+                no_improve_count = 0
                 print(f"\n{C_GREEN}✨ 第 {gen} 代演化成功！新冠軍誕生。{C_RESET}")
             else:
+                no_improve_count += 1
                 print(f"\n{C_YELLOW}⚠️ 第 {gen} 代演化未取得突破，已安全回滾。{C_RESET}")
         except Exception as e:
             consecutive_errors += 1
@@ -98,7 +155,23 @@ def main():
             record_event("auto_evolve_error", {"generation": gen, "error": str(e), "consecutive": consecutive_errors})
             if consecutive_errors >= MAX_CONSECUTIVE_ERRORS:
                 print(f"{C_RED}連續 {consecutive_errors} 代出錯，停止演化。{C_RESET}")
-                break
+                append_jsonl(
+                    LOG_PATH,
+                    {
+                        "event": "stop",
+                        "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
+                        "reason": f"連續 {consecutive_errors} 代出錯",
+                        "generation": gen,
+                        "successful_evolutions": successful_evolutions,
+                        "best_score": best_score,
+                        "elapsed_seconds": time.time() - start_time,
+                    },
+                )
+                return 1
+            # 出錯時也視為未晉升
+            no_improve_count += 1
+            promoted = False
+            after_baseline = before_baseline
 
         gen_elapsed = time.time() - gen_start
         print(f"⏱️ 第 {gen} 代耗時: {gen_elapsed/60:.1f} 分鐘。")
@@ -117,6 +190,114 @@ def main():
         except Exception:
             pass
 
+        # 記錄世代完成事件
+        append_jsonl(
+            LOG_PATH,
+            {
+                "event": "generation_complete",
+                "generation": gen,
+                "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
+                "success": bool(success),
+                "promoted": promoted,
+                "before_baseline_dev": before_baseline,
+                "after_baseline_dev": after_baseline,
+                "best_score": best_score,
+                "no_improve_count": no_improve_count,
+                "elapsed_seconds": gen_elapsed,
+            },
+        )
+
+        # no_improve 控制流檢查
+        stop_reason = ""
+        if no_improve_count >= NO_IMPROVE_LIMIT:
+            if not retry_mode and RETRY_AFTER_NO_IMPROVE > 0:
+                # 進入重試模式
+                retry_mode = True
+                retry_count = 0
+                print(f"{C_YELLOW}🔄 連續 {no_improve_count} 代未晉升，進入重試模式（最多 {RETRY_AFTER_NO_IMPROVE} 次）{C_RESET}")
+                no_improve_count = 0  # 重置計數以允許重試
+                append_jsonl(
+                    LOG_PATH,
+                    {
+                        "event": "retry_mode_entered",
+                        "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
+                        "generation": gen,
+                        "reason": f"連續 {no_improve_count} 代未晉升",
+                        "max_retries": RETRY_AFTER_NO_IMPROVE,
+                    },
+                )
+            elif retry_mode:
+                retry_count += 1
+                if retry_count >= RETRY_AFTER_NO_IMPROVE:
+                    stop_reason = f"連續 {no_improve_count} 代未晉升，重試 {retry_count} 次仍無改善"
+                else:
+                    # 繼續重試
+                    print(f"{C_YELLOW}🔄 重試 {retry_count}/{RETRY_AFTER_NO_IMPROVE} 仍無改善，調整變異方向{C_RESET}")
+                    no_improve_count = 0
+                    append_jsonl(
+                        LOG_PATH,
+                        {
+                            "event": "retry_adjust",
+                            "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
+                            "generation": gen,
+                            "retry_count": retry_count,
+                        },
+                    )
+            else:
+                stop_reason = f"連續 {no_improve_count} 代未晉升"
+
+        if stop_reason:
+            print(f"{C_YELLOW}⏹️ 停止條件觸發：{stop_reason}{C_RESET}")
+
+            # 若為重試耗盡，寫入結構化結論與證據
+            if retry_mode and retry_count >= RETRY_AFTER_NO_IMPROVE:
+                convergence_report = {
+                    "event": "converged_to_baseline",
+                    "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
+                    "generation": gen,
+                    "reason": stop_reason,
+                    "successful_evolutions": successful_evolutions,
+                    "best_score": best_score,
+                    "baseline_dev_score": baseline_dev_score(),
+                    "no_improve_count": no_improve_count,
+                    "retry_count": retry_count,
+                    "elapsed_seconds": time.time() - start_time,
+                    "conclusion": "已收斂於 baseline，重試仍無改善",
+                    # 環境資訊用於同-seed 比對
+                    "environment": {
+                        "python": sys.version,
+                        "executable": sys.executable,
+                        "platform": platform.platform(),
+                        "arch": platform.machine(),
+                        "hashseed": os.environ.get("PYTHONHASHSEED", "not set"),
+                    },
+                }
+
+                # 寫入結構化結論檔案
+                conclusion_path = f"docs/convergence_report_{time.strftime('%Y%m%d_%H%M%S')}.json"
+                os.makedirs("docs", exist_ok=True)
+                with open(conclusion_path, "w", encoding="utf-8") as f:
+                    json.dump(convergence_report, f, ensure_ascii=False, indent=2)
+                print(f"{C_CYAN}收斂報告已寫入：{conclusion_path}{C_RESET}")
+
+                append_jsonl(LOG_PATH, convergence_report)
+
+            append_jsonl(
+                LOG_PATH,
+                {
+                    "event": "stop",
+                    "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
+                    "reason": stop_reason,
+                    "generation": gen,
+                    "successful_evolutions": successful_evolutions,
+                    "best_score": best_score,
+                    "elapsed_seconds": time.time() - start_time,
+                    "retry_mode": retry_mode,
+                    "retry_count": retry_count,
+                },
+            )
+            return 0
+
         # 世代之間短暫休息防 API 限制
         time.sleep(5)
 
@@ -128,6 +309,8 @@ def main():
     print(f"  - 成功晉升數: {successful_evolutions} 次")
     print(f"  - 總運行耗時: {total_elapsed/3600:.2f} 小時 ({total_elapsed/60:.1f} 分鐘)")
     print(f"{C_PURPLE}=================================================={C_RESET}")
+    
+    return 0
 
 if __name__ == "__main__":
     main()
