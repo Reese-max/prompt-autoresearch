@@ -54,6 +54,7 @@ def _install_fake_run_opt(monkeypatch, always_success=False):
 
     fake_mod = types.ModuleType("run_opt")
     fake_mod.run_opt_pass = fake_run_opt_pass
+    fake_mod.LAST_ROUND_COUNTERMEASURES = []
     monkeypatch.setitem(sys.modules, "run_opt", fake_mod)
     return calls
 

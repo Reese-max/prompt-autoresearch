@@ -257,7 +257,7 @@ def main(argv=None):
         },
     )
 
-    from run_opt import run_opt_pass
+    from run_opt import run_opt_pass, LAST_ROUND_COUNTERMEASURES
 
     for round_no in range(1, args.max_rounds + 1):
         print(f"\n{C_PURPLE}{'=' * 64}{C_RESET}")
@@ -269,8 +269,9 @@ def main(argv=None):
         round_started = time.time()
         error = ""
 
+        round_avoid_failures = list(avoid_failures_next)
+        countermeasures_injected = []
         try:
-            round_avoid_failures = list(avoid_failures_next)
             avoid_failures_next = []
             if round_avoid_failures:
                 print(f"{C_YELLOW}本輪方向避開：{', '.join(round_avoid_failures)}{C_RESET}")
@@ -281,6 +282,7 @@ def main(argv=None):
                 force_direction=args.force_direction,
                 avoid_failures=round_avoid_failures,
             )
+            countermeasures_injected = list(LAST_ROUND_COUNTERMEASURES)
         except Exception as exc:
             success = False
             error = str(exc)
@@ -336,6 +338,7 @@ def main(argv=None):
             "best_score": best_score,
             "no_improve_count": no_improve_count,
             "dominant_failure": failure_code,
+            "countermeasures_injected": countermeasures_injected,
             "same_failure_count": same_failure_count,
             "avoid_failures_next": avoid_failures_next,
             "round_estimated_api_calls": round_calls,

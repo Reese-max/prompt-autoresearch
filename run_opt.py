@@ -100,6 +100,32 @@ def parse_run_opt_args(argv):
             config["avoid_failures"] = []
     return config
 
+LAST_ROUND_COUNTERMEASURES = []
+
+
+def load_targeted_countermeasures(target_failures):
+    """從 rubrics/failure_taxonomy.md 載入指定缺陷碼的對策原文。"""
+    text = load_file("rubrics/failure_taxonomy.md")
+    if not text or not target_failures:
+        return {}
+    target_set = set(target_failures)
+    result = {}
+    code_pattern = re.compile(r"^###\s+(F\d{2})")
+    cm_pattern = re.compile(r"^\*\s*\*\*修復方向\*\*[：:]\s*(.+)")
+    current_code = None
+    for line in text.split("\n"):
+        m = code_pattern.match(line)
+        if m:
+            current_code = m.group(1)
+        if current_code:
+            cm = cm_pattern.match(line)
+            if cm:
+                if current_code in target_set:
+                    result[current_code] = cm.group(1).strip()
+                current_code = None
+    return result
+
+
 def compress_candidate_prompt(prompt):
     compress_user = f"""請將以下臺灣國考申論題提示詞壓縮到 520 字以內。
 
@@ -509,6 +535,16 @@ def run_opt_pass(smoke_parallel=None, dev_parallel=None, holdout_parallel=None, 
         print(f"  - 本輪避開失敗碼: {', '.join(merged_avoid_failures)}")
     print(f"  - 本輪假設: {hypothesis}")
 
+    # 載入定向變異對策原文
+    targeted_cms = load_targeted_countermeasures(target_failures)
+    if targeted_cms:
+        cms_lines = [f"- {code}：{text}" for code, text in sorted(targeted_cms.items())]
+        countermeasure_block = "以下為對應缺陷的具體修復方向，請在優化時嚴格落實：\n" + "\n".join(cms_lines)
+    else:
+        countermeasure_block = "—"
+    global LAST_ROUND_COUNTERMEASURES
+    LAST_ROUND_COUNTERMEASURES = sorted(targeted_cms.keys()) if targeted_cms else []
+
     meta_prompt = """你是一位精通臺灣國家考試（高考/特考三等）申論題高分寫作的提示詞優化大師。
 請根據【最新評估運行報告】，對當前最高分【冠軍提示詞 (baseline.md)】進行一次精準定向優化。
 
@@ -536,16 +572,17 @@ def run_opt_pass(smoke_parallel=None, dev_parallel=None, holdout_parallel=None, 
 
 【重要優化指令】
 1. **分析缺陷與優化方向**：上一輪出現了缺陷（如：{2}）。請在維持冠軍提示詞既有優秀結構的基礎上，針對這些缺陷進行局部微調與精確強化。
-2. **保留硬性防呆規則**：新提示詞必須【百分之百包含】以下特定關鍵字以通過系統防呆審查：
+2. **定向變異 — 對策原文注入**：{7}
+3. **保留硬性防呆規則**：新提示詞必須【百分之百包含】以下特定關鍵字以通過系統防呆審查：
    - 專家角色：必須包含「專家」或「閱卷委員」或「評分委員」或「寫作名師」。
    - 廢話與前言排除：必須包含「直接輸出正文」或「不得摻雜說明或提問」或「嚴禁任何前導廢話」。
    - 防編造法條：必須包含「杜絕捏造」或「嚴禁編造」或「不得編造」或「不要編造」。
    - 比較基準：必須包含「比較基準」或「橫向對比」。
    - 法律題分流：必須包含「三段論法」或「法源涵攝」或「法理」或「案例」。
-3. **字數嚴格控制**：修改後的提示詞總長度必須【控制在 400-500 字以內】，絕對不能超過 550 字，否則會被系統自動攔截淘汰。
-4. **輸出格式**：請直接輸出優化後的 System Prompt 全文正文。嚴禁包含任何 markdown 代碼塊（```）、任何 JSON 包裝、任何前導說明、對話或思考過程。直接以第一字開始輸出正文。
-5. **保留局部成果**：若題型 champion 顯示某類題型已有明顯突破，請吸收其有效精神，但不可讓其他題型退步超過 3 分。
-""".format(latest_report, baseline_prompt, ", ".join(target_failures), hypothesis, trend_report, champion_report, baseline_report)
+4. **字數嚴格控制**：修改後的提示詞總長度必須【控制在 400-500 字以內】，絕對不能超過 550 字，否則會被系統自動攔截淘汰。
+5. **輸出格式**：請直接輸出優化後的 System Prompt 全文正文。嚴禁包含任何 markdown 代碼塊（```）、任何 JSON 包裝、任何前導說明、對話或思考過程。直接以第一字開始輸出正文。
+6. **保留局部成果**：若題型 champion 顯示某類題型已有明顯突破，請吸收其有效精神，但不可讓其他題型退步超過 3 分。
+""".format(latest_report, baseline_prompt, ", ".join(target_failures), hypothesis, trend_report, champion_report, baseline_report, countermeasure_block)
 
     # --- 多候選生成 (#5) ---
     multi_cfg = get("multi_candidate") or {}
@@ -573,9 +610,10 @@ def run_opt_pass(smoke_parallel=None, dev_parallel=None, holdout_parallel=None, 
             ts = int(time.time())
             cand_path = f"prompts/candidates/candidate_{ts}_{ci}.md"
             write_file(cand_path, mutated)
+            cm_injected_str = ", ".join(LAST_ROUND_COUNTERMEASURES) if LAST_ROUND_COUNTERMEASURES else "(none)"
             write_file(
                 cand_path.replace(".md", ".meta.md"),
-                f"# Candidate Metadata\n\n- direction: {direction}\n- target_failures: {', '.join(target_failures)}\n- hypothesis: {hypothesis}\n- temperature: {temp}\n- candidate_index: {ci}\n",
+                f"# Candidate Metadata\n\n- direction: {direction}\n- target_failures: {', '.join(target_failures)}\n- hypothesis: {hypothesis}\n- temperature: {temp}\n- candidate_index: {ci}\n- countermeasures_injected: {cm_injected_str}\n",
             )
             update_candidate_scorecard(
                 cand_path,
@@ -586,6 +624,7 @@ def run_opt_pass(smoke_parallel=None, dev_parallel=None, holdout_parallel=None, 
                 temperature=temp,
                 candidate_index=ci,
                 candidate_length=len(mutated),
+                countermeasures_injected=LAST_ROUND_COUNTERMEASURES,
                 status="generated",
                 reject_reasons=[],
             )
