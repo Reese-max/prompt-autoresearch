@@ -332,5 +332,84 @@ class TestMetaPromptCountermeasureInjection:
             assert result[code] == expected_text
 
 
+class TestDominantFailureToCountermeasures:
+    """驗證 dominant_failure（F03/F04）→ load_targeted_countermeasures 的整合路徑。"""
+
+    def test_dominant_failure_F03_loads_countermeasure_text(self):
+        """dominant_failure 傳回 F03 時可載入對應對策原文。"""
+        summary = {"failure_counts": {"F03": 5, "F01": 2}}
+        df = infinite_evolve.dominant_failure(summary)
+        assert df == "F03"
+        result = run_opt.load_targeted_countermeasures([df])
+        assert "F03" in result
+        assert "結構化、具體化" in result["F03"]
+
+    def test_dominant_failure_F04_loads_countermeasure_text(self):
+        """dominant_failure 傳回 F04 時可載入對應對策原文。"""
+        summary = {"failure_counts": {"F04": 3, "F02": 1}}
+        df = infinite_evolve.dominant_failure(summary)
+        assert df == "F04"
+        result = run_opt.load_targeted_countermeasures([df])
+        assert "F04" in result
+        assert "專有名詞" in result["F04"]
+
+    def test_dominant_failure_other_also_loads(self):
+        """dominant_failure 非 F03/F04 時仍可載入（通用行為）。"""
+        summary = {"failure_counts": {"F08": 4, "F05": 2}}
+        df = infinite_evolve.dominant_failure(summary)
+        assert df == "F08"
+        result = run_opt.load_targeted_countermeasures([df])
+        assert "F08" in result
+        assert "涵攝" in result["F08"]
+
+    def test_dominant_failure_empty_summary_returns_empty(self):
+        """failure_counts 為空時 dominant_failure 回傳空字串，對應空 dict。"""
+        summary = {}
+        df = infinite_evolve.dominant_failure(summary)
+        assert df == ""
+        result = run_opt.load_targeted_countermeasures([df] if df else [])
+        assert result == {}
+
+    def test_countermeasures_injected_in_log_when_dominant_failure_F03(self, tmp_path, monkeypatch):
+        """dominant_failure=F03 時 round_complete.countermeasures_injected 含代碼。"""
+        monkeypatch.chdir(tmp_path)
+        p = tmp_path / "prompts" / "baseline.md"
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text("你是一位專精臺灣國家考試的專家。", encoding="utf-8")
+        tax_dir = tmp_path / "rubrics"
+        tax_dir.mkdir(parents=True, exist_ok=True)
+        (tax_dir / "failure_taxonomy.md").write_text(
+            "### F03：採分點不外露\n"
+            "* **修復方向**：規定標題必須「結構化、具體化」。\n",
+            encoding="utf-8",
+        )
+        monkeypatch.setattr(infinite_evolve, "run_cmd", lambda cmd, timeout=None: SimpleNamespace(returncode=0))
+        monkeypatch.setattr(infinite_evolve.time, "sleep", lambda _: None)
+
+        fake_mod = types.ModuleType("run_opt")
+        fake_mod.run_opt_pass = lambda **kwargs: True
+        fake_mod.LAST_ROUND_COUNTERMEASURES = ["F03"]
+        monkeypatch.setitem(sys.modules, "run_opt", fake_mod)
+
+        rc = infinite_evolve.main(argv=[
+            "--max-rounds", "3", "--no-improve-limit", "5",
+            "--retry-after-no-improve", "0", "--sleep-seconds", "0",
+            "--route-every", "0", "--round-timeout-seconds", "60",
+        ])
+        assert rc == 0
+
+        log_path = tmp_path / "evolution_log.jsonl"
+        log_rows = []
+        with open(log_path, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if line:
+                    log_rows.append(json.loads(line))
+
+        round_events = [r for r in log_rows if r.get("event") == "round_complete"]
+        for evt in round_events:
+            assert evt["countermeasures_injected"] == ["F03"]
+
+
 if __name__ == "__main__":
     sys.exit(pytest.main(["-v", __file__]))
