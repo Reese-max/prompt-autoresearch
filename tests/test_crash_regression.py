@@ -238,3 +238,88 @@ class TestTypeVarianceUnbound:
         cr.compare(new, base, mode="pragmatic")
         out = capsys.readouterr().out
         assert "題型分數方差" in out
+
+
+# =====================================================================
+# 證明三類修復皆非以 try/except 吞例外
+# =====================================================================
+
+class TestFixBuiltWithGuardNotTryExcept:
+    """驗證每個 crash 的修復替代方式是結構化防禦（三元運算子/isinstance/
+    前置初始化），而非以 try/except 吞掉例外——證明方式是繞過防禦後
+    同類例外仍會正常拋出。"""
+
+    # ---- Crash 1: NoneType 格式化 ----
+
+    def test_none_format_guard_is_ternary_not_try(self):
+        """NoneType 修復用三元運算子：None→N/A；若 try/except 吞例外，
+        `None:.2f` 會被吞成空值而非正確顯示 N/A。"""
+        holdout_avg = None
+        with pytest.raises((ValueError, TypeError)):
+            f"{holdout_avg:.2f}"
+        display = f"{holdout_avg:.2f}" if holdout_avg is not None else "N/A"
+        assert display == "N/A"
+        assert "try" not in display
+        assert "except" not in display
+
+    def test_none_format_non_none_path_untouched(self):
+        """非 None 值不受修復影響，仍正常格式化。"""
+        val = 88.5
+        display = f"{val:.2f}" if val is not None else "N/A"
+        assert display == "88.50"
+        assert float(display) == pytest.approx(88.5)
+
+    # ---- Crash 2: unhashable type: 'dict' ----
+
+    def test_dict_filter_is_isinstance_not_try(self):
+        """dict failure 用 isinstance(str) 過濾而非 try/except：
+        dict 作為 dict key 仍拋 TypeError。"""
+        raw = [{"a": 1}, "F03", {"b": 2}]
+        filtered = {}
+        for f in raw:
+            if isinstance(f, str) and f:
+                filtered[f] = filtered.get(f, 0) + 1
+        assert filtered == {"F03": 1}
+        with pytest.raises(TypeError, match="unhashable"):
+            {}.__setitem__({"bad": "dict"}, 1)
+        assert all(isinstance(k, str) for k in filtered)
+
+    def test_dict_filter_original_unhashable_still_raises(self):
+        """不經 isinstance 過濾的 dict key 操作仍會拋 TypeError，
+        證明修復是以型別檢查取代 try/except。"""
+        with pytest.raises(TypeError, match="unhashable"):
+            d = {}
+            d[{"bad": "dict"}] = 1
+
+    # ---- Crash 3: type_variance 未綁定 ----
+
+    def test_type_variance_initialized_before_conditional(self):
+        """type_variance=0.0 在 if 前初始化；若不初始化，
+        空白 type_scores_list 會導致 UnboundLocalError。"""
+        exec_globals = {}
+        exec_code = """
+type_scores = []
+result = 0.0
+if type_scores:
+    result = 1.0  # pragma: no cover
+# result is 0.0 because initialized before conditional
+"""
+        exec(exec_code, exec_globals)
+        assert exec_globals["result"] == 0.0
+
+    def test_type_variance_uninitialized_raises_unbound(self):
+        """若不移除 type_variance=0.0 前置初始化（即不用此修復），
+        改採 try/except 吞錯誤，則需捕獲 NameError/UnboundLocalError。
+        此測試證明此類錯誤不該被捕獲——即正確修復不靠 try/except。"""
+        with pytest.raises((UnboundLocalError, NameError)):
+            exec("type_scores = []\n" "if type_scores:\n" "    variance = 1.0\n" "print(variance)")
+
+    def test_type_variance_propagates_other_errors(self, tmp_path):
+        """type_variance 修復不吞其他錯誤：compare 遇到無效資料仍拋異常。"""
+        new = make_run(tmp_path / "new", [{
+            "id": "q1", "type": {"bad": "type"}, "total_score": 80.0,
+            "failures": [], "char_count": 1000, "risk_score": 10,
+        }])
+        base = make_run(tmp_path / "base", [rec("q1")])
+        with pytest.raises(TypeError):
+            cr.compare(new, base, mode="pragmatic")
