@@ -240,6 +240,123 @@ class TestThreeCrashCorrectOutputs:
 
 
 # ===========================================================================
+# 根因最小重現測試：逐一根因、明確斷言正確產出
+# ===========================================================================
+
+class TestRootCauseDictUnhashable:
+    """根因：unhashable type: 'dict' — compare 以 dict 為 key 時不崩潰且正確過濾。"""
+
+    def test_dict_only_failures_filtered(self, tmp_path):
+        """所有 failures 均為 dict 時，統計結果為空 dict。"""
+        base = make_run(tmp_path / "base", [
+            rec("q1", failures=[{"key": "val"}]),
+            rec("q2", failures=[123, {"nested": True}]),
+        ])
+        new = make_run(tmp_path / "new", [
+            rec("q1", score=90.0, failures=[{"bad": 1}]),
+        ])
+        passed, avg_new, diff = cr.compare(new, base, mode="pragmatic")
+        lc = cr.LAST_COMPARISON
+        assert lc["failure_new"] == {}, "所有 dict failure 應被過濾為空"
+        assert lc["failure_base"] == {}, "所有 dict failure 應被過濾為空"
+        assert avg_new == pytest.approx(90.0), "分數計算不受 dict failure 影響"
+
+    def test_dict_key_in_dict_not_usable(self, tmp_path):
+        """dict 作為 dict comprehension 的 key 必須被 isinstance 擋下。"""
+        failures = [{"a": 1}, "F03", {"b": 2}]
+        filtered = {}
+        for f in failures:
+            if isinstance(f, str) and f:
+                filtered[f] = filtered.get(f, 0) + 1
+        assert filtered == {"F03": 1}, "只有字串型 failure 會被計入"
+        assert all(isinstance(k, str) for k in filtered.keys()), "key 必須全部為 str"
+
+
+class TestRootCauseNoneTypeFormat:
+    """根因：unsupported format string passed to NoneType — None 不可直接 :.2f。"""
+
+    def test_holdout_avg_none_yields_na_display(self, tmp_path):
+        """holdout_avg=None 時，format 分支產生 'N/A' 而非崩潰。"""
+        holdout_avg = None
+        holdout_display = f"{holdout_avg:.2f}" if holdout_avg is not None else "N/A"
+        assert holdout_display == "N/A", "None 的顯示值必須為 'N/A'"
+
+    def test_holdout_avg_none_dev_avg_computed(self, tmp_path, monkeypatch):
+        """holdout_avg=None 時，baseline_dev_score 仍可正確計算。"""
+        _write_baseline(tmp_path)
+        _write_baseline_meta(tmp_path, {
+            "dev_avg": 88.03, "dev_run": "runs/some_dev",
+            "holdout_avg": None,
+        })
+        monkeypatch.chdir(tmp_path)
+        score = auto_evolve.baseline_dev_score()
+        assert score == pytest.approx(88.03), "dev_avg 不受 holdout_avg=None 影響"
+
+    def test_holdout_avg_none_full_run_correct_output(self, tmp_path, monkeypatch):
+        """完整 auto_evolve 流程中，None holdout_avg 產生正確 log 與 0 退出碼。"""
+        _write_baseline(tmp_path)
+        _write_baseline_meta(tmp_path, {
+            "dev_avg": 88.03, "dev_run": "runs/some_dev",
+            "holdout_avg": None,
+        })
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.setattr(auto_evolve.subprocess, "run",
+                            lambda cmd, timeout=None: SimpleNamespace(returncode=0))
+        monkeypatch.setattr(auto_evolve, "platform",
+                            types.SimpleNamespace(platform=lambda: "test", machine=lambda: "test"))
+        _install_fake_run_opt_for_auto_evolve(monkeypatch, always_success=False)
+        monkeypatch.setattr(auto_evolve.time, "sleep", lambda _: None)
+        monkeypatch.setattr(auto_evolve, "NO_IMPROVE_LIMIT", 10)
+        monkeypatch.setattr(auto_evolve, "RETRY_AFTER_NO_IMPROVE", 0)
+        monkeypatch.setattr(sys, "argv", ["auto_evolve.py", "2"])
+
+        rc = auto_evolve.main()
+        assert rc == 0, "None holdout_avg 不應導致非零退出碼"
+
+        log = _read_log(tmp_path)
+        gen_events = [r for r in log if r.get("event") == "generation_complete"]
+        assert len(gen_events) == 2, "應產生 2 筆 generation_complete"
+        for evt in gen_events:
+            assert evt["success"] is False or evt["success"] is True
+            assert "before_baseline_dev" in evt
+            assert isinstance(evt["before_baseline_dev"], (int, float))
+
+
+class TestRootCauseTypeVarianceUninitialized:
+    """根因：未初始化 type_variance — 空 type 資料時 variance 必須為 0.0。"""
+
+    def test_empty_type_data_variance_zero(self, tmp_path):
+        """單題型無散布時，type_variance 初始化為 0.0。"""
+        base = make_run(tmp_path / "base", [rec("q1", "事實")])
+        new = make_run(tmp_path / "new", [rec("q1", "事實", score=85.0)])
+        cr.compare(new, base, mode="pragmatic")
+        lc = cr.LAST_COMPARISON
+        assert "type_variance" in lc, "LAST_COMPARISON 必須包含 type_variance"
+        assert lc["type_variance"] == pytest.approx(0.0), "單題型時 variance 必須為 0.0"
+
+    def test_single_type_variance_zero(self, tmp_path):
+        """單一題型時，variance 為 0.0（無散布）。"""
+        base = make_run(tmp_path / "base", [rec("q1", "事實")])
+        new = make_run(tmp_path / "new", [rec("q1", "事實", score=90.0)])
+        cr.compare(new, base, mode="pragmatic")
+        lc = cr.LAST_COMPARISON
+        assert lc["type_variance"] == pytest.approx(0.0)
+
+    def test_multi_type_variance_nonnegative(self, tmp_path):
+        """多題型時，variance 非負且為 float。"""
+        base = make_run(tmp_path / "base", [
+            rec("q1", "事實", 80.0), rec("q2", "推理", 80.0), rec("q3", "應用", 80.0),
+        ])
+        new = make_run(tmp_path / "new", [
+            rec("q1", "事實", 90.0), rec("q2", "推理", 70.0), rec("q3", "應用", 85.0),
+        ])
+        cr.compare(new, base, mode="pragmatic")
+        lc = cr.LAST_COMPARISON
+        assert isinstance(lc["type_variance"], float), "type_variance 必須為 float"
+        assert lc["type_variance"] >= 0.0, "variance 不可為負"
+
+
+# ===========================================================================
 # 類別二：F03/F04 對策注入與記錄
 # ===========================================================================
 
