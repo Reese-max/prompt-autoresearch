@@ -536,7 +536,9 @@ def run_opt_pass(smoke_parallel=None, dev_parallel=None, holdout_parallel=None, 
     print(f"  - 本輪假設: {hypothesis}")
 
     # 載入定向變異對策原文
-    targeted_cms = load_targeted_countermeasures(target_failures)
+    targeted_cms = load_targeted_countermeasures(
+        [code for code in target_failures if code in ("F03", "F04")]
+    )
     if targeted_cms:
         cms_lines = [f"- {code}：{text}" for code, text in sorted(targeted_cms.items())]
         countermeasure_block = "以下為對應缺陷的具體修復方向，請在優化時嚴格落實：\n" + "\n".join(cms_lines)

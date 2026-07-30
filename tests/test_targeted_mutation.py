@@ -13,6 +13,7 @@ import os
 import re
 import sys
 import types
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -23,6 +24,88 @@ import infinite_evolve
 
 F03_COUNTERMEASURE = "規定標題必須「結構化、具體化」，例如「一、依行政程序法第 7 條之比例原則內涵」，並要求關鍵字加粗。"
 F04_COUNTERMEASURE = "要求模型必須包含「專有名詞（制度/學說/技術名稱）」與「具體法條/實例」，每段論點至少附帶一個具體佐證。"
+
+
+def _countermeasure_from_taxonomy(code):
+    taxonomy = Path("rubrics/failure_taxonomy.md").read_text(encoding="utf-8")
+    section = re.search(
+        rf"^###\s+{re.escape(code)}\b.*?(?=^###|\Z)",
+        taxonomy,
+        re.MULTILINE | re.DOTALL,
+    )
+    assert section, f"failure_taxonomy.md 缺少 {code}"
+    countermeasure = re.search(
+        r"^\*\s*\*\*修復方向\*\*[：:]\s*(.+)$",
+        section.group(),
+        re.MULTILINE,
+    )
+    assert countermeasure, f"failure_taxonomy.md 缺少 {code} 修復方向"
+    return countermeasure.group(1).strip()
+
+
+def _capture_mutation_prompt(tmp_path, monkeypatch, *, force_direction=None, avoid_failures=None):
+    taxonomy = Path("rubrics/failure_taxonomy.md").read_text(encoding="utf-8")
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "prompts").mkdir()
+    (tmp_path / "prompts" / "baseline.md").write_text("你是一位國考專家。", encoding="utf-8")
+    (tmp_path / "rubrics").mkdir()
+    (tmp_path / "rubrics" / "failure_taxonomy.md").write_text(taxonomy, encoding="utf-8")
+
+    captured = []
+
+    def capture_then_stop(_system, prompt, temperature):
+        captured.append(prompt)
+        raise RuntimeError("測試僅截取變異 prompt")
+
+    monkeypatch.setattr(run_opt, "baseline_runs_from_meta", lambda _hash: ({}, {}))
+    monkeypatch.setattr(run_opt, "find_latest_run_for_hash", lambda *_args: None)
+    monkeypatch.setattr(run_opt, "find_latest_run_for", lambda *_args: None)
+    monkeypatch.setattr(run_opt, "collect_recent_failure_trend", lambda *_args, **_kwargs: ({}, []))
+    monkeypatch.setattr(run_opt, "champion_context", lambda: "")
+    monkeypatch.setattr(run_opt, "call_minimax", capture_then_stop)
+
+    assert not run_opt.run_opt_pass(
+        smoke_parallel=1,
+        dev_parallel=1,
+        holdout_parallel=1,
+        force_direction=force_direction,
+        avoid_failures=avoid_failures,
+    )
+    assert len(captured) == 1
+    return captured[0], run_opt.LAST_ROUND_COUNTERMEASURES
+
+
+class TestActualTargetedMutation:
+    @pytest.mark.parametrize(("failure_code", "direction"), [("F03", "D03"), ("F04", "D04")])
+    def test_dominant_failure_injects_verbatim_taxonomy_countermeasure(
+        self, tmp_path, monkeypatch, failure_code, direction
+    ):
+        dominant_failure = infinite_evolve.dominant_failure({"failure_counts": {failure_code: 2}})
+        meta_prompt, injected = _capture_mutation_prompt(
+            tmp_path, monkeypatch, force_direction=direction
+        )
+        countermeasure = _countermeasure_from_taxonomy(dominant_failure)
+
+        assert f"- {dominant_failure}：{countermeasure}" in meta_prompt
+        assert isinstance(injected, list)
+        assert all(isinstance(code, str) for code in injected)
+        assert injected == [dominant_failure]
+
+    def test_non_target_dominant_failure_only_avoids_without_injection(self, tmp_path, monkeypatch):
+        dominant_failure = infinite_evolve.dominant_failure({"failure_counts": {"F08": 2}})
+        _, target_failures = run_opt.pick_direction(
+            "", trend_counts={dominant_failure: 2}, avoid_failures=[dominant_failure]
+        )
+        meta_prompt, injected = _capture_mutation_prompt(
+            tmp_path, monkeypatch, avoid_failures=[dominant_failure]
+        )
+
+        assert dominant_failure not in target_failures
+        assert isinstance(injected, list)
+        assert all(isinstance(code, str) for code in injected)
+        assert injected == []
+        assert "2. **定向變異 — 對策原文注入**：—" in meta_prompt
+        assert _countermeasure_from_taxonomy(dominant_failure) not in meta_prompt
 
 
 class TestLoadTargetedCountermeasures:
