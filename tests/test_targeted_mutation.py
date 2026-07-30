@@ -10,6 +10,7 @@ test_targeted_mutation.py — 定向變異與日誌結構測試
 """
 import json
 import os
+import re
 import sys
 import types
 from types import SimpleNamespace
@@ -81,6 +82,39 @@ class TestLoadTargetedCountermeasures:
             assert any(kw in text for kw in ("必須", "應", "嚴禁", "規定", "要求")), (
                 f"{code} 對策原文缺少指令式關鍵字：{text[:50]}..."
             )
+
+    def test_countermeasure_text_verbatim_match_with_taxonomy_file(self):
+        """逐字比對：load_targeted_countermeasures 回傳文字與 taxonomy 檔案完全一致。"""
+        result = run_opt.load_targeted_countermeasures(["F03", "F04"])
+        tax_path = "rubrics/failure_taxonomy.md"
+        with open(tax_path, "r", encoding="utf-8") as f:
+            tax_text = f.read()
+        code_pat = re.compile(r"^###\s+(F\d{2})")
+        cm_pat = re.compile(r"^\*\s*\*\*修復方向\*\*[：:]\s*(.+)")
+        current_code = None
+        tax_cms = {}
+        for line in tax_text.split("\n"):
+            m = code_pat.match(line)
+            if m:
+                current_code = m.group(1)
+            if current_code:
+                cm = cm_pat.match(line)
+                if cm:
+                    if current_code in ("F03", "F04"):
+                        tax_cms[current_code] = cm.group(1).strip()
+                    current_code = None
+        assert "F03" in tax_cms
+        assert "F04" in tax_cms
+        assert result["F03"] == tax_cms["F03"], (
+            f"F03 對策文字與 taxonomy 原文不符（逐字比對）\n"
+            f"  load_targeted_countermeasures 回傳: {result['F03']!r}\n"
+            f"  taxonomy 原文:                 {tax_cms['F03']!r}"
+        )
+        assert result["F04"] == tax_cms["F04"], (
+            f"F04 對策文字與 taxonomy 原文不符（逐字比對）\n"
+            f"  load_targeted_countermeasures 回傳: {result['F04']!r}\n"
+            f"  taxonomy 原文:                 {tax_cms['F04']!r}"
+        )
 
 
 class TestCountermeasuresInjectedField:
@@ -408,7 +442,51 @@ class TestDominantFailureToCountermeasures:
 
         round_events = [r for r in log_rows if r.get("event") == "round_complete"]
         for evt in round_events:
+            assert isinstance(evt["countermeasures_injected"], list)
+            assert all(isinstance(x, str) for x in evt["countermeasures_injected"])
             assert evt["countermeasures_injected"] == ["F03"]
+
+    def test_countermeasures_injected_in_log_when_dominant_failure_F04(self, tmp_path, monkeypatch):
+        """dominant_failure=F04 時 round_complete.countermeasures_injected 含代碼。"""
+        monkeypatch.chdir(tmp_path)
+        p = tmp_path / "prompts" / "baseline.md"
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text("你是一位專精臺灣國家考試的專家。", encoding="utf-8")
+        tax_dir = tmp_path / "rubrics"
+        tax_dir.mkdir(parents=True, exist_ok=True)
+        (tax_dir / "failure_taxonomy.md").write_text(
+            "### F04：內容抽象\n"
+            "* **修復方向**：要求模型必須包含「專有名詞（制度/學說/技術名稱）」與「具體法條/實例」，每段論點至少附帶一個具體佐證。\n",
+            encoding="utf-8",
+        )
+        monkeypatch.setattr(infinite_evolve, "run_cmd", lambda cmd, timeout=None: SimpleNamespace(returncode=0))
+        monkeypatch.setattr(infinite_evolve.time, "sleep", lambda _: None)
+
+        fake_mod = types.ModuleType("run_opt")
+        fake_mod.run_opt_pass = lambda **kwargs: True
+        fake_mod.LAST_ROUND_COUNTERMEASURES = ["F04"]
+        monkeypatch.setitem(sys.modules, "run_opt", fake_mod)
+
+        rc = infinite_evolve.main(argv=[
+            "--max-rounds", "3", "--no-improve-limit", "5",
+            "--retry-after-no-improve", "0", "--sleep-seconds", "0",
+            "--route-every", "0", "--round-timeout-seconds", "60",
+        ])
+        assert rc == 0
+
+        log_path = tmp_path / "evolution_log.jsonl"
+        log_rows = []
+        with open(log_path, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if line:
+                    log_rows.append(json.loads(line))
+
+        round_events = [r for r in log_rows if r.get("event") == "round_complete"]
+        for evt in round_events:
+            assert isinstance(evt["countermeasures_injected"], list)
+            assert all(isinstance(x, str) for x in evt["countermeasures_injected"])
+            assert evt["countermeasures_injected"] == ["F04"]
 
 
 if __name__ == "__main__":
