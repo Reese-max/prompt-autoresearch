@@ -400,3 +400,11 @@ generation	score	length	failures	decision
 2026-07-30 00:42:23	questions/smoke.jsonl	77.33	460
 2026-07-30 00:43:40	questions/smoke.jsonl	77.33	448
 2026-07-30 00:44:54	questions/smoke.jsonl	93.33	444
+2026-07-30 09:29:50	questions/smoke.jsonl	91.00	436
+2026-07-30 09:31:33	questions/smoke.jsonl	90.17	500
+2026-07-30 09:33:24	questions/smoke.jsonl	91.67	518
+2026-07-30 09:36:00	questions/smoke.jsonl	90.50	550
+2026-07-30 09:37:17	questions/smoke.jsonl	90.67	503
+2026-07-30 09:39:37	questions/smoke.jsonl	96.67	494
+2026-07-30 09:40:57	questions/smoke.jsonl	84.50	548
+2026-07-30 09:42:29	questions/smoke.jsonl	89.17	540

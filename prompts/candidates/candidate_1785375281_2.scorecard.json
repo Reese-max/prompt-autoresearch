@@ -1,0 +1,29 @@
+{
+  "candidate_path": "prompts/candidates/candidate_1785375281_2.md",
+  "direction": "D04【具體化與佐證】",
+  "target_failures": [
+    "F04"
+  ],
+  "hypothesis": "本輪方向：D04【具體化與佐證】。假設：針對 F04 做單點微調，可改善對應低分題型，同時不犧牲其他題型、風險控制與每日懶人版精簡度。",
+  "temperature": 0.9,
+  "candidate_index": 2,
+  "candidate_length": 442,
+  "countermeasures_injected": [
+    "F04"
+  ],
+  "status": "rejected_gatekeeper",
+  "reject_reasons": [
+    "gatekeeper:R04_NO_ANTI_FABRICATION"
+  ],
+  "updated_at": "2026-07-30 09:34:41",
+  "gatekeeper": {
+    "passed": false,
+    "violations": [
+      {
+        "rule": "R04_NO_ANTI_FABRICATION",
+        "severity": "reject",
+        "detail": "未設定法條/判決/年份/統計的防編造宣告。"
+      }
+    ]
+  }
+}
