@@ -12,6 +12,7 @@ import hashlib
 import json
 import sys
 import types
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -318,6 +319,36 @@ class TestBaselineHashInvariance:
         assert rc == 0
         assert len(calls) >= 3  # run_opt_pass 至少被呼叫 3 次
         assert _baseline_hash(tmp_path) == original_hash
+
+    def test_real_baseline_hash_invariance_during_evolution(self, tmp_path, monkeypatch):
+        """使用真實 prompts/baseline.md 的內容驗證演化過程中雜湊不變。"""
+        real_path = Path(__file__).resolve().parents[1] / "prompts" / "baseline.md"
+        real_content = real_path.read_bytes()
+        real_hash = hashlib.sha256(real_content).hexdigest()
+
+        p = tmp_path / "prompts" / "baseline.md"
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_bytes(real_content)
+
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.setattr(
+            infinite_evolve, "run_cmd", lambda cmd, timeout=None: SimpleNamespace(returncode=0)
+        )
+        _install_fake_run_opt(monkeypatch, always_success=False)
+        monkeypatch.setattr(infinite_evolve.time, "sleep", lambda _: None)
+
+        rc = infinite_evolve.main(argv=_common_argv(
+            max_rounds=10,
+            no_improve_limit=3,
+            retry_after_no_improve=0,
+        ))
+
+        assert rc == 0
+        after_hash = hashlib.sha256(p.read_bytes()).hexdigest()
+        assert after_hash == real_hash, (
+            f"真實 baseline.md 內容在演化後雜湊改變："
+            f"{real_hash[:16]} → {after_hash[:16]}"
+        )
 
 
 # ---------------------------------------------------------------------------
