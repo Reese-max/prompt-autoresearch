@@ -1,0 +1,1321 @@
+{
+  "meta": {
+    "timestamp": "2026-07-31 09:24:14",
+    "prompt_file": "prompts/baseline.md (mock)",
+    "prompt_hash": "mock_2a",
+    "question_file": "questions/dev.jsonl",
+    "repetitions": 5,
+    "n_questions": 12,
+    "total_attempts": 60,
+    "errors": 0,
+    "elapsed_seconds": 0.0,
+    "force_skip_cache": true,
+    "concurrency": 1,
+    "mode": "mock",
+    "mock_seed": 42
+  },
+  "per_question": {
+    "explain_002": {
+      "attempts": [
+        {
+          "attempt": 1,
+          "total_score": 78,
+          "general_score": 54,
+          "type_specific_score": 15,
+          "risk_score": 9,
+          "failures": [
+            "F02"
+          ],
+          "cached": false,
+          "error": null,
+          "char_count": 902
+        },
+        {
+          "attempt": 2,
+          "total_score": 81,
+          "general_score": 59,
+          "type_specific_score": 15,
+          "risk_score": 7,
+          "failures": [
+            "F03"
+          ],
+          "cached": false,
+          "error": null,
+          "char_count": 955
+        },
+        {
+          "attempt": 3,
+          "total_score": 80,
+          "general_score": 57,
+          "type_specific_score": 14,
+          "risk_score": 9,
+          "failures": [
+            "F03"
+          ],
+          "cached": false,
+          "error": null,
+          "char_count": 877
+        },
+        {
+          "attempt": 4,
+          "total_score": 82,
+          "general_score": 56,
+          "type_specific_score": 16,
+          "risk_score": 10,
+          "failures": [],
+          "cached": false,
+          "error": null,
+          "char_count": 899
+        },
+        {
+          "attempt": 5,
+          "total_score": 81,
+          "general_score": 58,
+          "type_specific_score": 15,
+          "risk_score": 8,
+          "failures": [],
+          "cached": false,
+          "error": null,
+          "char_count": 746
+        }
+      ],
+      "total_scores": [
+        78,
+        81,
+        80,
+        82,
+        81
+      ],
+      "total_stats": {
+        "n": 5,
+        "mean": 80.4,
+        "min": 78,
+        "max": 82,
+        "range": 4,
+        "stddev": 1.5166
+      },
+      "general_stats": {
+        "n": 5,
+        "mean": 56.8,
+        "min": 54,
+        "max": 59,
+        "range": 5,
+        "stddev": 1.9235
+      },
+      "type_specific_stats": {
+        "n": 5,
+        "mean": 15.0,
+        "min": 14,
+        "max": 16,
+        "range": 2,
+        "stddev": 0.7071
+      },
+      "risk_stats": {
+        "n": 5,
+        "mean": 8.6,
+        "min": 7,
+        "max": 10,
+        "range": 3,
+        "stddev": 1.1402
+      }
+    },
+    "explain_003": {
+      "attempts": [
+        {
+          "attempt": 1,
+          "total_score": 82,
+          "general_score": 55,
+          "type_specific_score": 17,
+          "risk_score": 10,
+          "failures": [
+            "F04"
+          ],
+          "cached": false,
+          "error": null,
+          "char_count": 803
+        },
+        {
+          "attempt": 2,
+          "total_score": 66,
+          "general_score": 51,
+          "type_specific_score": 6,
+          "risk_score": 9,
+          "failures": [],
+          "cached": false,
+          "error": null,
+          "char_count": 987
+        },
+        {
+          "attempt": 3,
+          "total_score": 77,
+          "general_score": 55,
+          "type_specific_score": 12,
+          "risk_score": 10,
+          "failures": [
+            "F03"
+          ],
+          "cached": false,
+          "error": null,
+          "char_count": 876
+        },
+        {
+          "attempt": 4,
+          "total_score": 82,
+          "general_score": 61,
+          "type_specific_score": 15,
+          "risk_score": 6,
+          "failures": [],
+          "cached": false,
+          "error": null,
+          "char_count": 1007
+        },
+        {
+          "attempt": 5,
+          "total_score": 80,
+          "general_score": 53,
+          "type_specific_score": 20,
+          "risk_score": 7,
+          "failures": [
+            "F11"
+          ],
+          "cached": false,
+          "error": null,
+          "char_count": 930
+        }
+      ],
+      "total_scores": [
+        82,
+        66,
+        77,
+        82,
+        80
+      ],
+      "total_stats": {
+        "n": 5,
+        "mean": 77.4,
+        "min": 66,
+        "max": 82,
+        "range": 16,
+        "stddev": 6.6933
+      },
+      "general_stats": {
+        "n": 5,
+        "mean": 55.0,
+        "min": 51,
+        "max": 61,
+        "range": 10,
+        "stddev": 3.7417
+      },
+      "type_specific_stats": {
+        "n": 5,
+        "mean": 14.0,
+        "min": 6,
+        "max": 20,
+        "range": 14,
+        "stddev": 5.3385
+      },
+      "risk_stats": {
+        "n": 5,
+        "mean": 8.4,
+        "min": 6,
+        "max": 10,
+        "range": 4,
+        "stddev": 1.8166
+      }
+    },
+    "compare_002": {
+      "attempts": [
+        {
+          "attempt": 1,
+          "total_score": 77,
+          "general_score": 56,
+          "type_specific_score": 12,
+          "risk_score": 9,
+          "failures": [],
+          "cached": false,
+          "error": null,
+          "char_count": 971
+        },
+        {
+          "attempt": 2,
+          "total_score": 88,
+          "general_score": 58,
+          "type_specific_score": 20,
+          "risk_score": 10,
+          "failures": [],
+          "cached": false,
+          "error": null,
+          "char_count": 838
+        },
+        {
+          "attempt": 3,
+          "total_score": 73,
+          "general_score": 46,
+          "type_specific_score": 18,
+          "risk_score": 9,
+          "failures": [],
+          "cached": false,
+          "error": null,
+          "char_count": 1096
+        },
+        {
+          "attempt": 4,
+          "total_score": 72,
+          "general_score": 51,
+          "type_specific_score": 12,
+          "risk_score": 9,
+          "failures": [],
+          "cached": false,
+          "error": null,
+          "char_count": 882
+        },
+        {
+          "attempt": 5,
+          "total_score": 70,
+          "general_score": 48,
+          "type_specific_score": 14,
+          "risk_score": 8,
+          "failures": [],
+          "cached": false,
+          "error": null,
+          "char_count": 949
+        }
+      ],
+      "total_scores": [
+        77,
+        88,
+        73,
+        72,
+        70
+      ],
+      "total_stats": {
+        "n": 5,
+        "mean": 76.0,
+        "min": 70,
+        "max": 88,
+        "range": 18,
+        "stddev": 7.1764
+      },
+      "general_stats": {
+        "n": 5,
+        "mean": 51.8,
+        "min": 46,
+        "max": 58,
+        "range": 12,
+        "stddev": 5.1186
+      },
+      "type_specific_stats": {
+        "n": 5,
+        "mean": 15.2,
+        "min": 12,
+        "max": 20,
+        "range": 8,
+        "stddev": 3.6332
+      },
+      "risk_stats": {
+        "n": 5,
+        "mean": 9.0,
+        "min": 8,
+        "max": 10,
+        "range": 2,
+        "stddev": 0.7071
+      }
+    },
+    "compare_003": {
+      "attempts": [
+        {
+          "attempt": 1,
+          "total_score": 74,
+          "general_score": 50,
+          "type_specific_score": 16,
+          "risk_score": 8,
+          "failures": [],
+          "cached": false,
+          "error": null,
+          "char_count": 980
+        },
+        {
+          "attempt": 2,
+          "total_score": 81,
+          "general_score": 60,
+          "type_specific_score": 12,
+          "risk_score": 9,
+          "failures": [],
+          "cached": false,
+          "error": null,
+          "char_count": 818
+        },
+        {
+          "attempt": 3,
+          "total_score": 78,
+          "general_score": 57,
+          "type_specific_score": 11,
+          "risk_score": 10,
+          "failures": [],
+          "cached": false,
+          "error": null,
+          "char_count": 807
+        },
+        {
+          "attempt": 4,
+          "total_score": 82,
+          "general_score": 56,
+          "type_specific_score": 18,
+          "risk_score": 8,
+          "failures": [],
+          "cached": false,
+          "error": null,
+          "char_count": 873
+        },
+        {
+          "attempt": 5,
+          "total_score": 79,
+          "general_score": 57,
+          "type_specific_score": 12,
+          "risk_score": 10,
+          "failures": [],
+          "cached": false,
+          "error": null,
+          "char_count": 835
+        }
+      ],
+      "total_scores": [
+        74,
+        81,
+        78,
+        82,
+        79
+      ],
+      "total_stats": {
+        "n": 5,
+        "mean": 78.8,
+        "min": 74,
+        "max": 82,
+        "range": 8,
+        "stddev": 3.1145
+      },
+      "general_stats": {
+        "n": 5,
+        "mean": 56.0,
+        "min": 50,
+        "max": 60,
+        "range": 10,
+        "stddev": 3.6742
+      },
+      "type_specific_stats": {
+        "n": 5,
+        "mean": 13.8,
+        "min": 11,
+        "max": 18,
+        "range": 7,
+        "stddev": 3.0332
+      },
+      "risk_stats": {
+        "n": 5,
+        "mean": 9.0,
+        "min": 8,
+        "max": 10,
+        "range": 2,
+        "stddev": 1.0
+      }
+    },
+    "analyze_002": {
+      "attempts": [
+        {
+          "attempt": 1,
+          "total_score": 74,
+          "general_score": 50,
+          "type_specific_score": 14,
+          "risk_score": 10,
+          "failures": [
+            "F03"
+          ],
+          "cached": false,
+          "error": null,
+          "char_count": 870
+        },
+        {
+          "attempt": 2,
+          "total_score": 69,
+          "general_score": 47,
+          "type_specific_score": 14,
+          "risk_score": 8,
+          "failures": [],
+          "cached": false,
+          "error": null,
+          "char_count": 922
+        },
+        {
+          "attempt": 3,
+          "total_score": 83,
+          "general_score": 61,
+          "type_specific_score": 15,
+          "risk_score": 7,
+          "failures": [],
+          "cached": false,
+          "error": null,
+          "char_count": 692
+        },
+        {
+          "attempt": 4,
+          "total_score": 84,
+          "general_score": 59,
+          "type_specific_score": 15,
+          "risk_score": 10,
+          "failures": [],
+          "cached": false,
+          "error": null,
+          "char_count": 901
+        },
+        {
+          "attempt": 5,
+          "total_score": 83,
+          "general_score": 59,
+          "type_specific_score": 15,
+          "risk_score": 9,
+          "failures": [
+            "F09"
+          ],
+          "cached": false,
+          "error": null,
+          "char_count": 781
+        }
+      ],
+      "total_scores": [
+        74,
+        69,
+        83,
+        84,
+        83
+      ],
+      "total_stats": {
+        "n": 5,
+        "mean": 78.6,
+        "min": 69,
+        "max": 84,
+        "range": 15,
+        "stddev": 6.7305
+      },
+      "general_stats": {
+        "n": 5,
+        "mean": 55.2,
+        "min": 47,
+        "max": 61,
+        "range": 14,
+        "stddev": 6.261
+      },
+      "type_specific_stats": {
+        "n": 5,
+        "mean": 14.6,
+        "min": 14,
+        "max": 15,
+        "range": 1,
+        "stddev": 0.5477
+      },
+      "risk_stats": {
+        "n": 5,
+        "mean": 8.8,
+        "min": 7,
+        "max": 10,
+        "range": 3,
+        "stddev": 1.3038
+      }
+    },
+    "analyze_003": {
+      "attempts": [
+        {
+          "attempt": 1,
+          "total_score": 86,
+          "general_score": 58,
+          "type_specific_score": 20,
+          "risk_score": 8,
+          "failures": [],
+          "cached": false,
+          "error": null,
+          "char_count": 958
+        },
+        {
+          "attempt": 2,
+          "total_score": 75,
+          "general_score": 54,
+          "type_specific_score": 15,
+          "risk_score": 6,
+          "failures": [
+            "F11"
+          ],
+          "cached": false,
+          "error": null,
+          "char_count": 946
+        },
+        {
+          "attempt": 3,
+          "total_score": 83,
+          "general_score": 59,
+          "type_specific_score": 15,
+          "risk_score": 9,
+          "failures": [],
+          "cached": false,
+          "error": null,
+          "char_count": 914
+        },
+        {
+          "attempt": 4,
+          "total_score": 73,
+          "general_score": 46,
+          "type_specific_score": 19,
+          "risk_score": 8,
+          "failures": [],
+          "cached": false,
+          "error": null,
+          "char_count": 655
+        },
+        {
+          "attempt": 5,
+          "total_score": 75,
+          "general_score": 53,
+          "type_specific_score": 14,
+          "risk_score": 8,
+          "failures": [],
+          "cached": false,
+          "error": null,
+          "char_count": 1126
+        }
+      ],
+      "total_scores": [
+        86,
+        75,
+        83,
+        73,
+        75
+      ],
+      "total_stats": {
+        "n": 5,
+        "mean": 78.4,
+        "min": 73,
+        "max": 86,
+        "range": 13,
+        "stddev": 5.7271
+      },
+      "general_stats": {
+        "n": 5,
+        "mean": 54.0,
+        "min": 46,
+        "max": 59,
+        "range": 13,
+        "stddev": 5.1478
+      },
+      "type_specific_stats": {
+        "n": 5,
+        "mean": 16.6,
+        "min": 14,
+        "max": 20,
+        "range": 6,
+        "stddev": 2.7019
+      },
+      "risk_stats": {
+        "n": 5,
+        "mean": 7.8,
+        "min": 6,
+        "max": 9,
+        "range": 3,
+        "stddev": 1.0954
+      }
+    },
+    "practical_002": {
+      "attempts": [
+        {
+          "attempt": 1,
+          "total_score": 75,
+          "general_score": 55,
+          "type_specific_score": 13,
+          "risk_score": 7,
+          "failures": [
+            "F12"
+          ],
+          "cached": false,
+          "error": null,
+          "char_count": 1056
+        },
+        {
+          "attempt": 2,
+          "total_score": 84,
+          "general_score": 55,
+          "type_specific_score": 19,
+          "risk_score": 10,
+          "failures": [],
+          "cached": false,
+          "error": null,
+          "char_count": 1037
+        },
+        {
+          "attempt": 3,
+          "total_score": 71,
+          "general_score": 54,
+          "type_specific_score": 10,
+          "risk_score": 7,
+          "failures": [],
+          "cached": false,
+          "error": null,
+          "char_count": 904
+        },
+        {
+          "attempt": 4,
+          "total_score": 88,
+          "general_score": 59,
+          "type_specific_score": 19,
+          "risk_score": 10,
+          "failures": [],
+          "cached": false,
+          "error": null,
+          "char_count": 907
+        },
+        {
+          "attempt": 5,
+          "total_score": 76,
+          "general_score": 53,
+          "type_specific_score": 13,
+          "risk_score": 10,
+          "failures": [],
+          "cached": false,
+          "error": null,
+          "char_count": 853
+        }
+      ],
+      "total_scores": [
+        75,
+        84,
+        71,
+        88,
+        76
+      ],
+      "total_stats": {
+        "n": 5,
+        "mean": 78.8,
+        "min": 71,
+        "max": 88,
+        "range": 17,
+        "stddev": 6.9785
+      },
+      "general_stats": {
+        "n": 5,
+        "mean": 55.2,
+        "min": 53,
+        "max": 59,
+        "range": 6,
+        "stddev": 2.2804
+      },
+      "type_specific_stats": {
+        "n": 5,
+        "mean": 14.8,
+        "min": 10,
+        "max": 19,
+        "range": 9,
+        "stddev": 4.0249
+      },
+      "risk_stats": {
+        "n": 5,
+        "mean": 8.8,
+        "min": 7,
+        "max": 10,
+        "range": 3,
+        "stddev": 1.6432
+      }
+    },
+    "practical_003": {
+      "attempts": [
+        {
+          "attempt": 1,
+          "total_score": 76,
+          "general_score": 55,
+          "type_specific_score": 14,
+          "risk_score": 7,
+          "failures": [],
+          "cached": false,
+          "error": null,
+          "char_count": 898
+        },
+        {
+          "attempt": 2,
+          "total_score": 86,
+          "general_score": 64,
+          "type_specific_score": 14,
+          "risk_score": 8,
+          "failures": [],
+          "cached": false,
+          "error": null,
+          "char_count": 858
+        },
+        {
+          "attempt": 3,
+          "total_score": 79,
+          "general_score": 50,
+          "type_specific_score": 19,
+          "risk_score": 10,
+          "failures": [],
+          "cached": false,
+          "error": null,
+          "char_count": 942
+        },
+        {
+          "attempt": 4,
+          "total_score": 83,
+          "general_score": 57,
+          "type_specific_score": 16,
+          "risk_score": 10,
+          "failures": [],
+          "cached": false,
+          "error": null,
+          "char_count": 851
+        },
+        {
+          "attempt": 5,
+          "total_score": 75,
+          "general_score": 51,
+          "type_specific_score": 14,
+          "risk_score": 10,
+          "failures": [],
+          "cached": false,
+          "error": null,
+          "char_count": 903
+        }
+      ],
+      "total_scores": [
+        76,
+        86,
+        79,
+        83,
+        75
+      ],
+      "total_stats": {
+        "n": 5,
+        "mean": 79.8,
+        "min": 75,
+        "max": 86,
+        "range": 11,
+        "stddev": 4.6583
+      },
+      "general_stats": {
+        "n": 5,
+        "mean": 55.4,
+        "min": 50,
+        "max": 64,
+        "range": 14,
+        "stddev": 5.5946
+      },
+      "type_specific_stats": {
+        "n": 5,
+        "mean": 15.4,
+        "min": 14,
+        "max": 19,
+        "range": 5,
+        "stddev": 2.1909
+      },
+      "risk_stats": {
+        "n": 5,
+        "mean": 9.0,
+        "min": 7,
+        "max": 10,
+        "range": 3,
+        "stddev": 1.4142
+      }
+    },
+    "legal_theory_002": {
+      "attempts": [
+        {
+          "attempt": 1,
+          "total_score": 77,
+          "general_score": 51,
+          "type_specific_score": 19,
+          "risk_score": 7,
+          "failures": [],
+          "cached": false,
+          "error": null,
+          "char_count": 907
+        },
+        {
+          "attempt": 2,
+          "total_score": 85,
+          "general_score": 58,
+          "type_specific_score": 18,
+          "risk_score": 9,
+          "failures": [
+            "F11"
+          ],
+          "cached": false,
+          "error": null,
+          "char_count": 1029
+        },
+        {
+          "attempt": 3,
+          "total_score": 81,
+          "general_score": 57,
+          "type_specific_score": 16,
+          "risk_score": 8,
+          "failures": [],
+          "cached": false,
+          "error": null,
+          "char_count": 1003
+        },
+        {
+          "attempt": 4,
+          "total_score": 81,
+          "general_score": 59,
+          "type_specific_score": 15,
+          "risk_score": 7,
+          "failures": [],
+          "cached": false,
+          "error": null,
+          "char_count": 1004
+        },
+        {
+          "attempt": 5,
+          "total_score": 80,
+          "general_score": 54,
+          "type_specific_score": 19,
+          "risk_score": 7,
+          "failures": [],
+          "cached": false,
+          "error": null,
+          "char_count": 1124
+        }
+      ],
+      "total_scores": [
+        77,
+        85,
+        81,
+        81,
+        80
+      ],
+      "total_stats": {
+        "n": 5,
+        "mean": 80.8,
+        "min": 77,
+        "max": 85,
+        "range": 8,
+        "stddev": 2.8636
+      },
+      "general_stats": {
+        "n": 5,
+        "mean": 55.8,
+        "min": 51,
+        "max": 59,
+        "range": 8,
+        "stddev": 3.2711
+      },
+      "type_specific_stats": {
+        "n": 5,
+        "mean": 17.4,
+        "min": 15,
+        "max": 19,
+        "range": 4,
+        "stddev": 1.8166
+      },
+      "risk_stats": {
+        "n": 5,
+        "mean": 7.6,
+        "min": 7,
+        "max": 9,
+        "range": 2,
+        "stddev": 0.8944
+      }
+    },
+    "legal_theory_003": {
+      "attempts": [
+        {
+          "attempt": 1,
+          "total_score": 79,
+          "general_score": 55,
+          "type_specific_score": 17,
+          "risk_score": 7,
+          "failures": [],
+          "cached": false,
+          "error": null,
+          "char_count": 849
+        },
+        {
+          "attempt": 2,
+          "total_score": 80,
+          "general_score": 57,
+          "type_specific_score": 14,
+          "risk_score": 9,
+          "failures": [],
+          "cached": false,
+          "error": null,
+          "char_count": 854
+        },
+        {
+          "attempt": 3,
+          "total_score": 64,
+          "general_score": 43,
+          "type_specific_score": 12,
+          "risk_score": 9,
+          "failures": [],
+          "cached": false,
+          "error": null,
+          "char_count": 815
+        },
+        {
+          "attempt": 4,
+          "total_score": 88,
+          "general_score": 60,
+          "type_specific_score": 19,
+          "risk_score": 9,
+          "failures": [],
+          "cached": false,
+          "error": null,
+          "char_count": 1026
+        },
+        {
+          "attempt": 5,
+          "total_score": 82,
+          "general_score": 56,
+          "type_specific_score": 18,
+          "risk_score": 8,
+          "failures": [
+            "F12"
+          ],
+          "cached": false,
+          "error": null,
+          "char_count": 917
+        }
+      ],
+      "total_scores": [
+        79,
+        80,
+        64,
+        88,
+        82
+      ],
+      "total_stats": {
+        "n": 5,
+        "mean": 78.6,
+        "min": 64,
+        "max": 88,
+        "range": 24,
+        "stddev": 8.8769
+      },
+      "general_stats": {
+        "n": 5,
+        "mean": 54.2,
+        "min": 43,
+        "max": 60,
+        "range": 17,
+        "stddev": 6.5345
+      },
+      "type_specific_stats": {
+        "n": 5,
+        "mean": 16.0,
+        "min": 12,
+        "max": 19,
+        "range": 7,
+        "stddev": 2.9155
+      },
+      "risk_stats": {
+        "n": 5,
+        "mean": 8.4,
+        "min": 7,
+        "max": 9,
+        "range": 2,
+        "stddev": 0.8944
+      }
+    },
+    "legal_case_002": {
+      "attempts": [
+        {
+          "attempt": 1,
+          "total_score": 78,
+          "general_score": 52,
+          "type_specific_score": 17,
+          "risk_score": 9,
+          "failures": [],
+          "cached": false,
+          "error": null,
+          "char_count": 1064
+        },
+        {
+          "attempt": 2,
+          "total_score": 91,
+          "general_score": 69,
+          "type_specific_score": 14,
+          "risk_score": 8,
+          "failures": [
+            "F04"
+          ],
+          "cached": false,
+          "error": null,
+          "char_count": 789
+        },
+        {
+          "attempt": 3,
+          "total_score": 68,
+          "general_score": 48,
+          "type_specific_score": 13,
+          "risk_score": 7,
+          "failures": [],
+          "cached": false,
+          "error": null,
+          "char_count": 866
+        },
+        {
+          "attempt": 4,
+          "total_score": 82,
+          "general_score": 55,
+          "type_specific_score": 18,
+          "risk_score": 9,
+          "failures": [],
+          "cached": false,
+          "error": null,
+          "char_count": 696
+        },
+        {
+          "attempt": 5,
+          "total_score": 84,
+          "general_score": 58,
+          "type_specific_score": 18,
+          "risk_score": 8,
+          "failures": [],
+          "cached": false,
+          "error": null,
+          "char_count": 1022
+        }
+      ],
+      "total_scores": [
+        78,
+        91,
+        68,
+        82,
+        84
+      ],
+      "total_stats": {
+        "n": 5,
+        "mean": 80.6,
+        "min": 68,
+        "max": 91,
+        "range": 23,
+        "stddev": 8.4735
+      },
+      "general_stats": {
+        "n": 5,
+        "mean": 56.4,
+        "min": 48,
+        "max": 69,
+        "range": 21,
+        "stddev": 7.9561
+      },
+      "type_specific_stats": {
+        "n": 5,
+        "mean": 16.0,
+        "min": 13,
+        "max": 18,
+        "range": 5,
+        "stddev": 2.3452
+      },
+      "risk_stats": {
+        "n": 5,
+        "mean": 8.2,
+        "min": 7,
+        "max": 9,
+        "range": 2,
+        "stddev": 0.8367
+      }
+    },
+    "legal_case_003": {
+      "attempts": [
+        {
+          "attempt": 1,
+          "total_score": 72,
+          "general_score": 46,
+          "type_specific_score": 16,
+          "risk_score": 10,
+          "failures": [],
+          "cached": false,
+          "error": null,
+          "char_count": 982
+        },
+        {
+          "attempt": 2,
+          "total_score": 78,
+          "general_score": 58,
+          "type_specific_score": 13,
+          "risk_score": 7,
+          "failures": [],
+          "cached": false,
+          "error": null,
+          "char_count": 818
+        },
+        {
+          "attempt": 3,
+          "total_score": 77,
+          "general_score": 52,
+          "type_specific_score": 15,
+          "risk_score": 10,
+          "failures": [
+            "F09"
+          ],
+          "cached": false,
+          "error": null,
+          "char_count": 782
+        },
+        {
+          "attempt": 4,
+          "total_score": 80,
+          "general_score": 53,
+          "type_specific_score": 17,
+          "risk_score": 10,
+          "failures": [
+            "F04"
+          ],
+          "cached": false,
+          "error": null,
+          "char_count": 801
+        },
+        {
+          "attempt": 5,
+          "total_score": 75,
+          "general_score": 51,
+          "type_specific_score": 16,
+          "risk_score": 8,
+          "failures": [],
+          "cached": false,
+          "error": null,
+          "char_count": 933
+        }
+      ],
+      "total_scores": [
+        72,
+        78,
+        77,
+        80,
+        75
+      ],
+      "total_stats": {
+        "n": 5,
+        "mean": 76.4,
+        "min": 72,
+        "max": 80,
+        "range": 8,
+        "stddev": 3.0496
+      },
+      "general_stats": {
+        "n": 5,
+        "mean": 52.0,
+        "min": 46,
+        "max": 58,
+        "range": 12,
+        "stddev": 4.3012
+      },
+      "type_specific_stats": {
+        "n": 5,
+        "mean": 15.4,
+        "min": 13,
+        "max": 17,
+        "range": 4,
+        "stddev": 1.5166
+      },
+      "risk_stats": {
+        "n": 5,
+        "mean": 9.0,
+        "min": 7,
+        "max": 10,
+        "range": 3,
+        "stddev": 1.4142
+      }
+    }
+  },
+  "overall": {
+    "question_mean_stats": {
+      "n": 12,
+      "mean": 78.7167,
+      "min": 76.0,
+      "max": 80.8,
+      "range": 4.799999999999997,
+      "stddev": 1.5526
+    },
+    "question_stddev_stats": {
+      "n": 12,
+      "mean": 5.4882,
+      "min": 1.5166,
+      "max": 8.8769,
+      "range": 7.360299999999999,
+      "stddev": 2.4017
+    },
+    "question_range_stats": {
+      "n": 12,
+      "mean": 13.75,
+      "min": 4,
+      "max": 24,
+      "range": 20,
+      "stddev": 6.2395
+    },
+    "pooled_stats": {
+      "n": 60,
+      "mean": 78.7167,
+      "min": 64,
+      "max": 91,
+      "range": 27,
+      "stddev": 5.5726
+    }
+  },
+  "step_dead_zone_analysis": {
+    "unique_scores_sorted": [
+      64,
+      66,
+      68,
+      69,
+      70,
+      71,
+      72,
+      73,
+      74,
+      75,
+      76,
+      77,
+      78,
+      79,
+      80,
+      81,
+      82,
+      83,
+      84,
+      85,
+      86,
+      88,
+      91
+    ],
+    "step_height_estimate": 1,
+    "min_gap": 1,
+    "gap_distribution": {
+      "1": 18,
+      "2": 3,
+      "3": 1
+    },
+    "step_height_method": "mode_of_22_gaps_count_18",
+    "dead_zones": [
+      {
+        "from": 64,
+        "to": 66,
+        "width": 2,
+        "excess_width": 1
+      },
+      {
+        "from": 66,
+        "to": 68,
+        "width": 2,
+        "excess_width": 1
+      },
+      {
+        "from": 86,
+        "to": 88,
+        "width": 2,
+        "excess_width": 1
+      },
+      {
+        "from": 88,
+        "to": 91,
+        "width": 3,
+        "excess_width": 2
+      }
+    ],
+    "total_dead_zone_width": 5.0
+  }
+}
