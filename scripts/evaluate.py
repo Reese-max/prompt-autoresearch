@@ -33,6 +33,194 @@ C_RESET  = "\033[0m"
 
 CACHE_DIR  = os.path.join(".cache", "eval")
 
+
+# ---------------------------------------------------------------------------
+# 連續內插計分函式 — 取代 count 門檻型階梯計分
+#
+# 每個函式皆有明確上下界（lo, hi），並在 breakpoints 之間做線性內插，
+# 使 count 每增加一個單位均產生正比例且可觀察的分數增量。
+# 保留既有 rubric 權重語義：general=70, type_specific=20, risk=10。
+# ---------------------------------------------------------------------------
+
+def _lerp(x, x0, x1, y0, y1):
+    """在 (x0,y0)-(x1,y1) 之間做線性內插。"""
+    if x1 == x0:
+        return y1
+    return y0 + (y1 - y0) * (x - x0) / (x1 - x0)
+
+
+def _count_interpolate(count, breakpoints, lo, hi):
+    """
+    通用 count→score 連續內插。
+
+    breakpoints: sorted list of (count_threshold, score_value)，至少含 (0, lo) 與 (max_count, hi)。
+    count: 觀測到的數量（整數或浮點）。
+    lo, hi: 輸出分數的下界與上界。
+
+    回傳 lo ≤ result ≤ hi。
+    """
+    count = max(0, count)
+    # 超過最大 breakpoint → 回傳 hi
+    if count >= breakpoints[-1][0]:
+        return hi
+    # 低於最小 breakpoint → 回傳 lo
+    if count <= breakpoints[0][0]:
+        return lo
+    # 找到 count 落在哪兩個 breakpoint 之間
+    for i in range(len(breakpoints) - 1):
+        c0, s0 = breakpoints[i]
+        c1, s1 = breakpoints[i + 1]
+        if c0 <= count < c1:
+            return _lerp(count, c0, c1, s0, s1)
+    return hi
+
+
+# ---- 基礎申論維度（滿分 70 分，六個子維度） ----
+
+def score_topic_relevance(count):
+    """
+    題意命中（滿分 15 分）。
+    count: 正確回應的子問 / 關鍵詞數量。
+    breakpoints: 0→0, 1→4, 2→8, 3→11, 4→13, 5→15。
+    """
+    bps = [(0, 0), (1, 4), (2, 8), (3, 11), (4, 13), (5, 15)]
+    return _count_interpolate(count, bps, 0, 15)
+
+
+def score_structure(count):
+    """
+    架構清楚（滿分 10 分）。
+    count: 可辨識的邏輯段落層次數。
+    breakpoints: 0→0, 1→2, 2→4, 3→6, 4→8, 5→10。
+    """
+    bps = [(0, 0), (1, 2), (2, 4), (3, 6), (4, 8), (5, 10)]
+    return _count_interpolate(count, bps, 0, 10)
+
+
+def score_scoring_points_visible(count):
+    """
+    採分點外露（滿分 15 分）。
+    count: 以標題或粗體明確外露的採分點數。
+    breakpoints: 0→0, 1→3, 2→6, 3→9, 4→12, 5→15。
+    """
+    bps = [(0, 0), (1, 3), (2, 6), (3, 9), (4, 12), (5, 15)]
+    return _count_interpolate(count, bps, 0, 15)
+
+
+def score_content_concreteness(count):
+    """
+    內容具體（滿分 15 分）。
+    count: 具體佐證數（法條、學說、案例、統計數據等）。
+    breakpoints: 0→0, 1→3, 2→6, 3→9, 4→12, 5→15。
+    """
+    bps = [(0, 0), (1, 3), (2, 6), (3, 9), (4, 12), (5, 15)]
+    return _count_interpolate(count, bps, 0, 15)
+
+
+def score_exam_tone(count):
+    """
+    考場語氣（滿分 10 分）。
+    count: 符合考場語氣的段落數（反向指標：違規次數越多分越低）。
+    breakpoints: 0→0, 1→2, 2→4, 3→6, 4→8, 5→10。
+    """
+    bps = [(0, 0), (1, 2), (2, 4), (3, 6), (4, 8), (5, 10)]
+    return _count_interpolate(count, bps, 0, 10)
+
+
+def score_conclusion(count):
+    """
+    結論回扣（滿分 5 分）。
+    count: 結論中回扣題目關鍵詞的數量。
+    breakpoints: 0→0, 1→2, 2→3, 3→4, 4→5。
+    """
+    bps = [(0, 0), (1, 2), (2, 3), (3, 4), (4, 5)]
+    return _count_interpolate(count, bps, 0, 5)
+
+
+def score_general(counts):
+    """
+    基礎申論分（滿分 70 分）。
+    counts: dict，keys 為上述六個維度的 count 名稱，values 為整數。
+    """
+    return (
+        score_topic_relevance(counts.get("topic_relevance", 0))
+        + score_structure(counts.get("structure", 0))
+        + score_scoring_points_visible(counts.get("scoring_points_visible", 0))
+        + score_content_concreteness(counts.get("content_concreteness", 0))
+        + score_exam_tone(counts.get("exam_tone", 0))
+        + score_conclusion(counts.get("conclusion", 0))
+    )
+
+
+# ---- 題型專項維度（滿分 20 分） ----
+
+def score_type_specific(count, max_count=5, max_score=20):
+    """
+    題型專項分（滿分 20 分）。
+    count: 符合特定題型要求的項目數。
+    等距內插：0→0, max_count→max_score。
+    """
+    bps = [(0, 0), (max_count, max_score)]
+    return _count_interpolate(count, bps, 0, max_score)
+
+
+# ---- 風險控制維度（滿分 10 分，扣分制） ----
+
+def score_risk(violation_count, max_score=10):
+    """
+    風險控制分（滿分 10 分，扣分制）。
+    violation_count: 違規項目的數量。
+    每個違規按比例扣分，直至 0。
+    """
+    if violation_count <= 0:
+        return max_score
+    # 每個違規扣 2.5 分（4 個違規扣完 10 分）
+    penalty_per_violation = max_score / 4.0
+    return max(0, max_score - violation_count * penalty_per_violation)
+
+
+# ---- 總分加總 ----
+
+def score_total(general, type_specific, risk):
+    """三層分數加總，範圍 0–100。"""
+    return general + type_specific + risk
+
+
+def interpolate_within_tier(raw_score, lo, hi):
+    """
+    將整數 raw_score 連續內插到 [lo, hi] 區間內。
+
+    取代原本的離散階梯（例如 general 0-6=低分, 7-12=中等, 13-15=滿分），
+    改為：score = lo + (hi - lo) * (raw_score - tier_lo) / (tier_hi - tier_lo)
+    使每增加 1 分均產生正比例且可觀察的增量。
+
+    raw_score: LLM judge 回傳的整數原始分數
+    lo, hi: 該維度的滿分下界與上界（例如 0, 15）
+    """
+    raw_score = max(lo, min(hi, raw_score))
+    return lo + (hi - lo) * (raw_score - lo) / (hi - lo)
+
+
+def interpolate_general_score(raw_score):
+    """基礎申論分連續內插（滿分 70 分）。"""
+    return interpolate_within_tier(raw_score, 0, 70)
+
+
+def interpolate_type_score(raw_score):
+    """題型專項分連續內插（滿分 20 分）。"""
+    return interpolate_within_tier(raw_score, 0, 20)
+
+
+def interpolate_risk_score(raw_score):
+    """風險控制分連續內插（滿分 10 分）。"""
+    return interpolate_within_tier(raw_score, 0, 10)
+
+
+# ---------------------------------------------------------------------------
+# 結束連續內插計分函式
+# ---------------------------------------------------------------------------
+
+
 def cache_path(prompt_hash, question_file, question_id):
     qfile_hash = sha256_text(normalize_path(question_file))[:16]
     return os.path.join(CACHE_DIR, prompt_hash[:16], qfile_hash, f"{question_id}.json")
@@ -186,8 +374,14 @@ def evaluate_single_question(question_obj, system_prompt, general_rubric, type_r
         eval_res["prompt_hash"] = prompt_hash
         eval_res["question_file"] = normalize_path(question_file)
         
-        # 防呆：確保 total_score = sum of scores
-        eval_res["total_score"] = int(eval_res.get("general_score", 0)) + int(eval_res.get("type_specific_score", 0)) + int(eval_res.get("risk_score", 0))
+        # 連續內插：將整數原始分數映射到連續區間，保留上下界並消除階梯
+        raw_general = int(eval_res.get("general_score", 0))
+        raw_type = int(eval_res.get("type_specific_score", 0))
+        raw_risk = int(eval_res.get("risk_score", 0))
+        eval_res["general_score"] = round(interpolate_general_score(raw_general), 2)
+        eval_res["type_specific_score"] = round(interpolate_type_score(raw_type), 2)
+        eval_res["risk_score"] = round(interpolate_risk_score(raw_risk), 2)
+        eval_res["total_score"] = round(eval_res["general_score"] + eval_res["type_specific_score"] + eval_res["risk_score"], 2)
         
         save_cached_result(prompt_hash, question_file, q_id, eval_res)
         return eval_res
