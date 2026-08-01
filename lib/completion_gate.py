@@ -9,6 +9,7 @@ lib/completion_gate.py — 任務完成資格閘門
     from lib.completion_gate import verify_completion_evidence, TaskResult
     is_complete, reasons = verify_completion_evidence(task_result)
 """
+import hashlib
 import json
 import math
 import os
@@ -25,6 +26,7 @@ class TaskResult:
     artifacts: dict = field(default_factory=dict)
     results: list = field(default_factory=list)
     summary: dict = field(default_factory=dict)
+    workspace_root: str = ""
 
 
 def load_run_evidence(run_dir):
@@ -75,6 +77,96 @@ def _is_accessible_file(path: str) -> bool:
         return False
 
 
+def _workspace_root(workspace_root=None):
+    """取得證據驗證用的工作區根目錄。"""
+    root = workspace_root or os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    return os.path.realpath(os.fspath(root))
+
+
+def _artifact_path(info):
+    """回傳 (是否提供路徑, 路徑)。"""
+    if isinstance(info, (str, os.PathLike)):
+        return True, os.fspath(info)
+    if isinstance(info, dict) and "path" in info:
+        try:
+            return True, os.fspath(info.get("path"))
+        except TypeError:
+            return True, None
+    return False, None
+
+
+def _read_evidence_file(path, workspace_root):
+    """讀取並驗證單一證據檔案，回傳 (紀錄, 錯誤)。"""
+    if not isinstance(path, (str, os.PathLike)) or not os.fspath(path):
+        return None, "evidence path is empty or invalid"
+
+    root = _workspace_root(workspace_root)
+    raw_path = os.fspath(path)
+    candidate = os.path.realpath(
+        raw_path if os.path.isabs(raw_path) else os.path.join(root, raw_path)
+    )
+    try:
+        within_workspace = os.path.commonpath(
+            [os.path.normcase(candidate), os.path.normcase(root)]
+        ) == os.path.normcase(root)
+    except ValueError:
+        within_workspace = False
+    if not within_workspace:
+        return None, "evidence path is outside workspace"
+
+    digest = hashlib.sha256()
+    size = 0
+    try:
+        with open(candidate, "rb") as handle:
+            while True:
+                chunk = handle.read(1024 * 1024)
+                if not chunk:
+                    break
+                digest.update(chunk)
+                size += len(chunk)
+    except (OSError, ValueError):
+        return None, "evidence file is unreadable"
+    if size == 0:
+        return None, "evidence file is empty"
+
+    return {
+        "path": os.path.relpath(candidate, root).replace(os.sep, "/"),
+        "size": size,
+        "sha256": digest.hexdigest(),
+        "verified": True,
+    }, ""
+
+
+def build_evidence_manifest(artifacts, workspace_root=None):
+    """建立可機械驗證的 repo 內產出證據清單。"""
+    if not isinstance(artifacts, dict) or not artifacts:
+        return [], ["artifacts is empty"]
+
+    manifest = []
+    errors = []
+    legacy_metadata = False
+    for name, info in artifacts.items():
+        has_path, path = _artifact_path(info)
+        if not has_path:
+            # 相容舊 runner；這類資料不能產生雜湊清單，只能作為舊閘門訊號。
+            if isinstance(info, dict) and info.get("exists") is True and info.get("size", 0) > 0:
+                legacy_metadata = True
+                continue
+            errors.append(f"artifact {name!r} has no verifiable path")
+            continue
+        entry, error = _read_evidence_file(path, workspace_root)
+        if error:
+            errors.append(f"artifact {name!r}: {error}")
+        else:
+            manifest.append(entry)
+
+    if errors:
+        return [], errors
+    if manifest or legacy_metadata:
+        return manifest, []
+    return [], ["no valid non-empty artifacts found"]
+
+
 def _has_meaningful_result(result: dict) -> bool:
     """檢查單一結果是否含有意義性內容（answer 或 total_score > 0）。"""
     if not isinstance(result, dict):
@@ -90,23 +182,22 @@ def _has_meaningful_result(result: dict) -> bool:
     return has_answer or has_score
 
 
-def _check_artifacts_evidence(artifacts: dict) -> tuple:
+def _check_artifacts_evidence(artifacts: dict, workspace_root=None) -> tuple:
     """檢查 artifacts 是否提供有效證據。回傳 (is_valid, reason)。"""
     if not isinstance(artifacts, dict) or not artifacts:
         return False, "artifacts is empty"
-    for _name, info in artifacts.items():
-        if isinstance(info, (str, os.PathLike)) and _is_accessible_file(os.fspath(info)):
-            return True, ""
-        if isinstance(info, dict):
-            path = info.get("path")
-            if path:
-                if _is_accessible_file(os.fspath(path)):
-                    return True, ""
-                continue
-            # 相容既有 runner 的檔案探測結果；exists/size 必須由 runner 明確提供。
-            if info.get("exists") is True and info.get("size", 0) > 0:
-                return True, ""
-    return False, "no valid non-empty artifacts found"
+    manifest, errors = build_evidence_manifest(artifacts, workspace_root)
+    if not errors and manifest:
+        return True, ""
+    if not errors and any(
+        isinstance(info, dict)
+        and info.get("exists") is True
+        and info.get("size", 0) > 0
+        and "path" not in info
+        for info in artifacts.values()
+    ):
+        return True, ""
+    return False, errors[0] if errors else "no valid non-empty artifacts found"
 
 
 def _check_results_evidence(results: list) -> tuple:
@@ -151,15 +242,18 @@ def completion_disposition(task_result):
         artifacts = task_result.artifacts
         results = task_result.results
         summary = task_result.summary
+        workspace_root = task_result.workspace_root
     else:
         exit_code = task_result.get("exit_code", -1)
         stdout = task_result.get("stdout", "")
         artifacts = task_result.get("artifacts", {})
         results = task_result.get("results", [])
         summary = task_result.get("summary", {})
+        workspace_root = task_result.get("workspace_root") or task_result.get("repo_root")
 
+    evidence_manifest, evidence_errors = build_evidence_manifest(artifacts, workspace_root)
     checks = (
-        ("artifacts", _check_artifacts_evidence(artifacts)),
+        ("artifacts", _check_artifacts_evidence(artifacts, workspace_root)),
         ("results", _check_results_evidence(results)),
         ("summary", _check_summary_evidence(summary)),
     )
@@ -187,6 +281,8 @@ def completion_disposition(task_result):
         "rejection_reasons": reasons,
         "evidence_types": evidence_types,
         "missing_evidence_types": missing_evidence_types,
+        "evidence_manifest": evidence_manifest,
+        "evidence_errors": evidence_errors,
     }
 
 
@@ -212,6 +308,7 @@ def verify_completion_evidence(task_result):
             - artifacts: 產出檔案資訊 {name: {exists: bool, size: int}}
             - results: 評估結果列表
             - summary: 摘要統計
+            - workspace_root: 證據必須位於其中的工作區根目錄（可選）
 
     回傳：
         tuple: (is_complete: bool, reasons: list[str])
@@ -225,6 +322,7 @@ def verify_completion_evidence(task_result):
         artifacts = task_result.artifacts
         results = task_result.results
         summary = task_result.summary
+        workspace_root = task_result.workspace_root
     else:
         exit_code = task_result.get("exit_code", -1)
         stdout = task_result.get("stdout", "")
@@ -232,6 +330,7 @@ def verify_completion_evidence(task_result):
         artifacts = task_result.get("artifacts", {})
         results = task_result.get("results", [])
         summary = task_result.get("summary", {})
+        workspace_root = task_result.get("workspace_root") or task_result.get("repo_root")
 
     reasons = []
 
@@ -240,12 +339,18 @@ def verify_completion_evidence(task_result):
         reasons.append(f"exit_code={exit_code} != 0")
         return False, reasons
 
+    if isinstance(artifacts, dict) and artifacts:
+        _, artifact_errors = build_evidence_manifest(artifacts, workspace_root)
+        if artifact_errors:
+            reasons.append("invalid artifact evidence: " + "; ".join(artifact_errors))
+            return False, reasons
+
     # 閘門 2: 至少有一個可驗證的產出／結果證據
     # exit_code=0 或 stdout 成功文字都不足以判定成功。
     evidence_sources = []
     evidence_reasons = []
 
-    ok, reason = _check_artifacts_evidence(artifacts)
+    ok, reason = _check_artifacts_evidence(artifacts, workspace_root)
     if ok:
         evidence_sources.append("artifacts")
     else:

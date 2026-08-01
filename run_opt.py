@@ -174,6 +174,8 @@ def read_summary(run_dir):
             "reason_code": data.get("reason_code", ""),
             "rejection_reason": data.get("rejection_reason", ""),
             "missing_evidence_types": data.get("missing_evidence_types", []),
+            "evidence_manifest": data.get("evidence_manifest", []),
+            "evidence_errors": data.get("evidence_errors", []),
             "text": load_file(os.path.join(run_dir, "summary.md")),
             "json": data,
         }
@@ -196,6 +198,8 @@ def read_summary(run_dir):
         "reason_code": "",
         "rejection_reason": "",
         "missing_evidence_types": [],
+        "evidence_manifest": [],
+        "evidence_errors": [],
         "text": text,
     }
 
@@ -224,6 +228,17 @@ def update_candidate_scorecard(cand_path, **updates):
     write_json(card_path, card)
 
 
+def _workspace_root_for_run(run_dir):
+    """由 runs/<name> 或測試用單層目錄推導證據工作區。"""
+    if not run_dir:
+        return ""
+    absolute = os.path.abspath(os.fspath(run_dir))
+    parent = os.path.dirname(absolute)
+    if os.path.basename(parent).lower() == "runs":
+        return os.path.dirname(parent)
+    return parent
+
+
 def evaluation_completion(result, run_dir, summary):
     """判定評估是否有可供候選流程使用的有效產出。"""
     artifacts, results, persisted_summary = load_run_evidence(run_dir)
@@ -237,6 +252,7 @@ def evaluation_completion(result, run_dir, summary):
         "artifacts": artifacts,
         "results": results,
         "summary": normalized_summary,
+        "workspace_root": _workspace_root_for_run(run_dir),
     })
     if not run_dir:
         disposition.update({

@@ -52,6 +52,8 @@ def _record_invalid_comparison(new_dir, base_dir, candidate_id, round_no, missin
         "rejection_reason": "no valid output evidence",
         "rejection_reasons": [f"missing evidence types: {', '.join(missing)}"],
         "evidence_types": [],
+        "evidence_manifest": [],
+        "evidence_errors": ["no valid output evidence"],
         "missing_evidence_types": missing,
         "type_breakthroughs": [],
     }

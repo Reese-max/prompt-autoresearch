@@ -148,6 +148,7 @@ def run_optimization_round(direction=None, parallel=6):
             "artifacts": artifacts,
             "results": results,
             "summary": summary,
+            "workspace_root": PROJECT_ROOT,
         })
         disposition = completion_disposition({
             "exit_code": result.returncode,
@@ -156,6 +157,7 @@ def run_optimization_round(direction=None, parallel=6):
             "artifacts": artifacts,
             "results": results,
             "summary": summary,
+            "workspace_root": PROJECT_ROOT,
         })
         success = result.returncode == 0 and gate_result
 
@@ -173,6 +175,8 @@ def run_optimization_round(direction=None, parallel=6):
             "reason_code": disposition["reason_code"],
             "rejection_reason": disposition["rejection_reason"],
             "missing_evidence_types": disposition["missing_evidence_types"],
+            "evidence_manifest": disposition["evidence_manifest"],
+            "evidence_errors": disposition["evidence_errors"],
         })
 
         return success

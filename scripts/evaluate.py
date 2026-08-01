@@ -22,7 +22,7 @@ os.chdir(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 
 from lib.api import call_minimax
 from lib.io import sha256_text, load_file, normalize_path
-from lib.completion_gate import completion_disposition
+from lib.completion_gate import build_evidence_manifest, completion_disposition
 
 # Colors for terminal output
 C_GREEN  = "\033[92m"
@@ -549,6 +549,8 @@ def calculate_statistics(results, elapsed_seconds, prompt_file, question_file, p
         "reason_code": completion["reason_code"],
         "rejection_reason": completion["rejection_reason"],
         "missing_evidence_types": completion["missing_evidence_types"],
+        "evidence_manifest": completion["evidence_manifest"],
+        "evidence_errors": completion["evidence_errors"],
     })
     
     return summary
@@ -632,6 +634,16 @@ def save_run_results(summary, results):
     # 寫入 summary.md
     with open(f"{run_dir}/summary.md", "w", encoding="utf-8") as f:
         f.write(summary_md)
+
+    evidence_manifest, evidence_errors = build_evidence_manifest(
+        {
+            "details.jsonl": {"path": details_path},
+            "summary.md": {"path": f"{run_dir}/summary.md"},
+        },
+        workspace_root=os.getcwd(),
+    )
+    summary["evidence_manifest"] = evidence_manifest
+    summary["evidence_errors"] = evidence_errors
 
     with open(f"{run_dir}/summary.json", "w", encoding="utf-8") as f:
         json.dump(summary, f, ensure_ascii=False, indent=2)
