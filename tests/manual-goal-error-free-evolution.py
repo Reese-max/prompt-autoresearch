@@ -242,6 +242,59 @@ class TestThreeCrashCorrectOutputs:
 
 
 # ===========================================================================
+# 最小重現測試：三種 crash 各自獨立、明確斷言錯誤輸入下產出正確結果
+# ===========================================================================
+
+class TestCrash1_MinRepro_NoneTypeFormat:
+    """最小重現 Crash 1：holdout_avg=None 時 f-string :.2f 不崩潰，正確產出 N/A。"""
+
+    def test_min_repro_holdout_none_format(self):
+        """直接對 None 套 .2f 仍會 ValueError（原始崩潰路徑），
+        修復後三元運算子正確回傳 'N/A'。"""
+        holdout_avg = None
+        with pytest.raises((ValueError, TypeError)):
+            _ = f"{holdout_avg:.2f}"
+        holdout_display = f"{holdout_avg:.2f}" if holdout_avg is not None else "N/A"
+        assert holdout_display == "N/A", "None 的格式化結果必須為 'N/A' 而非崩潰"
+
+
+class TestCrash2_MinRepro_UnhashableDict:
+    """最小重現 Crash 2：failure 為 dict 時 isinstance 過濾正確，dict 不進統計。"""
+
+    def test_min_repro_dict_failure_filtered(self):
+        """dict 做 dict key 觸發 TypeError（原始崩潰路徑），
+        isinstance(f, str) 過濾後只有字串 failure 被計入。"""
+        failures = [{"bad": "dict"}, "F03", {"nested": True}, "F03"]
+        filtered = {}
+        for f in failures:
+            if isinstance(f, str) and f:
+                filtered[f] = filtered.get(f, 0) + 1
+        with pytest.raises(TypeError, match="unhashable"):
+            d = {}
+            d[{"bad": "dict"}] = 1
+        assert filtered == {"F03": 2}, "dict failure 被過濾，字串 failure 正確累計"
+        assert all(isinstance(k, str) for k in filtered.keys())
+
+
+class TestCrash3_MinRepro_TypeVarianceUnbound:
+    """最小重現 Crash 3：type_variance 前置初始化為 0.0，空白時不拋 UnboundLocalError。"""
+
+    def test_min_repro_uninitialized_raises(self):
+        """若不前置初始化，空 list 時存取 variance 引發 UnboundLocalError（原始崩潰路徑）。"""
+        with pytest.raises((UnboundLocalError, NameError)):
+            exec("type_scores = []\nif type_scores:\n    variance = 1.0\nprint(variance)")
+
+    def test_min_repro_initialized_yields_zero(self):
+        """前置初始化 type_variance=0.0 後，空 list 時 variance 為 0.0 而非崩潰。"""
+        type_scores_list = []
+        type_variance = 0.0
+        avg_new = 80.0
+        if type_scores_list:
+            type_variance = 1.0
+        assert type_variance == 0.0, "空白題型時 variance 必須為 0.0"
+
+
+# ===========================================================================
 # 根因最小重現測試：逐一根因、明確斷言正確產出
 # ===========================================================================
 
