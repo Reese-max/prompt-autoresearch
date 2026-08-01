@@ -33,6 +33,8 @@ def list_runs():
         summary = load_json(os.path.join(run_dir, "summary.json"))
         if summary.get("question_file") != "questions/dev.jsonl":
             continue
+        if summary.get("completion_status") in {"failed", "incomplete"}:
+            continue
         rows.append(
             {
                 "run_dir": run_dir,

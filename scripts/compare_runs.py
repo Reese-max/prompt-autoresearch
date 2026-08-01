@@ -25,6 +25,35 @@ C_RED    = "\033[91m"
 C_RESET  = "\033[0m"
 LAST_COMPARISON = {}
 
+
+def _has_meaningful_output(row):
+    """單題結果至少要有答案或正分，否則不得參與候選比較。"""
+    if row.get("error"):
+        return False
+    answer = row.get("answer")
+    if isinstance(answer, str) and answer.strip():
+        return True
+    try:
+        return float(row.get("total_score") or 0) > 0
+    except (TypeError, ValueError):
+        return False
+
+
+def _record_invalid_comparison(new_dir, base_dir, candidate_id, round_no, missing):
+    global LAST_COMPARISON
+    LAST_COMPARISON = {
+        "new_dir": new_dir,
+        "base_dir": base_dir,
+        "candidate_id": candidate_id,
+        "round_no": round_no,
+        "passed": False,
+        "completion_status": "failed",
+        "reason_code": "NO_VALID_OUTPUT",
+        "rejection_reason": "no valid output evidence",
+        "missing_evidence_types": missing,
+        "type_breakthroughs": [],
+    }
+
 def acceptance_mode():
     return os.environ.get("AUTORESEARCH_ACCEPTANCE_MODE", "pragmatic").strip().lower() or "pragmatic"
 
@@ -57,9 +86,23 @@ def compare(new_dir, base_dir, mode=None, candidate_id=None, round_no=None):
     if not new_data:
         print(f"{C_RED}[錯誤] 無法載入新運行數據: {new_dir}{C_RESET}")
         sys.exit(1)
+    if not any(_has_meaningful_output(row) for row in new_data.values()):
+        print(f"{C_RED}[拒絕] 新運行沒有有效產出，維持未完成，不納入候選比較。{C_RESET}")
+        _record_invalid_comparison(
+            new_dir, base_dir, candidate_id, round_no,
+            ["results"],
+        )
+        return False, 0.0, 0.0
     if not base_data:
         print(f"{C_YELLOW}[警告] 無法載入基準運行數據: {base_dir}。將進行無基準自我分析。{C_RESET}")
         base_data = {}
+    elif not any(_has_meaningful_output(row) for row in base_data.values()):
+        print(f"{C_RED}[拒絕] 基準運行沒有有效產出，維持未完成，不納入候選比較。{C_RESET}")
+        _record_invalid_comparison(
+            new_dir, base_dir, candidate_id, round_no,
+            ["baseline_results"],
+        )
+        return False, 0.0, 0.0
         
     # 計算分數
     new_scores = [q["total_score"] for q in new_data.values()]

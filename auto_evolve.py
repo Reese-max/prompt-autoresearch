@@ -82,6 +82,15 @@ def scan_candidate_evaluations():
         card = load_json(os.path.join(cand_dir, name))
         if not card:
             continue
+        if card.get("status") in {"failed", "incomplete"} or card.get("completion_status") in {"failed", "incomplete"}:
+            continue
+        if card.get("missing_evidence_types"):
+            continue
+        if any(
+            (card.get(stage) or {}).get("completion", {}).get("status") == "failed"
+            for stage in ("smoke", "dev", "holdout")
+        ):
+            continue
         smoke = card.get("smoke") or {}
         dev = card.get("dev") or {}
         score = dev.get("score")

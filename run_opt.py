@@ -26,6 +26,7 @@ from lib.io import (
     read_jsonl, append_jsonl, normalize_path, ensure_dir,
 )
 from lib.metrics import record_round
+from lib.completion_gate import completion_disposition
 
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8", errors="replace", line_buffering=True)
@@ -169,6 +170,10 @@ def read_summary(run_dir):
             "error_count": data.get("error_count", 0),
             "cache_hit_count": data.get("cache_hit_count", 0),
             "estimated_api_calls": data.get("estimated_api_calls", 0),
+            "completion_status": data.get("completion_status", ""),
+            "reason_code": data.get("reason_code", ""),
+            "rejection_reason": data.get("rejection_reason", ""),
+            "missing_evidence_types": data.get("missing_evidence_types", []),
             "text": load_file(os.path.join(run_dir, "summary.md")),
             "json": data,
         }
@@ -187,6 +192,10 @@ def read_summary(run_dir):
         "word_count_pass_rate": 0.0,
         "risk_perfect_rate": 0.0,
         "error_count": 0,
+        "completion_status": "",
+        "reason_code": "",
+        "rejection_reason": "",
+        "missing_evidence_types": [],
         "text": text,
     }
 
@@ -213,6 +222,58 @@ def update_candidate_scorecard(cand_path, **updates):
     card.update(updates)
     card["updated_at"] = time.strftime("%Y-%m-%d %H:%M:%S")
     write_json(card_path, card)
+
+
+def evaluation_completion(result, run_dir, summary):
+    """判定評估是否有可供候選流程使用的有效產出。"""
+    normalized_summary = summary or {}
+    if "average_score" not in normalized_summary and "score" in normalized_summary:
+        normalized_summary = {**normalized_summary, "average_score": normalized_summary.get("score")}
+    disposition = completion_disposition({
+        "exit_code": getattr(result, "returncode", -1),
+        "stdout": "",
+        "stderr": "",
+        "artifacts": {},
+        "results": [],
+        "summary": normalized_summary,
+    })
+    if not run_dir and disposition["status"] == "completed":
+        disposition.update({
+            "status": "failed",
+            "reason_code": "NO_VALID_OUTPUT",
+            "rejection_reason": "no valid output run directory",
+            "rejection_reasons": ["run_directory is missing"],
+            "missing_evidence_types": ["run_directory"],
+        })
+    elif disposition["status"] == "failed" and disposition["reason_code"] == "NO_VALID_EVIDENCE":
+        disposition["reason_code"] = "NO_VALID_OUTPUT"
+    return disposition
+
+
+def mark_candidate_evaluation_failed(cand_path, stage, result, run_dir, summary):
+    """將無有效產出的候選標為 failed，並留下可解析的拒絕證據。"""
+    disposition = evaluation_completion(result, run_dir, summary)
+    stage_data = {
+        "passed": False,
+        "run": run_dir,
+        "returncode": getattr(result, "returncode", -1),
+        "completion": disposition,
+        "reason_code": disposition["reason_code"],
+        "missing_evidence_types": disposition["missing_evidence_types"],
+    }
+    reasons = [f"{stage}:{reason}" for reason in disposition["rejection_reasons"]]
+    update_candidate_scorecard(
+        cand_path,
+        **{stage: stage_data},
+        status="failed",
+        completion_status="failed",
+        final_decision="FAILED",
+        reason_code=disposition["reason_code"],
+        rejection_reason=disposition["rejection_reason"],
+        reject_reasons=reasons,
+        missing_evidence_types=disposition["missing_evidence_types"],
+    )
+    return disposition
 
 def read_details(run_dir):
     path = os.path.join(run_dir, "details.jsonl")
@@ -241,6 +302,8 @@ def find_latest_run_for(question_file, before=None):
         if before and run_dir >= before:
             continue
         summary = read_summary(run_dir)
+        if summary.get("completion_status") in {"failed", "incomplete"}:
+            continue
         if summary.get("question_file") == normalized:
             candidates.append(run_dir)
     return candidates[-1] if candidates else None
@@ -250,6 +313,8 @@ def find_latest_run_for_hash(question_file, prompt_hash):
     candidates = []
     for run_dir in list_run_dirs():
         summary = read_summary(run_dir)
+        if summary.get("completion_status") in {"failed", "incomplete"}:
+            continue
         if summary.get("question_file") == normalized and summary.get("prompt_hash") == prompt_hash:
             candidates.append(run_dir)
     return candidates[-1] if candidates else None
@@ -694,6 +759,11 @@ def run_opt_pass(smoke_parallel=None, dev_parallel=None, holdout_parallel=None, 
     for ci, (mutated, temp, cand_path, _) in enumerate(gk_passed):
         write_file(PROMPT_PATH, mutated)
         smoke_res, smoke_run, smoke_summary = run_evaluate(PROMPT_PATH, "questions/smoke.jsonl", smoke_parallel, capture=True)
+        smoke_completion = evaluation_completion(smoke_res, smoke_run, smoke_summary)
+        if smoke_completion["status"] != "completed":
+            print(f"  - {C_RED}❌ 候選 {ci+1} Smoke 無有效產出，標記 failed：{smoke_completion['reason_code']}{C_RESET}")
+            mark_candidate_evaluation_failed(cand_path, "smoke", smoke_res, smoke_run, smoke_summary)
+            continue
         smoke_score = smoke_summary.get("score", 0.0)
         smoke_drop = baseline_smoke_score - smoke_score if baseline_smoke_run else 0.0
         smoke_governance_notes = governance_notes(smoke_summary, "smoke")
@@ -718,6 +788,7 @@ def run_opt_pass(smoke_parallel=None, dev_parallel=None, holdout_parallel=None, 
                     "risk_perfect_rate": smoke_summary.get("risk_perfect_rate", 0.0),
                     "error_count": smoke_summary.get("error_count", 0),
                     "type_averages": smoke_summary.get("type_averages", {}),
+                    "completion": smoke_completion,
                 },
                 status="smoke_passed",
             )
@@ -775,16 +846,12 @@ def run_opt_pass(smoke_parallel=None, dev_parallel=None, holdout_parallel=None, 
     # --------------------------------------------------
     print(f"\n{C_YELLOW}[步驟 5] 第三層：全量開發測試 (Dev Test，36題，併緒 {dev_parallel})...{C_RESET}")
     dev_res, dev_run_dir, dev_summary = run_evaluate(PROMPT_PATH, "questions/dev.jsonl", dev_parallel)
-    if dev_res.returncode != 0 or not dev_run_dir:
-        reason = f"Dev 評估失敗：returncode={dev_res.returncode}, run_dir={dev_run_dir}"
+    dev_completion = evaluation_completion(dev_res, dev_run_dir, dev_summary)
+    if dev_completion["status"] != "completed":
+        mark_candidate_evaluation_failed(cand_path, "dev", dev_res, dev_run_dir, dev_summary)
+        reason = f"Dev 評估無有效產出：{dev_completion['reason_code']}"
         print(f"\n{C_RED}❌ {reason}{C_RESET}")
         write_file(PROMPT_PATH, baseline_prompt)
-        update_candidate_scorecard(
-            cand_path,
-            dev={"passed": False, "run": dev_run_dir, "returncode": dev_res.returncode},
-            status="rejected_dev_error",
-            reject_reasons=[reason],
-        )
         write_decision(
             dev_run_dir,
             f"# Decision\n\n- decision: REVERT\n- stage: dev\n- direction: {direction}\n- hypothesis: {hypothesis}\n- reason: {reason}\n",
@@ -804,6 +871,7 @@ def run_opt_pass(smoke_parallel=None, dev_parallel=None, holdout_parallel=None, 
             "governance_passed": not dev_governance_notes,
             "governance_notes": dev_governance_notes,
             "type_averages": dev_summary.get("type_averages", {}),
+            "completion": dev_completion,
         },
         status="dev_evaluated",
     )
@@ -873,6 +941,16 @@ def run_opt_pass(smoke_parallel=None, dev_parallel=None, holdout_parallel=None, 
     if accept:
         print(f"\n{C_YELLOW}[步驟 7] 啟動防過擬合 Holdout 盲測題庫驗證（併緒 {holdout_parallel}）...{C_RESET}")
         holdout_res, holdout_run_dir, holdout_summary = run_evaluate(PROMPT_PATH, "questions/holdout.jsonl", holdout_parallel)
+        holdout_completion = evaluation_completion(holdout_res, holdout_run_dir, holdout_summary)
+        if holdout_completion["status"] != "completed":
+            mark_candidate_evaluation_failed(cand_path, "holdout", holdout_res, holdout_run_dir, holdout_summary)
+            reason = f"Holdout 評估無有效產出：{holdout_completion['reason_code']}"
+            write_file(PROMPT_PATH, baseline_prompt)
+            write_decision(
+                holdout_run_dir or dev_run_dir,
+                f"# Decision\n\n- decision: REVERT\n- stage: holdout\n- reason: {reason}\n",
+            )
+            return False
         holdout_governance_notes = governance_notes(holdout_summary, "holdout")
         if holdout_res.returncode != 0 or not holdout_run_dir:
             holdout_accept = False
@@ -903,6 +981,7 @@ def run_opt_pass(smoke_parallel=None, dev_parallel=None, holdout_parallel=None, 
                 "reason": holdout_reason,
                 "governance_notes": holdout_governance_notes,
                 "type_averages": holdout_summary.get("type_averages", {}),
+                "completion": holdout_completion,
             },
         )
 

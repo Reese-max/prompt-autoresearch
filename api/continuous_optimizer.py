@@ -21,7 +21,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(
 
 from lib.io import load_json, read_jsonl, append_jsonl
 from lib.config import get
-from lib.completion_gate import verify_completion_evidence
+from lib.completion_gate import completion_disposition, verify_completion_evidence
 from api.feedback import get_feedback_summary, get_weak_areas, generate_optimization_hints
 
 # --- 常數 ---
@@ -101,6 +101,14 @@ def run_optimization_round(direction=None, parallel=6):
             "results": [],
             "summary": {},
         })
+        disposition = completion_disposition({
+            "exit_code": result.returncode,
+            "stdout": stdout_text,
+            "stderr": stderr_text,
+            "artifacts": {},
+            "results": [],
+            "summary": {},
+        })
         success = result.returncode == 0 and gate_result
 
         append_jsonl(OPTIMIZATION_LOG, {
@@ -113,6 +121,10 @@ def run_optimization_round(direction=None, parallel=6):
             "returncode": result.returncode,
             "gate_passed": gate_result,
             "gate_reasons": gate_reasons,
+            "completion_status": disposition["status"],
+            "reason_code": disposition["reason_code"],
+            "rejection_reason": disposition["rejection_reason"],
+            "missing_evidence_types": disposition["missing_evidence_types"],
         })
 
         return success

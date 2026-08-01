@@ -86,6 +86,56 @@ def _check_stdout_evidence(stdout: str) -> tuple:
     return True, ""
 
 
+def completion_disposition(task_result):
+    """回傳可持久化的完成處置，供 runner／候選流程使用。"""
+    is_complete, reasons = verify_completion_evidence(task_result)
+    if isinstance(task_result, TaskResult):
+        exit_code = task_result.exit_code
+        stdout = task_result.stdout
+        artifacts = task_result.artifacts
+        results = task_result.results
+        summary = task_result.summary
+    else:
+        exit_code = task_result.get("exit_code", -1)
+        stdout = task_result.get("stdout", "")
+        artifacts = task_result.get("artifacts", {})
+        results = task_result.get("results", [])
+        summary = task_result.get("summary", {})
+
+    checks = (
+        ("stdout", _check_stdout_evidence(stdout)),
+        ("artifacts", _check_artifacts_evidence(artifacts)),
+        ("results", _check_results_evidence(results)),
+        ("summary", _check_summary_evidence(summary)),
+    )
+    evidence_types = [name for name, (ok, _reason) in checks if ok]
+    missing_evidence_types = [name for name, (ok, _reason) in checks if not ok]
+
+    if is_complete:
+        reason_code = ""
+        rejection_reason = ""
+        status = "completed"
+        missing_evidence_types = []
+    elif exit_code != 0:
+        reason_code = "NONZERO_EXIT_CODE"
+        rejection_reason = reasons[0] if reasons else f"exit_code={exit_code} != 0"
+        status = "failed"
+        missing_evidence_types = []
+    else:
+        reason_code = "NO_VALID_EVIDENCE"
+        rejection_reason = "no valid evidence source found"
+        status = "failed"
+
+    return {
+        "status": status,
+        "reason_code": reason_code,
+        "rejection_reason": rejection_reason,
+        "rejection_reasons": reasons,
+        "evidence_types": evidence_types,
+        "missing_evidence_types": missing_evidence_types,
+    }
+
+
 def verify_completion_evidence(task_result):
     """驗證任務結果是否包含有效的完成證據。
 

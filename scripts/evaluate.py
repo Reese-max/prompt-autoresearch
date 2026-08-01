@@ -22,6 +22,7 @@ os.chdir(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 
 from lib.api import call_minimax
 from lib.io import sha256_text, load_file, normalize_path
+from lib.completion_gate import completion_disposition
 
 # Colors for terminal output
 C_GREEN  = "\033[92m"
@@ -535,6 +536,20 @@ def calculate_statistics(results, elapsed_seconds, prompt_file, question_file, p
         "error_count": error_count,
         "estimated_api_calls": estimated_api_calls,
     }
+    completion = completion_disposition({
+        "exit_code": 0,
+        "stdout": "",
+        "stderr": "",
+        "artifacts": {},
+        "results": results,
+        "summary": {"average_score": avg_score},
+    })
+    summary.update({
+        "completion_status": completion["status"],
+        "reason_code": completion["reason_code"],
+        "rejection_reason": completion["rejection_reason"],
+        "missing_evidence_types": completion["missing_evidence_types"],
+    })
     
     return summary
 
