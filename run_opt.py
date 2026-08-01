@@ -324,9 +324,17 @@ def write_baseline_meta(prompt_hash, smoke_run, dev_run, holdout_run):
     }
     write_json(BASELINE_META_PATH, payload)
 
+ELITE_MIN_ABSOLUTE_SCORE = 60.0
+
+
 def save_elite_candidate(candidate_prompt, cand_path, direction, hypothesis, dev_run_dir, baseline_dev_run, comparison):
     breakthroughs = comparison.get("type_breakthroughs", []) if comparison else []
     if not breakthroughs:
+        return []
+
+    candidate_avg = comparison.get("avg_new", 0.0)
+    if candidate_avg < ELITE_MIN_ABSOLUTE_SCORE:
+        print(f"  - {C_YELLOW}[跳過 elite] 候選均分 {candidate_avg:.2f} 低於門檻 {ELITE_MIN_ABSOLUTE_SCORE}，不寫入 champion pool。{C_RESET}")
         return []
 
     os.makedirs(ELITE_DIR, exist_ok=True)
@@ -355,6 +363,7 @@ def save_elite_candidate(candidate_prompt, cand_path, direction, hypothesis, dev
             "baseline_avg": item["baseline_avg"],
             "candidate_avg": item["candidate_avg"],
             "diff": item["diff"],
+            "overall_avg": candidate_avg,
             "overall_diff": comparison.get("score_diff"),
             "risk_rate": comparison.get("risk_rate"),
             "base_risk_rate": comparison.get("base_risk_rate"),
@@ -704,9 +713,11 @@ def run_opt_pass(smoke_parallel=None, dev_parallel=None, holdout_parallel=None, 
                     "run": smoke_run,
                     "score": smoke_score,
                     "drop": smoke_drop,
+                    "baseline_score": baseline_smoke_score,
                     "word_count_pass_rate": smoke_summary.get("word_count_pass_rate", 0.0),
                     "risk_perfect_rate": smoke_summary.get("risk_perfect_rate", 0.0),
                     "error_count": smoke_summary.get("error_count", 0),
+                    "type_averages": smoke_summary.get("type_averages", {}),
                 },
                 status="smoke_passed",
             )
@@ -731,10 +742,12 @@ def run_opt_pass(smoke_parallel=None, dev_parallel=None, holdout_parallel=None, 
                     "run": smoke_run,
                     "score": smoke_score,
                     "drop": smoke_drop,
+                    "baseline_score": baseline_smoke_score,
                     "word_count_pass_rate": smoke_summary.get("word_count_pass_rate", 0.0),
                     "risk_perfect_rate": smoke_summary.get("risk_perfect_rate", 0.0),
                     "error_count": smoke_summary.get("error_count", 0),
                     "returncode": smoke_res.returncode,
+                    "type_averages": smoke_summary.get("type_averages", {}),
                 },
                 status="rejected_smoke",
                 reject_reasons=reasons,
@@ -790,6 +803,7 @@ def run_opt_pass(smoke_parallel=None, dev_parallel=None, holdout_parallel=None, 
             "error_count": dev_summary.get("error_count", 0),
             "governance_passed": not dev_governance_notes,
             "governance_notes": dev_governance_notes,
+            "type_averages": dev_summary.get("type_averages", {}),
         },
         status="dev_evaluated",
     )
@@ -806,7 +820,7 @@ def run_opt_pass(smoke_parallel=None, dev_parallel=None, holdout_parallel=None, 
         comparison_data = {}
     else:
         from scripts.compare_runs import compare
-        accept, new_avg, diff = compare(dev_run_dir, baseline_dev_run)
+        accept, new_avg, diff = compare(dev_run_dir, baseline_dev_run, candidate_id=cand_path)
         from scripts.compare_runs import LAST_COMPARISON
         comparison_data = LAST_COMPARISON
     if dev_governance_notes:
@@ -888,6 +902,7 @@ def run_opt_pass(smoke_parallel=None, dev_parallel=None, holdout_parallel=None, 
                 "accepted": holdout_accept,
                 "reason": holdout_reason,
                 "governance_notes": holdout_governance_notes,
+                "type_averages": holdout_summary.get("type_averages", {}),
             },
         )
 
@@ -935,11 +950,28 @@ def run_opt_pass(smoke_parallel=None, dev_parallel=None, holdout_parallel=None, 
             decision_run=dev_run_dir,
             holdout_run=holdout_run_dir,
             elite_saved=len(elite_saved),
+            evidence={
+                "smoke_run": smoke_run,
+                "smoke_score": smoke_score,
+                "dev_run": dev_run_dir,
+                "dev_score": dev_summary.get("score"),
+                "holdout_run": holdout_run_dir,
+                "holdout_score": holdout_summary.get("score"),
+                "baseline_dev_run": baseline_dev_run,
+                "score_diff": diff,
+            },
         )
         record_round(
             round_no=0, direction=direction, target_failures=target_failures,
             smoke_score=smoke_score, dev_score=dev_summary.get("score"),
             holdout_score=holdout_summary.get("score"), accept=True, score_diff=diff,
+            candidate_id=cand_path,
+            candidate_scores=[
+                {"stage": "smoke", "score": smoke_score, "run": smoke_run},
+                {"stage": "dev", "score": dev_summary.get("score"), "run": dev_run_dir},
+                {"stage": "holdout", "score": holdout_summary.get("score"), "run": holdout_run_dir},
+            ],
+            winner_id=cand_path,
         )
         return True
     else:
@@ -975,11 +1007,28 @@ def run_opt_pass(smoke_parallel=None, dev_parallel=None, holdout_parallel=None, 
             decision_run=dev_run_dir,
             holdout_run=holdout_run_dir,
             elite_saved=len(elite_saved),
+            evidence={
+                "smoke_run": smoke_run,
+                "smoke_score": smoke_score,
+                "dev_run": dev_run_dir,
+                "dev_score": dev_summary.get("score"),
+                "holdout_run": holdout_run_dir,
+                "holdout_score": holdout_summary.get("score"),
+                "baseline_dev_run": baseline_dev_run,
+                "score_diff": diff,
+            },
         )
         record_round(
             round_no=0, direction=direction, target_failures=target_failures,
             smoke_score=smoke_score, dev_score=dev_summary.get("score"),
             holdout_score=holdout_summary.get("score"), accept=False, score_diff=diff,
+            candidate_id=cand_path,
+            candidate_scores=[
+                {"stage": "smoke", "score": smoke_score, "run": smoke_run},
+                {"stage": "dev", "score": dev_summary.get("score"), "run": dev_run_dir},
+                {"stage": "holdout", "score": holdout_summary.get("score"), "run": holdout_run_dir},
+            ],
+            elimination_reasons=[reason],
         )
         return False
 

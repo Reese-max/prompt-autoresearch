@@ -48,7 +48,7 @@ def load_details(run_dir):
                 questions_data[obj["id"]] = obj
     return questions_data
 
-def compare(new_dir, base_dir, mode=None):
+def compare(new_dir, base_dir, mode=None, candidate_id=None, round_no=None):
     global LAST_COMPARISON
     mode = mode or acceptance_mode()
     new_data = load_details(new_dir)
@@ -211,6 +211,8 @@ def compare(new_dir, base_dir, mode=None):
     LAST_COMPARISON = {
         "new_dir": new_dir,
         "base_dir": base_dir,
+        "candidate_id": candidate_id,
+        "round_no": round_no,
         "avg_new": avg_new,
         "avg_base": avg_base,
         "score_diff": score_diff,
@@ -226,6 +228,8 @@ def compare(new_dir, base_dir, mode=None):
         "type_variance": type_variance,
         "worst_type": worst_type_name,
         "worst_type_score": worst_type_score,
+        "new_details_path": os.path.join(new_dir, "details.jsonl") if new_dir else None,
+        "base_details_path": os.path.join(base_dir, "details.jsonl") if base_dir else None,
     }
 
     if type_breakthroughs:

@@ -40,6 +40,10 @@ def record_round(
     elapsed_seconds=None,
     error="",
     candidates_count=1,
+    candidate_id=None,
+    candidate_scores=None,
+    winner_id=None,
+    elimination_reasons=None,
 ):
     """記錄一輪演化結果。"""
     payload = {
@@ -57,6 +61,10 @@ def record_round(
         "elapsed_seconds": elapsed_seconds,
         "error": error,
         "candidates_count": candidates_count,
+        "candidate_id": candidate_id,
+        "candidate_scores": candidate_scores or [],
+        "winner_id": winner_id,
+        "elimination_reasons": elimination_reasons or [],
     }
     append_jsonl(METRICS_PATH, payload)
     return payload

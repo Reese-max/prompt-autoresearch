@@ -145,10 +145,10 @@ def evaluate_routed(route_path, question_file, parallel):
     return res.returncode, run_dir, read_json(os.path.join(run_dir, "summary.json"), {}) if run_dir else {}
 
 
-def compare_run(new_run, base_run, mode="pragmatic"):
+def compare_run(new_run, base_run, mode="pragmatic", candidate_id=None):
     import scripts.compare_runs as compare_runs
 
-    accepted, _, diff = compare_runs.compare(new_run, base_run, mode=mode)
+    accepted, _, diff = compare_runs.compare(new_run, base_run, mode=mode, candidate_id=candidate_id)
     return accepted, diff, dict(compare_runs.LAST_COMPARISON)
 
 
@@ -270,34 +270,44 @@ def evolve_one_type(type_name, rounds, parallel, mode):
                 "event": "gate_reject",
                 "type": type_name,
                 "candidate": candidate_path,
+                "candidate_hash": sha256_text(candidate_prompt),
+                "round": round_no,
                 "violations": violations,
             })
             continue
 
         _, cand_dev_run, _ = evaluate_prompt(candidate_path, dev_subset, parallel)
-        dev_accept, dev_diff, dev_comparison = compare_run(cand_dev_run, base_dev_run, mode=mode)
+        dev_accept, dev_diff, dev_comparison = compare_run(cand_dev_run, base_dev_run, mode=mode, candidate_id=candidate_path)
         if not dev_accept:
             print(f"{C_RED}Dev 未通過：diff={dev_diff:+.2f}{C_RESET}")
             append_jsonl(LOG_PATH, {
                 "event": "dev_reject",
                 "type": type_name,
                 "candidate": candidate_path,
+                "candidate_hash": sha256_text(candidate_prompt),
+                "round": round_no,
                 "dev_run": cand_dev_run,
                 "base_dev_run": base_dev_run,
+                "dev_avg": dev_comparison.get("avg_new"),
+                "baseline_avg": dev_comparison.get("avg_base"),
                 "comparison": acceptance_summary(dev_comparison),
             })
             continue
 
         _, cand_holdout_run, _ = evaluate_prompt(candidate_path, holdout_subset, parallel)
-        holdout_accept, holdout_diff, holdout_comparison = compare_run(cand_holdout_run, base_holdout_run, mode=mode)
+        holdout_accept, holdout_diff, holdout_comparison = compare_run(cand_holdout_run, base_holdout_run, mode=mode, candidate_id=candidate_path)
         if not holdout_accept:
             print(f"{C_RED}Holdout 未通過：diff={holdout_diff:+.2f}{C_RESET}")
             append_jsonl(LOG_PATH, {
                 "event": "holdout_reject",
                 "type": type_name,
                 "candidate": candidate_path,
+                "candidate_hash": sha256_text(candidate_prompt),
+                "round": round_no,
                 "dev_run": cand_dev_run,
                 "holdout_run": cand_holdout_run,
+                "holdout_avg": holdout_comparison.get("avg_new"),
+                "baseline_avg": holdout_comparison.get("avg_base"),
                 "comparison": acceptance_summary(holdout_comparison),
             })
             continue
@@ -317,7 +327,11 @@ def evolve_one_type(type_name, rounds, parallel, mode):
             "event": "champion_accept",
             "type": type_name,
             "candidate": candidate_path,
+            "candidate_hash": sha256_text(candidate_prompt),
+            "round": round_no,
             "champion": champion_path,
+            "dev_avg": dev_comparison.get("avg_new"),
+            "baseline_avg": dev_comparison.get("avg_base"),
             "meta": meta,
         })
         accepted_any = True
