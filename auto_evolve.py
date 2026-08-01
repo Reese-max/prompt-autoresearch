@@ -65,6 +65,89 @@ def baseline_dev_score():
     except (TypeError, ValueError):
         return 0.0
 
+
+def scan_candidate_evaluations():
+    """評測既有候選：掃描 prompts/candidates/*.scorecard.json 收錄已評測候選證據。
+
+    只收錄已有 smoke/dev 分數的候選，作為「比較並淘汰」階段的既有基礎，
+    避免以預設 baseline 或空白資料跳過既有候選的評測。
+    """
+    results = []
+    cand_dir = "prompts/candidates"
+    if not os.path.isdir(cand_dir):
+        return results
+    for name in sorted(os.listdir(cand_dir)):
+        if not name.endswith(".scorecard.json"):
+            continue
+        card = load_json(os.path.join(cand_dir, name))
+        if not card:
+            continue
+        smoke = card.get("smoke") or {}
+        dev = card.get("dev") or {}
+        score = dev.get("score")
+        if score is None:
+            score = smoke.get("score")
+        if score is None:
+            continue
+        results.append({
+            "candidate_path": card.get("candidate_path") or "",
+            "smoke_score": smoke.get("score"),
+            "dev_score": dev.get("score"),
+            "score": float(score),
+            "status": card.get("status", ""),
+            "selected": bool(card.get("selected")),
+        })
+    return results
+
+
+def run_controlled_closed_loop(parallel_config):
+    """受控執行路徑：串接「評測既有候選 → 依結果產生迭代候選 → 比較並淘汰 → 回傳全域最高品質候選」。
+
+    1. 評測既有候選：scan_candidate_evaluations() 收錄既有候選評估證據。
+    2. 依結果產生迭代候選：run_opt.run_opt_pass 依歷史結果產生多候選並評估。
+    3. 比較並淘汰：run_opt_pass 以 smoke/dev/holdout 比較並淘汰較差候選。
+    4. 回傳全域最高品質候選：回傳 (success, best_candidate)。
+
+    multi_candidate 停用或 count<2 時直接 raise，避免單一候選捷徑跳過「比較並淘汰」階段。
+    """
+    import run_opt
+
+    existing = scan_candidate_evaluations()
+    prior_best = max(existing, key=lambda c: c.get("score", 0.0)) if existing else None
+
+    get_fn = getattr(run_opt, "get", None)
+    multi_cfg = {}
+    if get_fn is not None:
+        try:
+            multi_cfg = get_fn("multi_candidate") or {}
+        except Exception:
+            multi_cfg = {}
+    use_multi = bool(multi_cfg.get("enabled", True))
+    count = int(multi_cfg.get("count") or 0) if multi_cfg else 3
+    if not use_multi or count < 2:
+        raise ValueError(
+            f"[受控閉環] multi_candidate 未啟用或 count<2 (enabled={use_multi}, count={count})，"
+            "單一候選捷徑會跳過「比較並淘汰」階段，請修正 config 後再跑。"
+        )
+
+    existing_info = (
+        f"，最高 {prior_best['score']:.2f} ({prior_best['candidate_path']})"
+        if prior_best
+        else "（無）"
+    )
+    print(f"{C_CYAN}[受控閉環] 既有已評測候選 {len(existing)} 個{existing_info}"
+          f"，本輪多候選 count={count}，產生迭代候選...{C_RESET}")
+
+    success = run_opt.run_opt_pass(**parallel_config)
+
+    after = scan_candidate_evaluations()
+    merged = {c["candidate_path"]: c for c in existing + after if c.get("candidate_path")}
+    best_candidate = max(merged.values(), key=lambda c: c.get("score", 0.0)) if merged else None
+    if best_candidate:
+        print(f"{C_CYAN}[受控閉環] 全域最高品質候選: {best_candidate['candidate_path']} "
+              f"(score={best_candidate['score']:.2f}, status={best_candidate['status']}){C_RESET}")
+    return success, best_candidate
+
 def parse_args(argv):
     generations = 10
     rest = list(argv)
@@ -115,6 +198,7 @@ def main():
     retry_count = 0
     retry_mode = False
     best_score = baseline_dev_score()
+    best_candidate = None
 
     append_jsonl(
         LOG_PATH,
@@ -135,8 +219,10 @@ def main():
         total_attempts += 1
         before_baseline = baseline_dev_score()
 
+        success = False
+        best_candidate = None
         try:
-            success = run_opt_pass(**parallel_config)
+            success, best_candidate = run_controlled_closed_loop(parallel_config)
             consecutive_errors = 0
             after_baseline = baseline_dev_score()
             promoted = after_baseline > before_baseline
@@ -204,6 +290,7 @@ def main():
                 "after_baseline_dev": after_baseline,
                 "best_score": best_score,
                 "no_improve_count": no_improve_count,
+                "best_candidate": best_candidate,
                 "elapsed_seconds": gen_elapsed,
             },
         )
@@ -262,6 +349,7 @@ def main():
                     "baseline_dev_score": baseline_dev_score(),
                     "no_improve_count": no_improve_count,
                     "retry_count": retry_count,
+                    "best_candidate": best_candidate,
                     "elapsed_seconds": time.time() - start_time,
                     "conclusion": "已收斂於 baseline，重試仍無改善",
                     # 環境資訊用於同-seed 比對
@@ -292,6 +380,7 @@ def main():
                     "generation": gen,
                     "successful_evolutions": successful_evolutions,
                     "best_score": best_score,
+                    "best_candidate": best_candidate,
                     "elapsed_seconds": time.time() - start_time,
                     "retry_mode": retry_mode,
                     "retry_count": retry_count,
@@ -308,6 +397,9 @@ def main():
     print(f"  - 總規劃世代: {generations} 代")
     print(f"  - 總嘗試次數: {total_attempts} 次")
     print(f"  - 成功晉升數: {successful_evolutions} 次")
+    if best_candidate:
+        print(f"  - 全域最高品質候選: {best_candidate['candidate_path']} "
+              f"(score={best_candidate['score']:.2f}, status={best_candidate['status']})")
     print(f"  - 總運行耗時: {total_elapsed/3600:.2f} 小時 ({total_elapsed/60:.1f} 分鐘)")
     print(f"{C_PURPLE}=================================================={C_RESET}")
     
