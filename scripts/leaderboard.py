@@ -9,6 +9,8 @@ import argparse
 import json
 import os
 
+from lib.completion_gate import persist_run_failure, verify_persisted_run_evidence
+
 if hasattr(__import__("sys").stdout, "reconfigure"):
     __import__("sys").stdout.reconfigure(encoding="utf-8", errors="replace")
 
@@ -35,6 +37,11 @@ def list_runs():
             continue
         if summary.get("completion_status") in {"failed", "incomplete"}:
             continue
+        if summary.get("completion_status") == "completed" or "evidence_manifest" in summary:
+            evidence = verify_persisted_run_evidence(run_dir)
+            if evidence["status"] != "completed":
+                persist_run_failure(run_dir, evidence)
+                continue
         rows.append(
             {
                 "run_dir": run_dir,

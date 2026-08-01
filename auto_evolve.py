@@ -16,6 +16,7 @@ import platform
 
 from lib.io import load_json
 from lib.metrics import record_event
+from lib.completion_gate import verify_persisted_run_evidence
 
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8", errors="replace", line_buffering=True)
@@ -103,6 +104,44 @@ def scan_candidate_evaluations():
             score = smoke.get("score")
         if score is None:
             continue
+
+        evidence_checks = {}
+        evidence_errors = []
+        for stage in ("smoke", "dev", "holdout"):
+            stage_data = card.get(stage) or {}
+            if not isinstance(stage_data, dict) or not (
+                stage_data.get("score") is not None or stage_data.get("completion")
+            ):
+                continue
+            run_dir = stage_data.get("run")
+            check = verify_persisted_run_evidence(run_dir)
+            evidence_checks[stage] = check
+            if check["status"] != "completed":
+                evidence_errors.extend(
+                    f"{stage}: {reason}"
+                    for reason in check["rejection_reasons"]
+                )
+        if evidence_errors:
+            failed_checks = [
+                check for check in evidence_checks.values()
+                if check["status"] != "completed"
+            ]
+            first_failure = failed_checks[0] if failed_checks else {}
+            card.update({
+                "status": "failed",
+                "completion_status": "failed",
+                "final_decision": "FAILED",
+                "reason_code": first_failure.get("reason_code") or "INVALID_EVIDENCE_MANIFEST",
+                "rejection_reason": "candidate evidence revalidation failed",
+                "rejection_reasons": evidence_errors,
+                "reject_reasons": evidence_errors,
+                "missing_evidence_types": ["evidence_manifest"],
+                "evidence_errors": evidence_errors,
+                "evidence_validation": evidence_checks,
+            })
+            with open(os.path.join(cand_dir, name), "w", encoding="utf-8") as handle:
+                json.dump(card, handle, ensure_ascii=False, indent=2)
+            continue
         results.append({
             "candidate_path": card.get("candidate_path") or "",
             "smoke_score": smoke.get("score"),
@@ -110,6 +149,7 @@ def scan_candidate_evaluations():
             "score": float(score),
             "status": card.get("status", ""),
             "selected": bool(card.get("selected")),
+            "evidence_validation": evidence_checks,
         })
     return results
 

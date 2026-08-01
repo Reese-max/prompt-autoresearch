@@ -27,7 +27,14 @@ if hasattr(sys.stderr, "reconfigure"):
 
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
 
-from run_opt import call_minimax, compress_candidate_prompt, load_file, sha256_text, write_json  # noqa: E402
+from run_opt import (  # noqa: E402
+    _selection_evidence_failure,
+    call_minimax,
+    compress_candidate_prompt,
+    load_file,
+    sha256_text,
+    write_json,
+)
 from scripts.gatekeeper import run_gatekeeper  # noqa: E402
 
 C_GREEN = "\033[92m"
@@ -196,12 +203,19 @@ def build_type_prompt(type_name, source_prompt, dev_subset, baseline_summary, ro
 
 def acceptance_summary(comparison):
     return {
+        "completion_status": comparison.get("completion_status", ""),
+        "reason_code": comparison.get("reason_code", ""),
+        "rejection_reason": comparison.get("rejection_reason", ""),
+        "rejection_reasons": comparison.get("rejection_reasons", []),
         "score_diff": comparison.get("score_diff"),
         "risk_rate": comparison.get("risk_rate"),
         "base_risk_rate": comparison.get("base_risk_rate"),
         "failure_new": comparison.get("failure_new", {}),
         "failure_base": comparison.get("failure_base", {}),
         "type_diffs": comparison.get("type_diffs", {}),
+        "evidence_manifest": comparison.get("evidence_manifest", []),
+        "base_evidence_manifest": comparison.get("base_evidence_manifest", []),
+        "evidence_errors": comparison.get("evidence_errors", []),
     }
 
 
@@ -222,6 +236,26 @@ def update_route():
 
 
 def save_champion(type_name, candidate_path, candidate_prompt, dev_run, holdout_run, dev_comparison, holdout_comparison):
+    failure = _selection_evidence_failure(
+        dev_comparison,
+        (("dev", dev_run),),
+    ) or _selection_evidence_failure(
+        holdout_comparison,
+        (("holdout", holdout_run),),
+    )
+    if failure:
+        rejection = {
+            "status": "failed",
+            "completion_status": "failed",
+            "final_decision": "FAILED",
+            "reason_code": failure["reason_code"],
+            "rejection_reason": failure["rejection_reason"],
+            "rejection_reasons": failure["rejection_reasons"],
+            "reject_reasons": failure["rejection_reasons"],
+            "missing_evidence_types": ["evidence_manifest"],
+        }
+        write_json(candidate_path.replace(".md", ".scorecard.json"), rejection)
+        return None, rejection
     os.makedirs(CHAMPIONS_DIR, exist_ok=True)
     slug = type_slug(type_name)
     champion_path = os.path.join(CHAMPIONS_DIR, f"{slug}.md")
@@ -321,6 +355,16 @@ def evolve_one_type(type_name, rounds, parallel, mode):
             dev_comparison,
             holdout_comparison,
         )
+        if not champion_path:
+            append_jsonl(LOG_PATH, {
+                "event": "champion_reject",
+                "type": type_name,
+                "candidate": candidate_path,
+                "candidate_hash": sha256_text(candidate_prompt),
+                "round": round_no,
+                "meta": meta,
+            })
+            continue
         update_route()
         print(f"{C_GREEN}✅ 新題型 champion 已更新：{champion_path}{C_RESET}")
         append_jsonl(LOG_PATH, {

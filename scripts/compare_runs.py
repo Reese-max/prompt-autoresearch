@@ -25,6 +25,12 @@ C_RED    = "\033[91m"
 C_RESET  = "\033[0m"
 LAST_COMPARISON = {}
 
+from lib.completion_gate import (  # noqa: E402
+    build_evidence_manifest,
+    persist_run_failure,
+    verify_persisted_run_evidence,
+)
+
 
 def _has_meaningful_output(row):
     """單題結果至少要有答案或正分，否則不得參與候選比較。"""
@@ -39,8 +45,21 @@ def _has_meaningful_output(row):
         return False
 
 
-def _record_invalid_comparison(new_dir, base_dir, candidate_id, round_no, missing):
+def _record_invalid_comparison(
+    new_dir,
+    base_dir,
+    candidate_id,
+    round_no,
+    missing,
+    reason_code="NO_VALID_OUTPUT",
+    rejection_reason="no valid output evidence",
+    rejection_reasons=None,
+    evidence_errors=None,
+    evidence_manifest=None,
+    base_evidence_manifest=None,
+):
     global LAST_COMPARISON
+    rejection_reasons = rejection_reasons or [f"missing evidence types: {', '.join(missing)}"]
     LAST_COMPARISON = {
         "new_dir": new_dir,
         "base_dir": base_dir,
@@ -48,15 +67,27 @@ def _record_invalid_comparison(new_dir, base_dir, candidate_id, round_no, missin
         "round_no": round_no,
         "passed": False,
         "completion_status": "failed",
-        "reason_code": "NO_VALID_OUTPUT",
-        "rejection_reason": "no valid output evidence",
-        "rejection_reasons": [f"missing evidence types: {', '.join(missing)}"],
+        "reason_code": reason_code,
+        "rejection_reason": rejection_reason,
+        "rejection_reasons": rejection_reasons,
         "evidence_types": [],
-        "evidence_manifest": [],
-        "evidence_errors": ["no valid output evidence"],
+        "evidence_manifest": evidence_manifest or [],
+        "base_evidence_manifest": base_evidence_manifest or [],
+        "evidence_errors": evidence_errors or ["no valid output evidence"],
         "missing_evidence_types": missing,
         "type_breakthroughs": [],
     }
+
+
+def _validated_run_manifest(run_dir, role):
+    """有 summary 的 run 必須重新驗證持久化證據；舊 details-only fixture 保持相容。"""
+    if not run_dir or not os.path.isfile(os.path.join(run_dir, "summary.json")):
+        return None
+    result = verify_persisted_run_evidence(run_dir)
+    if result["status"] == "completed":
+        return result
+    result["role"] = role
+    return result
 
 def acceptance_mode():
     return os.environ.get("AUTORESEARCH_ACCEPTANCE_MODE", "pragmatic").strip().lower() or "pragmatic"
@@ -84,9 +115,21 @@ def load_details(run_dir):
 def compare(new_dir, base_dir, mode=None, candidate_id=None, round_no=None):
     global LAST_COMPARISON
     mode = mode or acceptance_mode()
+    new_evidence = _validated_run_manifest(new_dir, "candidate")
+    if new_evidence and new_evidence["status"] != "completed":
+        print(f"{C_RED}[拒絕] 候選證據清單驗證失敗，排除比較：{new_evidence['rejection_reason']}{C_RESET}")
+        persist_run_failure(new_dir, new_evidence)
+        _record_invalid_comparison(
+            new_dir, base_dir, candidate_id, round_no,
+            ["evidence_manifest"],
+            reason_code=new_evidence["reason_code"],
+            rejection_reason=new_evidence["rejection_reason"],
+            rejection_reasons=new_evidence["rejection_reasons"],
+            evidence_errors=new_evidence["evidence_errors"],
+        )
+        return False, 0.0, 0.0
+
     new_data = load_details(new_dir)
-    base_data = load_details(base_dir)
-    
     if not new_data:
         print(f"{C_RED}[錯誤] 無法載入新運行數據: {new_dir}{C_RESET}")
         sys.exit(1)
@@ -97,6 +140,22 @@ def compare(new_dir, base_dir, mode=None, candidate_id=None, round_no=None):
             ["results"],
         )
         return False, 0.0, 0.0
+    base_evidence = _validated_run_manifest(base_dir, "baseline")
+    if base_evidence and base_evidence["status"] != "completed":
+        print(f"{C_RED}[拒絕] 基準證據清單驗證失敗，排除比較：{base_evidence['rejection_reason']}{C_RESET}")
+        persist_run_failure(base_dir, base_evidence)
+        _record_invalid_comparison(
+            new_dir, base_dir, candidate_id, round_no,
+            ["baseline_evidence_manifest"],
+            reason_code=base_evidence["reason_code"],
+            rejection_reason=base_evidence["rejection_reason"],
+            rejection_reasons=base_evidence["rejection_reasons"],
+            evidence_errors=base_evidence["evidence_errors"],
+            evidence_manifest=new_evidence.get("evidence_manifest", []) if new_evidence else [],
+        )
+        return False, 0.0, 0.0
+
+    base_data = load_details(base_dir)
     if not base_data:
         print(f"{C_YELLOW}[警告] 無法載入基準運行數據: {base_dir}。將進行無基準自我分析。{C_RESET}")
         base_data = {}
@@ -107,7 +166,6 @@ def compare(new_dir, base_dir, mode=None, candidate_id=None, round_no=None):
             ["baseline_results"],
         )
         return False, 0.0, 0.0
-        
     # 計算分數
     new_scores = [q["total_score"] for q in new_data.values()]
     avg_new = sum(new_scores) / len(new_scores) if new_scores else 0
@@ -277,6 +335,18 @@ def compare(new_dir, base_dir, mode=None, candidate_id=None, round_no=None):
         "worst_type_score": worst_type_score,
         "new_details_path": os.path.join(new_dir, "details.jsonl") if new_dir else None,
         "base_details_path": os.path.join(base_dir, "details.jsonl") if base_dir else None,
+        "completion_status": "completed",
+        "evidence_manifest": new_evidence.get("evidence_manifest", []) if new_evidence else build_evidence_manifest(
+            {"details.jsonl": {"path": os.path.join(new_dir, "details.jsonl")}},
+            os.path.dirname(new_dir),
+        )[0],
+        "base_evidence_manifest": base_evidence.get("evidence_manifest", []) if base_evidence else (
+            build_evidence_manifest(
+                {"details.jsonl": {"path": os.path.join(base_dir, "details.jsonl")}},
+                os.path.dirname(base_dir),
+            )[0] if base_data else []
+        ),
+        "evidence_errors": [],
     }
 
     if type_breakthroughs:

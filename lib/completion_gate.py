@@ -167,6 +167,166 @@ def build_evidence_manifest(artifacts, workspace_root=None):
     return [], ["no valid non-empty artifacts found"]
 
 
+def validate_evidence_manifest(manifest, workspace_root=None):
+    """重新讀取 manifest 指向的檔案，確認大小、雜湊與工作區邊界仍一致。"""
+    if not isinstance(manifest, list) or not manifest:
+        return [], ["evidence_manifest is empty or invalid"]
+
+    verified = []
+    errors = []
+    for index, entry in enumerate(manifest):
+        if not isinstance(entry, dict):
+            errors.append(f"evidence_manifest[{index}] is not an object")
+            continue
+        if entry.get("verified") is not True:
+            errors.append(f"evidence_manifest[{index}] is not marked verified")
+            continue
+        current, error = _read_evidence_file(entry.get("path"), workspace_root)
+        if error:
+            errors.append(f"evidence_manifest[{index}]: {error}")
+            continue
+        if entry.get("size") != current["size"]:
+            errors.append(
+                f"evidence_manifest[{index}] size mismatch: "
+                f"expected {entry.get('size')}, found {current['size']}"
+            )
+            continue
+        if str(entry.get("sha256", "")).lower() != current["sha256"]:
+            errors.append(f"evidence_manifest[{index}] sha256 mismatch")
+            continue
+        verified.append(current)
+
+    if errors:
+        return [], errors
+    return verified, []
+
+
+def _run_workspace_root(run_dir):
+    """由 runs/<name> 或測試用單層目錄推導 manifest 工作區。"""
+    absolute = os.path.abspath(os.fspath(run_dir))
+    parent = os.path.dirname(absolute)
+    if os.path.basename(parent).lower() == "runs":
+        return os.path.dirname(parent)
+    return parent
+
+
+def verify_persisted_run_evidence(run_dir):
+    """驗證已完成 run 的持久化證據清單與實際產出。"""
+    if not run_dir or not os.path.isdir(run_dir):
+        return {
+            "status": "failed",
+            "completion_status": "failed",
+            "reason_code": "NO_VALID_OUTPUT",
+            "rejection_reason": "run directory is missing or invalid",
+            "rejection_reasons": ["run directory is missing or invalid"],
+            "evidence_manifest": [],
+            "evidence_errors": ["run directory is missing or invalid"],
+        }
+
+    root = _run_workspace_root(run_dir)
+    summary_path = os.path.join(run_dir, "summary.json")
+    try:
+        with open(summary_path, "r", encoding="utf-8") as handle:
+            summary = json.load(handle)
+    except (OSError, ValueError, TypeError):
+        return {
+            "status": "failed",
+            "completion_status": "failed",
+            "reason_code": "MISSING_EVIDENCE_MANIFEST",
+            "rejection_reason": "completed run has no readable summary evidence",
+            "rejection_reasons": ["summary.json is missing or invalid"],
+            "evidence_manifest": [],
+            "evidence_errors": ["summary.json is missing or invalid"],
+        }
+
+    if summary.get("completion_status") in {"failed", "incomplete"}:
+        reason = summary.get("rejection_reason") or "run is not completed"
+        return {
+            "status": "failed",
+            "completion_status": summary.get("completion_status"),
+            "reason_code": summary.get("reason_code") or "NON_COMPLETED_STATUS",
+            "rejection_reason": reason,
+            "rejection_reasons": summary.get("rejection_reasons") or [reason],
+            "evidence_manifest": [],
+            "evidence_errors": summary.get("evidence_errors") or [reason],
+        }
+
+    if summary.get("evidence_errors"):
+        errors = list(summary["evidence_errors"])
+        return {
+            "status": "failed",
+            "completion_status": "failed",
+            "reason_code": "INVALID_EVIDENCE_MANIFEST",
+            "rejection_reason": "persisted evidence errors are present",
+            "rejection_reasons": errors,
+            "evidence_manifest": [],
+            "evidence_errors": errors,
+        }
+
+    manifest, errors = validate_evidence_manifest(summary.get("evidence_manifest"), root)
+    if errors:
+        return {
+            "status": "failed",
+            "completion_status": "failed",
+            "reason_code": "INVALID_EVIDENCE_MANIFEST",
+            "rejection_reason": "persisted evidence manifest failed revalidation",
+            "rejection_reasons": errors,
+            "evidence_manifest": [],
+            "evidence_errors": errors,
+        }
+
+    _artifacts, results, _summary = load_run_evidence(run_dir)
+    if not any(_has_meaningful_result(result) for result in results):
+        reason = "run details contain no meaningful result evidence"
+        return {
+            "status": "failed",
+            "completion_status": "failed",
+            "reason_code": "NO_VALID_OUTPUT",
+            "rejection_reason": reason,
+            "rejection_reasons": [reason],
+            "evidence_manifest": [],
+            "evidence_errors": [reason],
+        }
+
+    return {
+        "status": "completed",
+        "completion_status": "completed",
+        "reason_code": "",
+        "rejection_reason": "",
+        "rejection_reasons": [],
+        "evidence_manifest": manifest,
+        "evidence_errors": [],
+    }
+
+
+def persist_run_failure(run_dir, failure):
+    """將 run 的驗證拒絕結果持久化，供後續入口排除。"""
+    if not run_dir:
+        return False
+    path = os.path.join(run_dir, "summary.json")
+    try:
+        with open(path, "r", encoding="utf-8") as handle:
+            summary = json.load(handle)
+        if not isinstance(summary, dict):
+            return False
+        summary.update({
+            "completion_status": "failed",
+            "status": "failed",
+            "reason_code": failure.get("reason_code") or "INVALID_EVIDENCE_MANIFEST",
+            "rejection_reason": failure.get("rejection_reason") or "evidence validation failed",
+            "rejection_reasons": failure.get("rejection_reasons", []),
+            "reject_reasons": failure.get("rejection_reasons", []),
+            "missing_evidence_types": ["evidence_manifest"],
+            "evidence_manifest": [],
+            "evidence_errors": failure.get("evidence_errors") or failure.get("rejection_reasons", []),
+        })
+        with open(path, "w", encoding="utf-8") as handle:
+            json.dump(summary, handle, ensure_ascii=False, indent=2)
+    except (OSError, ValueError, TypeError):
+        return False
+    return True
+
+
 def _has_meaningful_result(result: dict) -> bool:
     """檢查單一結果是否含有意義性內容（answer 或 total_score > 0）。"""
     if not isinstance(result, dict):

@@ -26,7 +26,13 @@ from lib.io import (
     read_jsonl, append_jsonl, normalize_path, ensure_dir,
 )
 from lib.metrics import record_round
-from lib.completion_gate import completion_disposition, load_run_evidence
+from lib.completion_gate import (
+    completion_disposition,
+    load_run_evidence,
+    persist_run_failure,
+    validate_evidence_manifest,
+    verify_persisted_run_evidence,
+)
 
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8", errors="replace", line_buffering=True)
@@ -203,6 +209,18 @@ def read_summary(run_dir):
         "text": text,
     }
 
+
+def _eligible_run_summary(run_dir):
+    """選入比較資料集前，重新驗證已標記完成的 run 證據。"""
+    summary = read_summary(run_dir)
+    raw = summary.get("json", {}) if summary else {}
+    if raw.get("completion_status") == "completed" or "evidence_manifest" in raw:
+        evidence = verify_persisted_run_evidence(run_dir)
+        if evidence["status"] != "completed":
+            persist_run_failure(run_dir, evidence)
+            return {}
+    return summary
+
 def governance_notes(summary, stage):
     notes = []
     word_rate = float(summary.get("word_count_pass_rate", 0.0))
@@ -326,7 +344,7 @@ def find_latest_run_for(question_file, before=None):
     for run_dir in list_run_dirs():
         if before and run_dir >= before:
             continue
-        summary = read_summary(run_dir)
+        summary = _eligible_run_summary(run_dir)
         if summary.get("completion_status") in {"failed", "incomplete"}:
             continue
         if summary.get("question_file") == normalized:
@@ -337,7 +355,7 @@ def find_latest_run_for_hash(question_file, prompt_hash):
     normalized = question_file.replace("\\", "/")
     candidates = []
     for run_dir in list_run_dirs():
-        summary = read_summary(run_dir)
+        summary = _eligible_run_summary(run_dir)
         if summary.get("completion_status") in {"failed", "incomplete"}:
             continue
         if summary.get("question_file") == normalized and summary.get("prompt_hash") == prompt_hash:
@@ -349,7 +367,7 @@ def collect_recent_failure_trend(question_file="questions/dev.jsonl", limit=4):
     counts = {}
     runs = []
     for run_dir in reversed(list_run_dirs()):
-        summary = read_summary(run_dir)
+        summary = _eligible_run_summary(run_dir)
         if summary.get("question_file") != normalized:
             continue
         rows = read_details(run_dir)
@@ -417,7 +435,79 @@ def write_baseline_meta(prompt_hash, smoke_run, dev_run, holdout_run):
 ELITE_MIN_ABSOLUTE_SCORE = 60.0
 
 
+def _selection_evidence_failure(comparison, run_dirs):
+    """champion/elite 寫入前重新驗證比較結果與實際 run 證據。"""
+    comparison = comparison or {}
+    if comparison.get("completion_status") in {"failed", "incomplete"}:
+        return {
+            "reason_code": comparison.get("reason_code") or "NON_COMPLETED_STATUS",
+            "rejection_reason": comparison.get("rejection_reason") or "comparison is not completed",
+            "rejection_reasons": comparison.get("rejection_reasons") or ["comparison is not completed"],
+        }
+    if comparison.get("evidence_errors"):
+        return {
+            "reason_code": "INVALID_EVIDENCE_MANIFEST",
+            "rejection_reason": "comparison evidence revalidation failed",
+            "rejection_reasons": list(comparison["evidence_errors"]),
+        }
+    root = next(
+        (_workspace_root_for_run(run_dir) for _role, run_dir in run_dirs if run_dir),
+        os.getcwd(),
+    )
+    for manifest_name in ("evidence_manifest", "base_evidence_manifest"):
+        manifest = comparison.get(manifest_name)
+        if manifest is None:
+            continue
+        _verified, manifest_errors = validate_evidence_manifest(manifest, root)
+        if manifest_errors:
+            return {
+                "reason_code": "INVALID_EVIDENCE_MANIFEST",
+                "rejection_reason": f"{manifest_name} failed revalidation",
+                "rejection_reasons": manifest_errors,
+            }
+    if comparison.get("completion_status") == "completed" and not comparison.get("evidence_manifest"):
+        return {
+            "reason_code": "MISSING_EVIDENCE_MANIFEST",
+            "rejection_reason": "completed comparison has no evidence manifest",
+            "rejection_reasons": ["evidence_manifest is empty or invalid"],
+        }
+    for role, run_dir in run_dirs:
+        if not run_dir or not os.path.isdir(run_dir):
+            continue
+        check = verify_persisted_run_evidence(run_dir)
+        if check["status"] != "completed":
+            return {
+                "reason_code": check["reason_code"],
+                "rejection_reason": f"{role} evidence revalidation failed",
+                "rejection_reasons": [f"{role}: {reason}" for reason in check["rejection_reasons"]],
+            }
+    return None
+
+
+def _mark_selection_evidence_failed(cand_path, failure):
+    """持久化 champion 選優入口的結構化拒絕結果。"""
+    update_candidate_scorecard(
+        cand_path,
+        status="failed",
+        completion_status="failed",
+        final_decision="FAILED",
+        reason_code=failure["reason_code"],
+        rejection_reason=failure["rejection_reason"],
+        rejection_reasons=failure["rejection_reasons"],
+        reject_reasons=failure["rejection_reasons"],
+        missing_evidence_types=["evidence_manifest"],
+    )
+
+
 def save_elite_candidate(candidate_prompt, cand_path, direction, hypothesis, dev_run_dir, baseline_dev_run, comparison):
+    evidence_failure = _selection_evidence_failure(
+        comparison,
+        (("candidate", dev_run_dir), ("baseline", baseline_dev_run)),
+    )
+    if evidence_failure:
+        print(f"  - {C_RED}[跳過 elite] {evidence_failure['rejection_reason']}{C_RESET}")
+        _mark_selection_evidence_failed(cand_path, evidence_failure)
+        return []
     breakthroughs = comparison.get("type_breakthroughs", []) if comparison else []
     if not breakthroughs:
         return []

@@ -102,6 +102,32 @@ def score_route(route_path, parallel, baseline_meta):
         baseline_meta.get("holdout_run", "runs/20260524_162523"),
         mode="pragmatic",
     )
+    comparisons = (dev_comparison, holdout_comparison)
+    invalid = next(
+        (comparison for comparison in comparisons
+         if comparison.get("completion_status") in {"failed", "incomplete"}),
+        None,
+    )
+    if invalid:
+        return {
+            "route_path": route_path,
+            "dev_run": dev_run,
+            "holdout_run": holdout_run,
+            "dev_avg": avg_from_summary(dev_summary),
+            "holdout_avg": avg_from_summary(holdout_summary),
+            "dev_accept": False,
+            "holdout_accept": False,
+            "accepted": False,
+            "valid": False,
+            "dev_diff": None,
+            "holdout_diff": None,
+            "holdout_risk_rate": None,
+            "completion_status": "failed",
+            "reason_code": invalid.get("reason_code") or "NON_COMPLETED_STATUS",
+            "rejection_reason": invalid.get("rejection_reason") or "route evidence is not completed",
+            "rejection_reasons": invalid.get("rejection_reasons", []),
+            "evidence_errors": invalid.get("evidence_errors", []),
+        }
     return {
         "route_path": route_path,
         "dev_run": dev_run,
@@ -111,6 +137,8 @@ def score_route(route_path, parallel, baseline_meta):
         "dev_accept": dev_accept,
         "holdout_accept": holdout_accept,
         "accepted": bool(dev_accept and holdout_accept),
+        "valid": True,
+        "completion_status": "completed",
         "dev_diff": dev_diff,
         "holdout_diff": holdout_diff,
         "dev_risk_rate": dev_comparison.get("risk_rate"),
@@ -141,6 +169,7 @@ def search_routes(parallel):
     baseline_meta = read_json("prompts/baseline.meta.json", {})
     stamp = time.strftime("%Y%m%d_%H%M%S")
     results = []
+    rejected_results = []
     print(f"{C_PURPLE}開始 route 子集合搜尋：{len(champions)} 個 champion。{C_RESET}")
 
     for name, by_type in route_subsets(champions):
@@ -150,7 +179,10 @@ def search_routes(parallel):
         result = score_route(route_path, parallel, baseline_meta)
         result["name"] = name
         result["by_type"] = by_type
-        results.append(result)
+        if not result.get("valid", True):
+            rejected_results.append(result)
+        else:
+            results.append(result)
         append_jsonl(LOG_PATH, {
             "event": "route_candidate",
             "name": name,
@@ -158,7 +190,10 @@ def search_routes(parallel):
             "accepted": result["accepted"],
             "dev_diff": result["dev_diff"],
             "holdout_diff": result["holdout_diff"],
-            "holdout_risk_rate": result["holdout_risk_rate"],
+            "holdout_risk_rate": result.get("holdout_risk_rate"),
+            "completion_status": result.get("completion_status", "completed"),
+            "reason_code": result.get("reason_code", ""),
+            "rejection_reason": result.get("rejection_reason", ""),
         })
 
     results.sort(key=rank_key, reverse=True)
@@ -170,6 +205,8 @@ def search_routes(parallel):
         "best": best,
         "accepted_count": len(accepted),
         "candidate_count": len(results),
+        "rejected_count": len(rejected_results),
+        "rejected_results": rejected_results,
         "top_results": results[:10],
     }
     write_json(DECISION_PATH, decision)
@@ -180,7 +217,9 @@ def search_routes(parallel):
         shutil.copy2(winner["route_path"], ROUTE_PATH)
         print(f"{C_GREEN}Route 已啟用：{winner['name']} -> {ACTIVE_ROUTE_PATH}{C_RESET}")
     else:
-        print(f"{C_RED}沒有 route 通過 dev + holdout。最佳候選：{best.get('name')} holdout_diff={best.get('holdout_diff'):+.2f}{C_RESET}")
+        best_diff = best.get("holdout_diff")
+        diff_text = f"{best_diff:+.2f}" if isinstance(best_diff, (int, float)) else "N/A"
+        print(f"{C_RED}沒有 route 通過 dev + holdout。最佳候選：{best.get('name', 'N/A')} holdout_diff={diff_text}{C_RESET}")
 
     return decision
 
