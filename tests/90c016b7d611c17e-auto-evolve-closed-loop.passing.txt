@@ -1,0 +1,38 @@
+.                                                                        [100%]
+=============================== tests coverage ================================
+_______________ coverage: platform win32, python 3.11.9-final-0 _______________
+
+Name                                       Stmts   Miss Branch BrPart  Cover   Missing
+--------------------------------------------------------------------------------------
+api\__init__.py                                0      0      0      0   100%
+api\continuous_optimizer.py                   82     82     16      0     0%   13-169
+api\feedback.py                               85     85     36      0     0%   13-198
+api\server.py                                219    219     46      0     0%   23-396
+lib\__init__.py                                0      0      0      0   100%
+lib\api.py                                    63     46     20      0    20%   31-41, 51-54, 59-65, 73-114
+lib\config.py                                123     41     68     18    65%   63->70, 68-69, 72-75, 156, 165, 167, 171, 176, 180, 184, 191, 193, 197, 203-204, 206, 213, 215, 235, 237-247, 252-253, 265-267, 274-278, 282
+lib\io.py                                     47     16     14      1    59%   34->36, 41-42, 54-63, 68-70, 75
+lib\metrics.py                                13      7      2      0    40%   21-27, 49-70
+scripts\__init__.py                            0      0      0      0   100%
+scripts\analyze_runs.py                       92     92     42      0     0%   5-138
+scripts\backfill_candidate_scorecards.py      66     66     22      0     0%   12-125
+scripts\bypass_reevaluate.py                 276    276     80      0     0%   25-515
+scripts\collect_execution_evidence.py        153    153     40      0     0%   7-240
+scripts\compare_runs.py                      161    161     58      0     0%   7-257
+scripts\compare_test_runs.py                 141    141     64      0     0%   15-227
+scripts\evaluate.py                          311    311     80      0     0%   6-676
+scripts\evaluate_routed.py                   110    110     26      0     0%   8-176
+scripts\experiment_report.py                 183    183     78      0     0%   12-308
+scripts\gatekeeper.py                         82     51     48     14    35%   12->14, 14->18, 37-43, 57, 63, 70, 78-79, 87, 95, 103, 111, 119, 127, 136-140, 150-187, 191
+scripts\gen_evolution_rounds.py               80     80     30      0     0%   8-169
+scripts\generate_questions.py                 21     21      8      0     0%   7-471
+scripts\leaderboard.py                        43     43     18      0     0%   8-74
+scripts\measure_noise.py                     229    229     64      0     0%   18-455
+scripts\preflight.py                          93     93     26      0     0%   6-146
+scripts\run_core_flow_e2e.py                 158    158     42      0     0%   19-442
+scripts\run_test_matrix.py                    80     80     16      0     0%   4-209
+scripts\verify_ci_matrix.py                   83     83     38      0     0%   4-119
+scripts\verify_reproducibility.py             55     55     18      0     0%   14-120
+--------------------------------------------------------------------------------------
+TOTAL                                       3049   2882   1000     33     6%
+1 passed in 21.69s
