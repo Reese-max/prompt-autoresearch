@@ -1,0 +1,14 @@
+Command:
+python -m pytest --no-cov --color=no --tb=short --show-capture=no -q tests/90c016b7d611c17e-auto-evolve-closed-loop.py
+
+Exit code: 1
+=================================== FAILURES ===================================
+_____ test_fixed_seed_closed_loop_selects_highest_candidate_with_evidence _____
+tests/90c016b7d611c17e-auto-evolve-closed-loop.py:85: in test_fixed_seed_closed_loop_selects_highest_candidate_with_evidence
+    assert run_opt.run_opt_pass(smoke_parallel=1, dev_parallel=1, holdout_parallel=1) is True
+E   assert False is True
+E    +  where False = <function run_opt_pass at 0x0000018F2D1BC4A0>(smoke_parallel=1, dev_parallel=1, holdout_parallel=1)
+E    +    where <function run_opt_pass at 0x0000018F2D1BC4A0> = run_opt.run_opt_pass
+=========================== short test summary info ============================
+FAILED tests/90c016b7d611c17e-auto-evolve-closed-loop.py::test_fixed_seed_closed_loop_selects_highest_candidate_with_evidence
+1 failed in 12.53s
