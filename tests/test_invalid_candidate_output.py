@@ -6,6 +6,7 @@ from types import SimpleNamespace
 import auto_evolve
 import run_opt
 import scripts.compare_runs as compare_runs
+from lib.completion_gate import completion_disposition
 
 
 def test_empty_completion_has_machine_readable_rejection():
@@ -15,6 +16,21 @@ def test_empty_completion_has_machine_readable_rejection():
     assert disposition["reason_code"] == "NO_VALID_OUTPUT"
     assert disposition["missing_evidence_types"]
     assert disposition["rejection_reasons"]
+
+
+def test_nonzero_empty_completion_keeps_missing_evidence_types():
+    disposition = completion_disposition({
+        "exit_code": 1,
+        "stdout": "",
+        "stderr": "error",
+        "artifacts": {},
+        "results": [],
+        "summary": {},
+    })
+
+    assert disposition["status"] == "failed"
+    assert disposition["reason_code"] == "NONZERO_EXIT_CODE"
+    assert disposition["missing_evidence_types"] == ["artifacts", "results", "summary"]
 
 
 def test_failed_candidate_is_not_scanned_for_selection(tmp_path, monkeypatch):
@@ -35,6 +51,23 @@ def test_failed_candidate_is_not_scanned_for_selection(tmp_path, monkeypatch):
     assert card["status"] == "failed"
     assert card["reason_code"] == "NO_VALID_OUTPUT"
     assert card["missing_evidence_types"]
+    assert auto_evolve.scan_candidate_evaluations() == []
+
+
+def test_rejected_candidate_with_stale_score_is_not_scanned_for_selection(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    candidate_dir = tmp_path / "prompts" / "candidates"
+    candidate_dir.mkdir(parents=True)
+    (candidate_dir / "candidate_rejected.scorecard.json").write_text(
+        json.dumps({
+            "candidate_path": "prompts/candidates/candidate_rejected.md",
+            "status": "rejected_smoke",
+            "smoke": {"score": 99.0},
+            "dev": {"score": 99.0},
+        }),
+        encoding="utf-8",
+    )
+
     assert auto_evolve.scan_candidate_evaluations() == []
 
 

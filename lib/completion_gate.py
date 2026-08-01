@@ -175,7 +175,6 @@ def completion_disposition(task_result):
         reason_code = "NONZERO_EXIT_CODE"
         rejection_reason = reasons[0] if reasons else f"exit_code={exit_code} != 0"
         status = "failed"
-        missing_evidence_types = []
     else:
         reason_code = "NO_VALID_EVIDENCE"
         rejection_reason = "no valid evidence source found"

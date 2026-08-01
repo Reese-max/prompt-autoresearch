@@ -50,6 +50,8 @@ def _record_invalid_comparison(new_dir, base_dir, candidate_id, round_no, missin
         "completion_status": "failed",
         "reason_code": "NO_VALID_OUTPUT",
         "rejection_reason": "no valid output evidence",
+        "rejection_reasons": [f"missing evidence types: {', '.join(missing)}"],
+        "evidence_types": [],
         "missing_evidence_types": missing,
         "type_breakthroughs": [],
     }
