@@ -283,7 +283,7 @@ def main(argv=None):
                 avoid_failures=round_avoid_failures,
                 dominant_failure=last_dominant_failure,
             )
-            countermeasures_injected = list(_run_opt.LAST_ROUND_COUNTERMEASURES)
+            countermeasures_injected = list(getattr(_run_opt, "LAST_ROUND_COUNTERMEASURES", []) or [])
         except Exception as exc:
             success = False
             error = str(exc)

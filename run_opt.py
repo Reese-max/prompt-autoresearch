@@ -107,7 +107,7 @@ def parse_run_opt_args(argv):
             config["avoid_failures"] = []
     return config
 
-LAST_ROUND_COUNTERMEASURES = []
+LAST_ROUND_COUNTERMEASURES: list[str] = []
 
 
 def load_targeted_countermeasures(target_failures):
@@ -641,6 +641,9 @@ def _cleanup_old_archives():
         os.remove(os.path.join(ARCHIVE_DIR, old))
 
 def run_opt_pass(smoke_parallel=None, dev_parallel=None, holdout_parallel=None, force_direction=None, avoid_failures=None, dominant_failure=None):
+    global LAST_ROUND_COUNTERMEASURES
+    LAST_ROUND_COUNTERMEASURES = []
+
     smoke_parallel = smoke_parallel or int_env("AUTORESEARCH_SMOKE_PARALLEL", DEFAULT_SMOKE_PARALLEL)
     dev_parallel = dev_parallel or int_env("AUTORESEARCH_DEV_PARALLEL", DEFAULT_DEV_PARALLEL)
     holdout_parallel = holdout_parallel or int_env("AUTORESEARCH_HOLDOUT_PARALLEL", DEFAULT_HOLDOUT_PARALLEL)
@@ -736,7 +739,6 @@ def run_opt_pass(smoke_parallel=None, dev_parallel=None, holdout_parallel=None, 
         countermeasure_block = "以下為對應缺陷的具體修復方向，請在優化時嚴格落實：\n" + "\n".join(cms_lines)
     else:
         countermeasure_block = "—"
-    global LAST_ROUND_COUNTERMEASURES
     LAST_ROUND_COUNTERMEASURES = sorted(targeted_cms.keys()) if targeted_cms else []
 
     meta_prompt = """你是一位精通臺灣國家考試（高考/特考三等）申論題高分寫作的提示詞優化大師。
