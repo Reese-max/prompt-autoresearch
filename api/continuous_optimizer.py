@@ -21,6 +21,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(
 
 from lib.io import load_json, read_jsonl, append_jsonl
 from lib.config import get
+from lib.completion_gate import verify_completion_evidence
 from api.feedback import get_feedback_summary, get_weak_areas, generate_optimization_hints
 
 # --- 常數 ---
@@ -62,7 +63,11 @@ def analyze_and_suggest():
 
 
 def run_optimization_round(direction=None, parallel=6):
-    """執行一輪優化。"""
+    """執行一輪優化。
+
+    回傳 True 僅當子程序 exit_code=0 且完成資格閘門驗證通過
+    （存在非空、可存取且可驗證的任務產出證據）。
+    """
     cmd = [PYTHON_BIN, "run_opt.py"]
     if direction:
         cmd.extend(["--force-direction", direction])
@@ -83,14 +88,31 @@ def run_optimization_round(direction=None, parallel=6):
             timeout=3600,  # 1 小時逾時
         )
 
-        success = result.returncode == 0
+        stdout_text = result.stdout[-1000:] if result.stdout else ""
+        stderr_text = result.stderr[-500:] if result.stderr else ""
+
+        # 完成資格閘門：exit_code=0 不足以判定成功，
+        # 還必須有非空且可驗證的產出證據
+        gate_result, gate_reasons = verify_completion_evidence({
+            "exit_code": result.returncode,
+            "stdout": stdout_text,
+            "stderr": stderr_text,
+            "artifacts": {},
+            "results": [],
+            "summary": {},
+        })
+        success = result.returncode == 0 and gate_result
+
         append_jsonl(OPTIMIZATION_LOG, {
             "event": "optimization",
             "timestamp": datetime.now().isoformat(),
             "success": success,
             "direction": direction,
-            "stdout": result.stdout[-1000:] if result.stdout else "",
-            "stderr": result.stderr[-500:] if result.stderr else "",
+            "stdout": stdout_text,
+            "stderr": stderr_text,
+            "returncode": result.returncode,
+            "gate_passed": gate_result,
+            "gate_reasons": gate_reasons,
         })
 
         return success

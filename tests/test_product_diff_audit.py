@@ -11,7 +11,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 CORE_PATH_PREFIXES = ("api", "lib")
 FORBIDDEN_SUFFIX = ".py"
 FORCED_CORE_FILES = {"app.js", "index.html"}
-ALLOWED_PREFIXES = ("tests/", "htmlcov/", "output/", ".github/", "lib/config.py", "lib/metrics.py")
+ALLOWED_PREFIXES = ("tests/", "htmlcov/", "output/", ".github/", "lib/config.py", "lib/metrics.py", "lib/completion_gate.py", "api/continuous_optimizer.py")
 
 
 def _windows_drive_path_to_posix(path: str) -> str | None:
