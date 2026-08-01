@@ -21,13 +21,54 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(
 
 from lib.io import load_json, read_jsonl, append_jsonl
 from lib.config import get
-from lib.completion_gate import completion_disposition, verify_completion_evidence
+from lib.completion_gate import (
+    completion_disposition,
+    load_run_evidence,
+    verify_completion_evidence,
+)
 from api.feedback import get_feedback_summary, get_weak_areas, generate_optimization_hints
 
 # --- 常數 ---
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OPTIMIZATION_LOG = os.path.join(PROJECT_ROOT, "optimization_log.jsonl")
 PYTHON_BIN = sys.executable or "python"
+
+
+def _run_dirs(project_root):
+    runs_root = os.path.join(project_root, "runs")
+    if not os.path.isdir(runs_root):
+        return set()
+    return {
+        os.path.join(runs_root, name)
+        for name in os.listdir(runs_root)
+        if name != "latest" and os.path.isdir(os.path.join(runs_root, name))
+    }
+
+
+def _file_signature(path):
+    try:
+        stat = os.stat(path)
+    except OSError:
+        return None
+    return stat.st_size, stat.st_mtime_ns
+
+
+def _collect_run_evidence(project_root, before_dirs, before_latest):
+    """只收集本次執行新增或更新的可解析 run 產出。"""
+    runs_root = os.path.join(project_root, "runs")
+    candidates = sorted(_run_dirs(project_root) - before_dirs)
+    latest_dir = os.path.join(runs_root, "latest")
+    latest_changed = _file_signature(os.path.join(latest_dir, "summary.json")) != before_latest
+    if latest_changed:
+        candidates.append(latest_dir)
+
+    for run_dir in reversed(candidates):
+        artifacts, results, summary = load_run_evidence(run_dir)
+
+        if artifacts or results:
+            return artifacts, results, summary
+
+    return {}, [], {}
 
 
 def check_feedback_threshold(min_feedback=10):
@@ -80,6 +121,8 @@ def run_optimization_round(direction=None, parallel=6):
     print(f"[ContinuousOptimizer] 執行優化: {' '.join(cmd)}")
 
     try:
+        before_dirs = _run_dirs(PROJECT_ROOT)
+        before_latest = _file_signature(os.path.join(PROJECT_ROOT, "runs", "latest", "summary.json"))
         result = subprocess.run(
             cmd,
             cwd=PROJECT_ROOT,
@@ -90,6 +133,11 @@ def run_optimization_round(direction=None, parallel=6):
 
         stdout_text = result.stdout[-1000:] if result.stdout else ""
         stderr_text = result.stderr[-500:] if result.stderr else ""
+        artifacts, results, summary = _collect_run_evidence(
+            PROJECT_ROOT, before_dirs, before_latest
+        )
+        if summary.get("completion_status") in {"failed", "incomplete"}:
+            artifacts, results, summary = {}, [], {}
 
         # 完成資格閘門：exit_code=0 不足以判定成功，
         # 還必須有非空且可驗證的產出證據
@@ -97,17 +145,17 @@ def run_optimization_round(direction=None, parallel=6):
             "exit_code": result.returncode,
             "stdout": stdout_text,
             "stderr": stderr_text,
-            "artifacts": {},
-            "results": [],
-            "summary": {},
+            "artifacts": artifacts,
+            "results": results,
+            "summary": summary,
         })
         disposition = completion_disposition({
             "exit_code": result.returncode,
             "stdout": stdout_text,
             "stderr": stderr_text,
-            "artifacts": {},
-            "results": [],
-            "summary": {},
+            "artifacts": artifacts,
+            "results": results,
+            "summary": summary,
         })
         success = result.returncode == 0 and gate_result
 

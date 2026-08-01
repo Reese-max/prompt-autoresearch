@@ -49,7 +49,7 @@ def _valid_task_result():
 
 
 def _stdout_only_result():
-    """模擬只有 stdout 但無 artifacts/results/summary 的結果（子程序場景）。"""
+    """模擬只有成功文字但無 artifacts/results/summary 的結果。"""
     return {
         "exit_code": 0,
         "stdout": "優化完成，新基線分數 82.5",
@@ -84,13 +84,13 @@ class TestCompletionGate:
         assert is_complete is True
         assert reasons == []
 
-    def test_stdout_only_result_passes_gate(self):
-        """只有 stdout 但無其他證據時，應通過閘門（stdout 作為證據）。"""
+    def test_stdout_only_result_blocked_by_gate(self):
+        """只有成功文字但無其他證據時，應被閘門阻擋。"""
         from lib.completion_gate import verify_completion_evidence
         task = _stdout_only_result()
         is_complete, reasons = verify_completion_evidence(task)
-        assert is_complete is True
-        assert reasons == []
+        assert is_complete is False
+        assert any("no valid evidence source" in reason for reason in reasons)
 
     def test_nonzero_exit_code_blocked(self):
         """exit_code != 0 時，即使有 stdout 也應被阻擋。"""
@@ -246,8 +246,8 @@ class TestOptimizerGateBlocksEmptyOutput:
         assert opt_event["gate_passed"] is False
         assert len(opt_event["gate_reasons"]) > 0
 
-    def test_optimizer_nonempty_stdout_returns_true(self, monkeypatch, tmp_path):
-        """continuous_optimizer 收到有內容的 stdout 時應回傳 True（閘門通過）。"""
+    def test_optimizer_nonempty_stdout_without_artifact_returns_false(self, monkeypatch, tmp_path):
+        """continuous_optimizer 只有成功文字時仍應回傳 False。"""
         import api.continuous_optimizer as optimizer
 
         log_path = tmp_path / "optimization_log.jsonl"
@@ -266,7 +266,7 @@ class TestOptimizerGateBlocksEmptyOutput:
 
         result = optimizer.run_optimization_round("structure")
 
-        assert result is True, "有內容的 stdout 應通過閘門"
+        assert result is False, "成功文字不是完成證據"
 
         log_entries = [
             json.loads(line)
@@ -274,8 +274,34 @@ class TestOptimizerGateBlocksEmptyOutput:
             if line.strip()
         ]
         opt_event = next(e for e in log_entries if e["event"] == "optimization")
-        assert opt_event["success"] is True
-        assert opt_event["gate_passed"] is True
+        assert opt_event["success"] is False
+        assert opt_event["gate_passed"] is False
+
+    def test_optimizer_persisted_artifact_returns_true(self, monkeypatch, tmp_path):
+        """continuous_optimizer 只有在本次 run 寫出可解析摘要時才完成。"""
+        import api.continuous_optimizer as optimizer
+
+        log_path = tmp_path / "optimization_log.jsonl"
+        monkeypatch.setattr(optimizer, "OPTIMIZATION_LOG", str(log_path))
+        monkeypatch.setattr(optimizer, "PROJECT_ROOT", str(tmp_path))
+
+        good_proc = types.SimpleNamespace(
+            returncode=0,
+            stdout="優化完成，新基線分數 82.5",
+            stderr="",
+        )
+
+        def run_and_write_artifact(*_args, **_kwargs):
+            latest_dir = tmp_path / "runs" / "latest"
+            latest_dir.mkdir(parents=True)
+            (latest_dir / "summary.json").write_text(
+                json.dumps({"average_score": 82.5}), encoding="utf-8"
+            )
+            return good_proc
+
+        monkeypatch.setattr(optimizer.subprocess, "run", run_and_write_artifact)
+
+        assert optimizer.run_optimization_round("structure") is True
 
     def test_optimizer_failure_returns_false(self, monkeypatch, tmp_path):
         """continuous_optimizer 在 returncode!=0 時回傳 False。"""
@@ -496,7 +522,7 @@ class TestCompletionDisposition:
         assert disposition["rejection_reason"] == "no valid evidence source found"
         assert disposition["evidence_types"] == []
         assert set(disposition["missing_evidence_types"]) == {
-            "stdout", "artifacts", "results", "summary",
+            "artifacts", "results", "summary",
         }
         assert len(disposition["rejection_reasons"]) > 0
 
@@ -509,18 +535,18 @@ class TestCompletionDisposition:
         assert disposition["reason_code"] == ""
         assert disposition["rejection_reasons"] == []
         assert set(disposition["evidence_types"]) == {
-            "stdout", "artifacts", "results", "summary",
+            "artifacts", "results", "summary",
         }
         assert disposition["missing_evidence_types"] == []
 
-    def test_stdout_only_disposition_completed(self):
-        """只有帶實質內容的 stdout 時 disposition 為 completed，證據類型為 stdout。"""
+    def test_stdout_only_disposition_failed(self):
+        """只有成功文字時 disposition 不得寫入 completed。"""
         from lib.completion_gate import completion_disposition
         disposition = completion_disposition(_stdout_only_result())
 
-        assert disposition["status"] == "completed"
-        assert disposition["evidence_types"] == ["stdout"]
-        assert disposition["missing_evidence_types"] == []
+        assert disposition["status"] == "failed"
+        assert disposition["reason_code"] == "NO_VALID_EVIDENCE"
+        assert disposition["evidence_types"] == []
 
     def test_nonzero_exit_disposition_failed_nonzero_exit_code(self):
         """exit_code != 0 時 disposition 為 failed + NONZERO_EXIT_CODE。"""

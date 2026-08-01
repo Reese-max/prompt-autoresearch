@@ -236,12 +236,21 @@ class FakeCompleted:
         self.stderr = stderr
 
 
+def _write_completion_evidence(env, score=82.5):
+    latest_dir = env / "runs" / "latest"
+    latest_dir.mkdir(parents=True, exist_ok=True)
+    (latest_dir / "summary.json").write_text(
+        json.dumps({"average_score": score}), encoding="utf-8"
+    )
+
+
 def test_optimization_round_passes_direction_and_parallel(env, monkeypatch):
     captured = {}
 
     def fake_run(cmd, **kwargs):
         captured["cmd"] = cmd
         captured["cwd"] = kwargs.get("cwd")
+        _write_completion_evidence(env)
         return FakeCompleted()
 
     monkeypatch.setattr(optimizer.subprocess, "run", fake_run)
@@ -264,6 +273,7 @@ def test_optimization_round_subprocess_kwargs_and_output_truncation(env, monkeyp
 
     def fake_run(cmd, **kwargs):
         captured["kwargs"] = kwargs
+        _write_completion_evidence(env)
         return FakeCompleted(returncode=0, stdout=long_stdout, stderr=long_stderr)
 
     monkeypatch.setattr(optimizer.subprocess, "run", fake_run)
@@ -295,9 +305,11 @@ def test_optimization_round_without_direction_omits_flag(env, monkeypatch):
 
 
 def test_optimization_success_reflected_in_server_status(env, monkeypatch):
-    monkeypatch.setattr(
-        optimizer.subprocess, "run", lambda cmd, **kw: FakeCompleted(returncode=0)
-    )
+    def fake_run(cmd, **kwargs):
+        _write_completion_evidence(env)
+        return FakeCompleted(returncode=0)
+
+    monkeypatch.setattr(optimizer.subprocess, "run", fake_run)
     post_feedback()
     assert optimizer.run_optimization_round(direction="structure") is True
 

@@ -26,7 +26,7 @@ from lib.io import (
     read_jsonl, append_jsonl, normalize_path, ensure_dir,
 )
 from lib.metrics import record_round
-from lib.completion_gate import completion_disposition
+from lib.completion_gate import completion_disposition, load_run_evidence
 
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8", errors="replace", line_buffering=True)
@@ -226,24 +226,33 @@ def update_candidate_scorecard(cand_path, **updates):
 
 def evaluation_completion(result, run_dir, summary):
     """判定評估是否有可供候選流程使用的有效產出。"""
-    normalized_summary = summary or {}
+    artifacts, results, persisted_summary = load_run_evidence(run_dir)
+    normalized_summary = persisted_summary
     if "average_score" not in normalized_summary and "score" in normalized_summary:
         normalized_summary = {**normalized_summary, "average_score": normalized_summary.get("score")}
     disposition = completion_disposition({
         "exit_code": getattr(result, "returncode", -1),
         "stdout": "",
         "stderr": "",
-        "artifacts": {},
-        "results": [],
+        "artifacts": artifacts,
+        "results": results,
         "summary": normalized_summary,
     })
-    if not run_dir and disposition["status"] == "completed":
+    if not run_dir:
         disposition.update({
             "status": "failed",
             "reason_code": "NO_VALID_OUTPUT",
             "rejection_reason": "no valid output run directory",
             "rejection_reasons": ["run_directory is missing"],
             "missing_evidence_types": ["run_directory"],
+        })
+    elif disposition["status"] == "completed" and not artifacts and not results:
+        disposition.update({
+            "status": "failed",
+            "reason_code": "NO_VALID_OUTPUT",
+            "rejection_reason": "run directory has no verifiable output",
+            "rejection_reasons": ["run directory has no verifiable output"],
+            "missing_evidence_types": ["artifacts", "results", "summary"],
         })
     elif disposition["status"] == "failed" and disposition["reason_code"] == "NO_VALID_EVIDENCE":
         disposition["reason_code"] = "NO_VALID_OUTPUT"

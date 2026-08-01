@@ -9,6 +9,8 @@ lib/completion_gate.py — 任務完成資格閘門
     from lib.completion_gate import verify_completion_evidence, TaskResult
     is_complete, reasons = verify_completion_evidence(task_result)
 """
+import json
+import math
 import os
 from dataclasses import dataclass, field
 from typing import Any
@@ -23,6 +25,39 @@ class TaskResult:
     artifacts: dict = field(default_factory=dict)
     results: list = field(default_factory=list)
     summary: dict = field(default_factory=dict)
+
+
+def load_run_evidence(run_dir):
+    """讀取已落盤且可解析的評估證據。"""
+    if not run_dir or not os.path.isdir(run_dir):
+        return {}, [], {}
+
+    artifacts = {}
+    results = []
+    summary = {}
+
+    summary_path = os.path.join(run_dir, "summary.json")
+    try:
+        with open(summary_path, "r", encoding="utf-8") as handle:
+            loaded = json.load(handle)
+        if isinstance(loaded, dict) and loaded:
+            artifacts["summary.json"] = {"path": summary_path}
+            summary = loaded
+    except (OSError, ValueError, TypeError):
+        pass
+
+    details_path = os.path.join(run_dir, "details.jsonl")
+    try:
+        with open(details_path, "r", encoding="utf-8") as handle:
+            lines = [line.strip() for line in handle if line.strip()]
+        loaded_results = [json.loads(line) for line in lines]
+        if loaded_results and all(isinstance(item, dict) for item in loaded_results):
+            artifacts["details.jsonl"] = {"path": details_path}
+            results = loaded_results
+    except (OSError, ValueError, TypeError):
+        pass
+
+    return artifacts, results, summary
 
 
 def _is_non_empty_string(value: Any) -> bool:
@@ -42,26 +77,41 @@ def _is_accessible_file(path: str) -> bool:
 
 def _has_meaningful_result(result: dict) -> bool:
     """檢查單一結果是否含有意義性內容（answer 或 total_score > 0）。"""
+    if not isinstance(result, dict):
+        return False
     if result.get("error"):
         return False
     has_answer = _is_non_empty_string(result.get("answer", ""))
-    has_score = (result.get("total_score") or 0) > 0
+    try:
+        score = float(result.get("total_score") or 0)
+        has_score = math.isfinite(score) and score > 0
+    except (TypeError, ValueError):
+        has_score = False
     return has_answer or has_score
 
 
 def _check_artifacts_evidence(artifacts: dict) -> tuple:
     """檢查 artifacts 是否提供有效證據。回傳 (is_valid, reason)。"""
-    if not artifacts:
+    if not isinstance(artifacts, dict) or not artifacts:
         return False, "artifacts is empty"
     for _name, info in artifacts.items():
-        if isinstance(info, dict) and info.get("exists") and info.get("size", 0) > 0:
+        if isinstance(info, (str, os.PathLike)) and _is_accessible_file(os.fspath(info)):
             return True, ""
+        if isinstance(info, dict):
+            path = info.get("path")
+            if path:
+                if _is_accessible_file(os.fspath(path)):
+                    return True, ""
+                continue
+            # 相容既有 runner 的檔案探測結果；exists/size 必須由 runner 明確提供。
+            if info.get("exists") is True and info.get("size", 0) > 0:
+                return True, ""
     return False, "no valid non-empty artifacts found"
 
 
 def _check_results_evidence(results: list) -> tuple:
     """檢查 results 是否提供有效證據。回傳 (is_valid, reason)。"""
-    if not results:
+    if not isinstance(results, list) or not results:
         return False, "results is empty"
     meaningful_count = sum(1 for r in results if _has_meaningful_result(r))
     if meaningful_count == 0:
@@ -71,19 +121,25 @@ def _check_results_evidence(results: list) -> tuple:
 
 def _check_summary_evidence(summary: dict) -> tuple:
     """檢查 summary 是否提供有效證據。回傳 (is_valid, reason)。"""
-    if not summary:
+    if not isinstance(summary, dict) or not summary:
         return False, "summary is empty"
     avg_score = summary.get("average_score")
-    if avg_score is None or (isinstance(avg_score, (int, float)) and avg_score <= 0):
+    if isinstance(avg_score, bool):
+        return False, "summary has no valid average_score"
+    try:
+        valid_score = math.isfinite(float(avg_score)) and float(avg_score) > 0
+    except (TypeError, ValueError):
+        valid_score = False
+    if not valid_score:
         return False, "summary has no valid average_score"
     return True, ""
 
 
 def _check_stdout_evidence(stdout: str) -> tuple:
-    """檢查 stdout 是否提供有效證據（非空白且非純成功訊息）。回傳 (is_valid, reason)。"""
+    """stdout 僅供診斷；不可作為完成資格證據。"""
     if not _is_non_empty_string(stdout):
         return False, "stdout is empty or whitespace-only"
-    return True, ""
+    return False, "stdout is not completion evidence"
 
 
 def completion_disposition(task_result):
@@ -103,7 +159,6 @@ def completion_disposition(task_result):
         summary = task_result.get("summary", {})
 
     checks = (
-        ("stdout", _check_stdout_evidence(stdout)),
         ("artifacts", _check_artifacts_evidence(artifacts)),
         ("results", _check_results_evidence(results)),
         ("summary", _check_summary_evidence(summary)),
@@ -186,16 +241,10 @@ def verify_completion_evidence(task_result):
         reasons.append(f"exit_code={exit_code} != 0")
         return False, reasons
 
-    # 閘門 2: 至少有一個額外證據來源
-    # exit_code=0 不足以判定成功，還必須有非空且可驗證的產出證據
+    # 閘門 2: 至少有一個可驗證的產出／結果證據
+    # exit_code=0 或 stdout 成功文字都不足以判定成功。
     evidence_sources = []
     evidence_reasons = []
-
-    ok, reason = _check_stdout_evidence(stdout)
-    if ok:
-        evidence_sources.append("stdout")
-    else:
-        evidence_reasons.append(reason)
 
     ok, reason = _check_artifacts_evidence(artifacts)
     if ok:
