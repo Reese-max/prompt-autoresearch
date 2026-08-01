@@ -451,7 +451,7 @@ def _cleanup_old_archives():
         old = archives.pop(0)
         os.remove(os.path.join(ARCHIVE_DIR, old))
 
-def run_opt_pass(smoke_parallel=None, dev_parallel=None, holdout_parallel=None, force_direction=None, avoid_failures=None):
+def run_opt_pass(smoke_parallel=None, dev_parallel=None, holdout_parallel=None, force_direction=None, avoid_failures=None, dominant_failure=None):
     smoke_parallel = smoke_parallel or int_env("AUTORESEARCH_SMOKE_PARALLEL", DEFAULT_SMOKE_PARALLEL)
     dev_parallel = dev_parallel or int_env("AUTORESEARCH_DEV_PARALLEL", DEFAULT_DEV_PARALLEL)
     holdout_parallel = holdout_parallel or int_env("AUTORESEARCH_HOLDOUT_PARALLEL", DEFAULT_HOLDOUT_PARALLEL)
@@ -539,6 +539,9 @@ def run_opt_pass(smoke_parallel=None, dev_parallel=None, holdout_parallel=None, 
     targeted_cms = load_targeted_countermeasures(
         [code for code in target_failures if code in ("F03", "F04")]
     )
+    if dominant_failure and dominant_failure not in set(merged_avoid_failures or []):
+        dominant_cms = load_targeted_countermeasures([dominant_failure])
+        targeted_cms = {**dominant_cms, **targeted_cms}
     if targeted_cms:
         cms_lines = [f"- {code}：{text}" for code, text in sorted(targeted_cms.items())]
         countermeasure_block = "以下為對應缺陷的具體修復方向，請在優化時嚴格落實：\n" + "\n".join(cms_lines)

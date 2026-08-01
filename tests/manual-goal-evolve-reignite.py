@@ -42,6 +42,7 @@ def _install_fake_run_opt(monkeypatch, always_success=False):
         holdout_parallel=None,
         force_direction=None,
         avoid_failures=None,
+        dominant_failure=None,
     ):
         calls.append({
             "smoke_parallel": smoke_parallel,
@@ -49,6 +50,7 @@ def _install_fake_run_opt(monkeypatch, always_success=False):
             "holdout_parallel": holdout_parallel,
             "force_direction": force_direction,
             "avoid_failures": avoid_failures,
+            "dominant_failure": dominant_failure,
         })
         return always_success
 

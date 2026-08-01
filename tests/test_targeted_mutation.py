@@ -43,7 +43,7 @@ def _countermeasure_from_taxonomy(code):
     return countermeasure.group(1).strip()
 
 
-def _capture_mutation_prompt(tmp_path, monkeypatch, *, force_direction=None, avoid_failures=None):
+def _capture_mutation_prompt(tmp_path, monkeypatch, *, force_direction=None, avoid_failures=None, dominant_failure=None):
     taxonomy = Path("rubrics/failure_taxonomy.md").read_text(encoding="utf-8")
     monkeypatch.chdir(tmp_path)
     (tmp_path / "prompts").mkdir()
@@ -70,6 +70,7 @@ def _capture_mutation_prompt(tmp_path, monkeypatch, *, force_direction=None, avo
         holdout_parallel=1,
         force_direction=force_direction,
         avoid_failures=avoid_failures,
+        dominant_failure=dominant_failure,
     )
     assert len(captured) == 1
     return captured[0], run_opt.LAST_ROUND_COUNTERMEASURES
@@ -106,6 +107,29 @@ class TestActualTargetedMutation:
         assert injected == []
         assert "2. **定向變異 — 對策原文注入**：—" in meta_prompt
         assert _countermeasure_from_taxonomy(dominant_failure) not in meta_prompt
+
+    def test_arbitrary_dominant_failure_injects_countermeasure(self, tmp_path, monkeypatch):
+        dominant_failure = infinite_evolve.dominant_failure({"failure_counts": {"F08": 2}})
+        countermeasure = _countermeasure_from_taxonomy(dominant_failure)
+        meta_prompt, injected = _capture_mutation_prompt(
+            tmp_path, monkeypatch, dominant_failure=dominant_failure
+        )
+
+        assert f"- {dominant_failure}：{countermeasure}" in meta_prompt
+        assert isinstance(injected, list)
+        assert all(isinstance(code, str) for code in injected)
+        assert injected == [dominant_failure]
+
+    def test_dominant_failure_in_avoid_failures_not_injected(self, tmp_path, monkeypatch):
+        dominant_failure = infinite_evolve.dominant_failure({"failure_counts": {"F08": 2}})
+        countermeasure = _countermeasure_from_taxonomy(dominant_failure)
+        meta_prompt, injected = _capture_mutation_prompt(
+            tmp_path, monkeypatch, avoid_failures=[dominant_failure], dominant_failure=dominant_failure
+        )
+
+        assert isinstance(injected, list)
+        assert injected == []
+        assert countermeasure not in meta_prompt
 
 
 class TestLoadTargetedCountermeasures:
@@ -264,7 +288,7 @@ class TestLogEntryCountermeasuresInjected:
         calls = []
         def fake_run_opt_pass(
             smoke_parallel=None, dev_parallel=None, holdout_parallel=None,
-            force_direction=None, avoid_failures=None,
+            force_direction=None, avoid_failures=None, dominant_failure=None,
         ):
             calls.append({
                 "smoke_parallel": smoke_parallel,
@@ -272,6 +296,7 @@ class TestLogEntryCountermeasuresInjected:
                 "holdout_parallel": holdout_parallel,
                 "force_direction": force_direction,
                 "avoid_failures": avoid_failures,
+                "dominant_failure": dominant_failure,
             })
             return True
 
@@ -322,7 +347,7 @@ class TestLogEntryCountermeasuresInjected:
         calls = []
         def fake_run_opt_pass(
             smoke_parallel=None, dev_parallel=None, holdout_parallel=None,
-            force_direction=None, avoid_failures=None,
+            force_direction=None, avoid_failures=None, dominant_failure=None,
         ):
             calls.append({
                 "smoke_parallel": smoke_parallel,
@@ -330,6 +355,7 @@ class TestLogEntryCountermeasuresInjected:
                 "holdout_parallel": holdout_parallel,
                 "force_direction": force_direction,
                 "avoid_failures": avoid_failures,
+                "dominant_failure": dominant_failure,
             })
             return True
 
@@ -375,7 +401,7 @@ class TestLogEntryCountermeasuresInjected:
         calls = []
         def fake_run_opt_pass(
             smoke_parallel=None, dev_parallel=None, holdout_parallel=None,
-            force_direction=None, avoid_failures=None,
+            force_direction=None, avoid_failures=None, dominant_failure=None,
         ):
             calls.append({
                 "smoke_parallel": smoke_parallel,
@@ -383,6 +409,7 @@ class TestLogEntryCountermeasuresInjected:
                 "holdout_parallel": holdout_parallel,
                 "force_direction": force_direction,
                 "avoid_failures": avoid_failures,
+                "dominant_failure": dominant_failure,
             })
             return True
 

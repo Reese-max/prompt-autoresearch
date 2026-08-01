@@ -281,6 +281,7 @@ def main(argv=None):
                 holdout_parallel=args.holdout_parallel,
                 force_direction=args.force_direction,
                 avoid_failures=round_avoid_failures,
+                dominant_failure=last_dominant_failure,
             )
             countermeasures_injected = list(_run_opt.LAST_ROUND_COUNTERMEASURES)
         except Exception as exc:
