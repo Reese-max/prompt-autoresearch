@@ -477,3 +477,88 @@ class TestNoVerifiableResultShouldFail:
         is_complete, reasons = verify_completion_evidence(task)
         assert is_complete is False
         assert len(reasons) > 0
+
+
+# ---------------------------------------------------------------------------
+# Tests — completion_disposition 可持久化完成處置與『可存取』證據面向
+# ---------------------------------------------------------------------------
+
+class TestCompletionDisposition:
+    """completion_disposition 產出可驗證的完成處置，供 runner／候選流程使用。"""
+
+    def test_empty_task_disposition_failed_no_valid_evidence(self):
+        """無有效產出時 disposition 為 failed + NO_VALID_EVIDENCE。"""
+        from lib.completion_gate import completion_disposition
+        disposition = completion_disposition(_empty_task_result())
+
+        assert disposition["status"] == "failed"
+        assert disposition["reason_code"] == "NO_VALID_EVIDENCE"
+        assert disposition["rejection_reason"] == "no valid evidence source found"
+        assert disposition["evidence_types"] == []
+        assert set(disposition["missing_evidence_types"]) == {
+            "stdout", "artifacts", "results", "summary",
+        }
+        assert len(disposition["rejection_reasons"]) > 0
+
+    def test_valid_task_disposition_completed(self):
+        """具有效產出與驗證證據時 disposition 為 completed。"""
+        from lib.completion_gate import completion_disposition
+        disposition = completion_disposition(_valid_task_result())
+
+        assert disposition["status"] == "completed"
+        assert disposition["reason_code"] == ""
+        assert disposition["rejection_reasons"] == []
+        assert set(disposition["evidence_types"]) == {
+            "stdout", "artifacts", "results", "summary",
+        }
+        assert disposition["missing_evidence_types"] == []
+
+    def test_stdout_only_disposition_completed(self):
+        """只有帶實質內容的 stdout 時 disposition 為 completed，證據類型為 stdout。"""
+        from lib.completion_gate import completion_disposition
+        disposition = completion_disposition(_stdout_only_result())
+
+        assert disposition["status"] == "completed"
+        assert disposition["evidence_types"] == ["stdout"]
+        assert disposition["missing_evidence_types"] == []
+
+    def test_nonzero_exit_disposition_failed_nonzero_exit_code(self):
+        """exit_code != 0 時 disposition 為 failed + NONZERO_EXIT_CODE。"""
+        from lib.completion_gate import completion_disposition
+        disposition = completion_disposition({
+            "exit_code": 1,
+            "stdout": "some output",
+            "stderr": "error",
+            "artifacts": {},
+            "results": [],
+            "summary": {},
+        })
+
+        assert disposition["status"] == "failed"
+        assert disposition["reason_code"] == "NONZERO_EXIT_CODE"
+        assert disposition["rejection_reason"] == "exit_code=1 != 0"
+
+    def test_evaluation_completion_maps_no_valid_evidence_to_no_valid_output(self):
+        """evaluation_completion 將無證據的空摘要映射為 NO_VALID_OUTPUT（既有候選流程）。"""
+        from types import SimpleNamespace
+        from run_opt import evaluation_completion
+
+        disposition = evaluation_completion(SimpleNamespace(returncode=0), None, {})
+
+        assert disposition["status"] == "failed"
+        assert disposition["reason_code"] == "NO_VALID_OUTPUT"
+        assert disposition["missing_evidence_types"]
+
+    def test_artifact_accessibility_requires_non_empty_file(self, tmp_path):
+        """『可存取』面向：產出檔案必須真實存在且非空才構成有效證據。"""
+        from lib.completion_gate import _is_accessible_file
+
+        real_file = tmp_path / "report.json"
+        real_file.write_text("{}", encoding="utf-8")
+        assert _is_accessible_file(str(real_file)) is True
+
+        assert _is_accessible_file(str(tmp_path / "missing.json")) is False
+
+        empty_file = tmp_path / "empty.json"
+        empty_file.write_text("", encoding="utf-8")
+        assert _is_accessible_file(str(empty_file)) is False
