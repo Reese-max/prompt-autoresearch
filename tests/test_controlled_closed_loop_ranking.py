@@ -160,6 +160,36 @@ def test_controlled_loop_does_not_mix_incompatible_benchmark_scales(tmp_path, mo
     ]
 
 
+def test_ranking_keeps_same_benchmark_best_version_over_extreme_other_benchmark():
+    a_v1 = _candidate(
+        "benchmark-a-v1",
+        [_evaluation("dev", 0.91, "benchmarks/a.jsonl", settings={"scale": "0-1"})],
+    )
+    a_v2 = _candidate(
+        "benchmark-a-v2",
+        [_evaluation("dev", 0.97, "benchmarks/a.jsonl", settings={"scale": "0-1"})],
+    )
+    b_extreme = _candidate(
+        "benchmark-b-extreme",
+        [_evaluation("dev", 999999.0, "benchmarks/b.jsonl", settings={"scale": "0-1000000"})],
+    )
+
+    without_other_benchmark, _ = auto_evolve._rank_candidate_evaluations([a_v1, a_v2])
+    with_other_benchmark, report = auto_evolve._rank_candidate_evaluations(
+        [a_v1, a_v2, b_extreme]
+    )
+
+    assert without_other_benchmark["candidate_path"] == "benchmark-a-v2"
+    assert with_other_benchmark["candidate_path"] == without_other_benchmark["candidate_path"]
+    assert with_other_benchmark["score"] == without_other_benchmark["score"] == 0.97
+    assert with_other_benchmark["selected_benchmark_group"]["basis"]["dataset"] == "benchmarks/a.jsonl"
+
+    by_path = {row["candidate_path"]: row for row in report}
+    assert by_path["benchmark-a-v1"]["outcome"] == "落敗"
+    assert by_path["benchmark-b-extreme"]["outcome"] == "淘汰"
+    assert by_path["benchmark-b-extreme"]["group_outcome"] == "勝出"
+
+
 def test_ranking_preserves_each_benchmark_group_winner_evidence():
     a_lower = _candidate(
         "benchmark-a-lower",
