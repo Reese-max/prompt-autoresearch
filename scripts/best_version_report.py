@@ -21,21 +21,27 @@ import hashlib
 import json
 import math
 import os
+import platform
 import subprocess
+import sys
 import time
+
+ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+if ROOT not in sys.path:
+    sys.path.insert(0, ROOT)
 
 from lib.notifications import send_report_to_telegram
 
 if hasattr(__import__("sys").stdout, "reconfigure"):
     __import__("sys").stdout.reconfigure(encoding="utf-8", errors="replace")
 
-ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 BASELINE_META_PATH = os.path.join(ROOT, "prompts", "baseline.meta.json")
 CHAMPIONS_DIR = os.path.join(ROOT, "prompts", "champions")
 CANDIDATES_DIR = os.path.join(ROOT, "prompts", "candidates")
 EVOLUTION_LOG_PATH = os.path.join(ROOT, "evolution_log.jsonl")
 CONFIG_PATH = os.path.join(ROOT, "config.yaml")
 RUNS_DIR = os.path.join(ROOT, "runs")
+SCHEMA_REL_PATH = "schemas/best_version_evidence_report.schema.json"
 
 
 def load_json(path, default=None):
@@ -330,6 +336,369 @@ def collect_rerun_settings(baseline_meta, champions, config, sessions):
             ),
         }
     return settings
+
+
+def _number(value):
+    """回傳有限浮點數；輸入缺失或非法時回傳 None。"""
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    return number if math.isfinite(number) else None
+
+
+def _list(value):
+    """把歷史 scorecard 的字串／清單格式統一成 JSON 清單。"""
+    if value is None or value == "":
+        return []
+    if isinstance(value, (list, tuple)):
+        return [str(item) for item in value]
+    return [str(value)]
+
+
+def _path_hash(path_rel):
+    """收集 repo 內檔案的可追溯版本；不讀取 repo 外路徑。"""
+    path_rel = repo_rel(path_rel)
+    result = {
+        "path": path_rel or "",
+        "sha256": "",
+        "exists": False,
+        "size": 0,
+    }
+    if path_rel:
+        path = os.path.join(ROOT, path_rel)
+        if os.path.isfile(path):
+            result["exists"] = True
+            result["size"] = os.path.getsize(path)
+            result["sha256"] = sha256_file(path)
+    result["version"] = result["sha256"] or "missing"
+    return result
+
+
+def _prompt_artifact(path, recorded_hash=""):
+    path_rel = repo_rel(path) or ""
+    actual_hash = ""
+    content = ""
+    if path_rel:
+        absolute = os.path.join(ROOT, path_rel)
+        if os.path.isfile(absolute):
+            content = read_text(absolute)
+            actual_hash = sha256_file(absolute)
+    return {
+        "path": path_rel,
+        "sha256": recorded_hash or actual_hash,
+        "recorded_sha256": recorded_hash or "",
+        "actual_sha256": actual_hash,
+        "verified": bool(content) and (not recorded_hash or recorded_hash == actual_hash),
+        "content": content,
+    }
+
+
+def _score_entry(value):
+    if isinstance(value, dict):
+        return {
+            "score": _number(value.get("score", value.get("average_score"))),
+            "passed": value.get("passed"),
+            "risk_perfect_rate": _number(value.get("risk_perfect_rate", value.get("risk_rate"))),
+            "word_count_pass_rate": _number(value.get("word_count_pass_rate", value.get("word_rate"))),
+            "run": display_path(value.get("run", value.get("run_dir", ""))),
+        }
+    return {
+        "score": _number(value),
+        "passed": None,
+        "risk_perfect_rate": None,
+        "word_count_pass_rate": None,
+        "run": "",
+    }
+
+
+def _baseline_scores(baseline_meta):
+    return {
+        dataset: {
+            "score": _number(baseline_meta.get(f"{dataset}_avg")),
+            "passed": None,
+            "risk_perfect_rate": None,
+            "word_count_pass_rate": None,
+            "run": display_path(baseline_meta.get(f"{dataset}_run", "")),
+        }
+        for dataset in ("smoke", "dev", "holdout")
+    }
+
+
+def build_candidate_comparisons(cards, baseline_meta):
+    """保留所有候選，並以同一組 smoke/dev/holdout 基準呈現。"""
+    baseline = _baseline_scores(baseline_meta)
+    comparisons = []
+    for index, card in enumerate(cards, 1):
+        path = repo_rel(card.get("candidate_path")) or ""
+        actual_hash = _path_hash(path)["sha256"] if path else ""
+        candidate_hash = card.get("candidate_hash") or actual_hash
+        scores = {
+            dataset: _score_entry(card.get(dataset))
+            for dataset in ("smoke", "dev", "holdout")
+        }
+        deltas = {}
+        for dataset, score in scores.items():
+            value = score["score"]
+            base = baseline[dataset]["score"]
+            deltas[dataset] = round(value - base, 6) if value is not None and base is not None else None
+        comparisons.append({
+            "ordinal": index,
+            "candidate_id": candidate_hash or path or f"candidate-{index}",
+            "path": path,
+            "sha256": candidate_hash,
+            "scorecard_path": card.get("_scorecard_file", ""),
+            "decision": card.get("final_decision") or card.get("status") or "PENDING",
+            "classification": classify_candidate(card),
+            "direction": card.get("direction", ""),
+            "target_failures": _list(card.get("target_failures")),
+            "scores": scores,
+            "baseline_scores": baseline,
+            "deltas": deltas,
+            "reject_reasons": _list(card.get("reject_reasons")),
+            "hypothesis": card.get("hypothesis", ""),
+        })
+    return comparisons
+
+
+def _run_dir_from_value(value):
+    if not isinstance(value, str) or not value:
+        return ""
+    path = repo_rel(value)
+    return path if path and os.path.isdir(os.path.join(ROOT, path)) else ""
+
+
+def collect_run_inputs(baseline_meta, champions, cards, sessions):
+    """從已記錄 run 的 summary 追溯題庫版本與執行產物版本。"""
+    run_dirs = set()
+
+    def visit(value):
+        if isinstance(value, dict):
+            for item in value.values():
+                visit(item)
+        elif isinstance(value, list):
+            for item in value:
+                visit(item)
+        else:
+            run = _run_dir_from_value(value)
+            if run:
+                run_dirs.add(run)
+
+    visit(baseline_meta)
+    visit(champions)
+    visit(cards)
+    visit(sessions)
+    inputs = []
+    for run in sorted(run_dirs):
+        summary_path = f"{run}/summary.json"
+        summary = load_json(os.path.join(ROOT, summary_path), {})
+        inputs.append(_path_hash(summary_path))
+        for name in ("details.jsonl", "decision.md", "route.json"):
+            candidate = f"{run}/{name}"
+            if os.path.isfile(os.path.join(ROOT, candidate)):
+                inputs.append(_path_hash(candidate))
+        question = repo_rel(summary.get("question_file")) if summary else None
+        if question:
+            inputs.append(_path_hash(question))
+    return inputs
+
+
+def collect_input_versions(baseline_meta, champions, cards, sessions):
+    paths = [
+        repo_rel(BASELINE_META_PATH),
+        repo_rel(CONFIG_PATH),
+        repo_rel(EVOLUTION_LOG_PATH),
+        baseline_meta.get("prompt_path") if baseline_meta else "prompts/baseline.md",
+    ]
+    for champion in champions:
+        paths.extend([champion.get("_meta_file"), champion.get("champion_prompt_path")])
+    for card in cards:
+        paths.extend([card.get("_scorecard_file"), card.get("candidate_path")])
+    seen = set()
+    inputs = []
+    for path in paths:
+        path_rel = repo_rel(path)
+        if path_rel and path_rel not in seen:
+            seen.add(path_rel)
+            inputs.append(_path_hash(path_rel))
+    for item in collect_run_inputs(baseline_meta, champions, cards, sessions):
+        if item["path"] not in seen:
+            seen.add(item["path"])
+            inputs.append(item)
+    return inputs
+
+
+def collect_environment():
+    """收集不含 secrets 的重現環境資訊。"""
+    return {
+        "python_version": sys.version,
+        "python_executable": sys.executable,
+        "platform": platform.platform(),
+        "architecture": platform.machine(),
+        "os_name": os.name,
+        "encoding": getattr(sys.stdout, "encoding", ""),
+        "hashseed": os.environ.get("PYTHONHASHSEED", "not set"),
+        "cwd": ".",
+        "commit": collect_git_commit(),
+    }
+
+
+def _command(argv, purpose):
+    return {
+        "purpose": purpose,
+        "argv": argv,
+        "command": subprocess.list2cmdline(argv),
+        "cwd": ".",
+    }
+
+
+def collect_reproduction_commands(baseline_meta, config):
+    prompt = repo_rel(baseline_meta.get("prompt_path")) if baseline_meta else None
+    prompt = prompt or "prompts/baseline.md"
+    parallel = config.get("parallel", {}) if config else {}
+    commands = []
+    for dataset in ("smoke", "dev", "holdout"):
+        workers = parallel.get(dataset, 6)
+        question = f"questions/{dataset}.jsonl"
+        commands.append(_command(
+            [sys.executable, "scripts/evaluate.py", prompt, question, "--parallel", str(workers)],
+            f"評測 winner：{dataset}",
+        ))
+    commands.append(_command(
+        [sys.executable, "scripts/gatekeeper.py", prompt, "--json"],
+        "驗證 winner 硬性規則",
+    ))
+    return commands
+
+
+def collect_measurement_basis(config, baseline_meta, input_versions):
+    thresholds = config.get("thresholds", {}) if config else {}
+    datasets = []
+    for dataset in ("smoke", "dev", "holdout"):
+        question = next(
+            (item for item in input_versions if item["path"] == f"questions/{dataset}.jsonl"),
+            None,
+        )
+        datasets.append({
+            "name": dataset,
+            "question_file": question or {"path": f"questions/{dataset}.jsonl", "version": "unavailable"},
+            "baseline_score": _number(baseline_meta.get(f"{dataset}_avg")),
+        })
+    return {
+        "datasets": datasets,
+        "score_scale": {"minimum": 0, "maximum": 100},
+        "thresholds": thresholds,
+        "acceptance_criteria": [
+            {"name": "總平均分晉升", "rule": "delta >= thresholds.dev_min_improvement 或 score >= 92 且不退步"},
+            {"name": "單項退步限制", "rule": "每一題型退步 <= thresholds.type_max_regression"},
+            {"name": "風險控制", "rule": "strict 100%；pragmatic >= 90% 且不低於 baseline"},
+            {"name": "字數合格率", "rule": ">= thresholds.word_rate_min"},
+        ],
+    }
+
+
+def load_report_schema():
+    path = os.path.join(ROOT, SCHEMA_REL_PATH)
+    if os.path.isfile(path):
+        return load_json(path, {})
+    return {
+        "type": "object",
+        "required": ["schema_version", "report_type", "decision", "winner", "quality", "candidate_comparison", "reproduction", "execution", "evidence", "schema_validation"],
+    }
+
+
+def _schema_type_matches(value, expected):
+    if expected == "object":
+        return isinstance(value, dict)
+    if expected == "array":
+        return isinstance(value, list)
+    if expected == "string":
+        return isinstance(value, str)
+    if expected == "number":
+        return isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(float(value))
+    if expected == "integer":
+        return isinstance(value, int) and not isinstance(value, bool)
+    if expected == "boolean":
+        return isinstance(value, bool)
+    if expected == "null":
+        return value is None
+    return True
+
+
+def _validate_schema_fragment(value, schema, location, errors):
+    expected = schema.get("type")
+    if isinstance(expected, list):
+        if not any(_schema_type_matches(value, item) for item in expected):
+            errors.append(f"{location}: type 必須為 {expected}")
+            return
+    elif expected and not _schema_type_matches(value, expected):
+        errors.append(f"{location}: type 必須為 {expected}")
+        return
+    if "enum" in schema and value not in schema["enum"]:
+        errors.append(f"{location}: 不在 enum {schema['enum']}")
+    if "const" in schema and value != schema["const"]:
+        errors.append(f"{location}: 必須等於 {schema['const']!r}")
+    if isinstance(value, dict):
+        for name in schema.get("required", []):
+            if name not in value:
+                errors.append(f"{location}.{name}: 缺少必要欄位")
+        for name, child in schema.get("properties", {}).items():
+            if name in value:
+                _validate_schema_fragment(value[name], child, f"{location}.{name}", errors)
+    if isinstance(value, list) and schema.get("items"):
+        for index, item in enumerate(value):
+            _validate_schema_fragment(item, schema["items"], f"{location}[{index}]", errors)
+    if isinstance(value, str) and "minLength" in schema and len(value) < schema["minLength"]:
+        errors.append(f"{location}: 長度不足")
+
+
+def schema_validation_errors(report, schema=None):
+    schema = schema or load_report_schema()
+    try:
+        import jsonschema
+    except ImportError:
+        pass
+    else:
+        validator = jsonschema.Draft202012Validator(schema)
+        return [
+            "$%s: %s" % (
+                ".".join(str(part) for part in error.absolute_path),
+                error.message,
+            )
+            for error in sorted(
+                validator.iter_errors(report),
+                key=lambda item: list(item.absolute_path),
+            )
+        ]
+    errors = []
+    _validate_schema_fragment(report, schema, "$", errors)
+    return errors
+
+
+def validate_report_schema(report, schema=None):
+    """以 repo 內 JSON Schema 驗證報告；回傳 True／False。"""
+    return not schema_validation_errors(report, schema)
+
+
+def _winner_data(baseline_meta, is_valid, rerun_settings, commands):
+    prompt_path = baseline_meta.get("prompt_path", "prompts/baseline.md") if baseline_meta else "prompts/baseline.md"
+    prompt = _prompt_artifact(prompt_path, baseline_meta.get("prompt_hash", "") if baseline_meta else "")
+    return {
+        "candidate_id": baseline_meta.get("prompt_hash") if baseline_meta and is_valid else None,
+        "kind": "global_baseline",
+        "decision": "ADOPT" if is_valid else "INCONCLUSIVE",
+        "prompt": prompt,
+        "workflow": {
+            "steps": [
+                "讀取完整 winner 提示詞",
+                "依序以 smoke、dev、holdout 題庫評測",
+                "執行 gatekeeper 與接受條件檢查",
+                "保留 scorecard、summary、details 與執行紀錄",
+            ],
+            "commands": commands,
+        },
+        "scores": _baseline_scores(baseline_meta or {}) if is_valid else {},
+    }
 
 
 # ---------- 證據完整性閘門 ----------
@@ -767,31 +1136,64 @@ def build_evidence_verification_section(evidence_checks):
     return lines
 
 
-def build_report(limit=10):
+def build_structured_report(limit=10):
+    """產生唯一的結構化最佳版本證據資料來源。"""
     baseline_meta = load_baseline_meta()
     champions = load_champion_metas()
     cards = load_candidate_scorecards()
     sessions = load_evolution_summary()
     config = load_config()
-
+    records = read_jsonl(EVOLUTION_LOG_PATH)
     now = time.strftime("%Y-%m-%d %H:%M:%S")
 
-    # 證據完整性閘門檢查
     is_valid, evidence_errors = verify_evidence_integrity(
         baseline_meta, champions, cards, sessions, config
     )
-
-    # 產生時重新驗證所有證據引用 + 收集重跑所需設定
     evidence_checks = collect_evidence_verification(baseline_meta, champions, cards)
     verification_valid = all(c["ok"] for c in evidence_checks)
     if not verification_valid:
         evidence_errors.append("關鍵證據檔案缺漏或雜湊不一致")
     is_valid = is_valid and verification_valid
-    rerun_settings = collect_rerun_settings(baseline_meta, champions, config, sessions)
 
-    json_data = {
+    rerun_settings = collect_rerun_settings(baseline_meta, champions, config, sessions)
+    commands = collect_reproduction_commands(baseline_meta, config)
+    environment = collect_environment()
+    input_versions = collect_input_versions(baseline_meta, champions, cards, sessions)
+    measurement_basis = collect_measurement_basis(config, baseline_meta, input_versions)
+    candidate_comparison = build_candidate_comparisons(cards, baseline_meta)
+    winner = _winner_data(baseline_meta, is_valid, rerun_settings, commands)
+
+    type_champions = []
+    for champion in champions:
+        item = {
+            "type": champion.get("type", ""),
+            "type_slug": champion.get("type_slug", ""),
+            "candidate_id": champion.get("candidate_hash", ""),
+            "candidate_avg": _number(champion.get("candidate_avg")),
+            "baseline_avg": _number(champion.get("baseline_avg")),
+            "diff": _number(champion.get("diff")),
+            "risk_rate": _number(champion.get("risk_rate")),
+            "decision": champion.get("decision", ""),
+            "prompt": _prompt_artifact(
+                champion.get("champion_prompt_path", ""),
+                champion.get("candidate_hash", ""),
+            ),
+            "meta_path": champion.get("_meta_file", ""),
+            "dev_run": display_path(champion.get("dev_run", "")),
+            "holdout_run": display_path(champion.get("holdout_run", "")),
+        }
+        type_champions.append(item)
+
+    data = {
+        "$schema": SCHEMA_REL_PATH,
+        "schema_version": "1.0.0",
         "report_type": "best_version_evidence",
         "generated_at": now,
+        "decision": {
+            "status": "valid" if is_valid else "inconclusive",
+            "reason": "證據完整且通過重新驗證" if is_valid else "證據不完整，拒絕選優",
+            "best_candidate_id": winner["candidate_id"],
+        },
         "evidence_integrity": {
             "valid": is_valid,
             "errors": evidence_errors,
@@ -801,7 +1203,8 @@ def build_report(limit=10):
             "total": len(evidence_checks),
             "checks": evidence_checks,
         },
-        "rerun_settings": rerun_settings,
+        "winner": winner,
+        # 保留既有欄位，避免通知與既有整合使用者破壞性變更。
         "champion": {
             "prompt_hash": baseline_meta.get("prompt_hash", "") if is_valid else "",
             "dev_avg": baseline_meta.get("dev_avg") if is_valid else None,
@@ -809,27 +1212,52 @@ def build_report(limit=10):
             "dev_run": display_path(baseline_meta.get("dev_run", "")) if is_valid else "",
             "holdout_run": display_path(baseline_meta.get("holdout_run", "")) if is_valid else "",
         },
-        "type_champions": [
-            {
-                "type": ch.get("type", ""),
-                "candidate_avg": ch.get("candidate_avg"),
-                "diff": ch.get("diff"),
-                "champion_prompt_path": display_path(ch.get("champion_prompt_path", "")),
-                "dev_run": display_path(ch.get("dev_run", "")),
-            }
-            for ch in champions
-        ] if is_valid else [],
+        "type_champions": type_champions if is_valid else [],
+        "quality": {
+            "baseline": _baseline_scores(baseline_meta),
+            "winner": winner["scores"],
+            "type_champions": type_champions,
+            "measurement_basis": measurement_basis,
+        },
+        "candidate_comparison": candidate_comparison,
+        "commands": commands,
+        "environment": environment,
+        "input_data_versions": input_versions,
+        "execution_log": records,
         "candidates_summary": {
             "total": len(cards),
             "accepted": len([c for c in cards if classify_candidate(c) == "accepted"]),
             "rejected": len([c for c in cards if classify_candidate(c) == "rejected"]),
             "pending": len([c for c in cards if classify_candidate(c) == "pending"]),
         },
+        "rerun_settings": rerun_settings,
+        "reproduction": {
+            "settings": rerun_settings,
+            "commands": commands,
+            "environment": environment,
+            "input_data_versions": input_versions,
+        },
+        "execution": {
+            "log_path": repo_rel(EVOLUTION_LOG_PATH) or "",
+            "records": records,
+            "sessions": sessions,
+        },
         "evolution_sessions": len(sessions),
         "config": {
             "thresholds": config.get("thresholds", {}),
             "parallel": config.get("parallel", {}),
             "multi_candidate": config.get("multi_candidate", {}),
+        },
+        "evidence": {
+            "files": {
+                "baseline_meta": display_path(BASELINE_META_PATH),
+                "evolution_log": display_path(EVOLUTION_LOG_PATH),
+                "config": display_path(CONFIG_PATH),
+                "champions_dir": display_path(CHAMPIONS_DIR),
+                "candidates_dir": display_path(CANDIDATES_DIR),
+            },
+            "input_data_versions": input_versions,
+            "checks": evidence_checks,
         },
         "evidence_files": {
             "baseline_meta": display_path(BASELINE_META_PATH),
@@ -838,7 +1266,35 @@ def build_report(limit=10):
             "champions_dir": display_path(CHAMPIONS_DIR),
             "candidates_dir": display_path(CANDIDATES_DIR),
         },
+        "schema_validation": {
+            "schema_path": SCHEMA_REL_PATH,
+            "valid": True,
+            "errors": [],
+        },
     }
+    schema_errors = schema_validation_errors(data)
+    data["schema_validation"] = {
+        "schema_path": SCHEMA_REL_PATH,
+        "valid": not schema_errors,
+        "errors": schema_errors,
+    }
+    return data
+
+
+def build_report(limit=10, structured=None):
+    baseline_meta = load_baseline_meta()
+    champions = load_champion_metas()
+    cards = load_candidate_scorecards()
+    sessions = load_evolution_summary()
+    config = load_config()
+
+    json_data = structured or build_structured_report(limit=limit)
+    now = json_data["generated_at"]
+    is_valid = json_data["evidence_integrity"]["valid"]
+    evidence_errors = json_data["evidence_integrity"]["errors"]
+    evidence_checks = json_data["evidence_verification"]["checks"]
+    verification_valid = json_data["evidence_verification"]["valid"]
+    rerun_settings = json_data["rerun_settings"]
 
     lines = []
     lines.append("# 最佳版本證據報告")
@@ -894,26 +1350,51 @@ def main():
     parser = argparse.ArgumentParser(description="產生最佳版本證據報告")
     parser.add_argument("--limit", type=int, default=10, help="候選比較最多列出幾筆")
     parser.add_argument("--out", help="可選：寫出報告路徑")
+    parser.add_argument("--json-out", help="可選：寫出完整結構化 JSON 路徑")
+    parser.add_argument("--json", action="store_true", help="只輸出完整結構化 JSON")
+    parser.add_argument("--validate-schema", action="store_true", help="Schema 無效時以失敗結束")
     args = parser.parse_args()
 
-    report = build_report(limit=args.limit)
-    print(report)
+    structured = build_structured_report(limit=args.limit)
+    report = build_report(limit=args.limit, structured=structured)
+    if args.json:
+        print(json.dumps(structured, ensure_ascii=False, indent=2))
+    else:
+        print(report)
+
     report_path = None
     if args.out:
-        out_path = os.path.abspath(os.path.join(ROOT, args.out))
+        out_rel = repo_rel(args.out)
+        if not out_rel:
+            parser.error("--out 必須位於目前 repo 內")
+        out_path = os.path.join(ROOT, out_rel)
         os.makedirs(os.path.dirname(out_path), exist_ok=True)
         with open(out_path, "w", encoding="utf-8", newline="\n") as f:
             f.write(report)
         report_path = repo_rel(out_path)
 
-    delivery = send_report_to_telegram(
-        report,
-        report_path=report_path,
-        failure_path=os.path.join(ROOT, "output", "delivery_failures.jsonl"),
-    )
-    if delivery["status"] == "failed":
-        print("[通知失敗] Telegram 未確認收到結論；失敗已持久化，可重試。")
+    if args.json_out:
+        json_rel = repo_rel(args.json_out)
+        if not json_rel:
+            parser.error("--json-out 必須位於目前 repo 內")
+        json_path = os.path.join(ROOT, json_rel)
+        os.makedirs(os.path.dirname(json_path), exist_ok=True)
+        with open(json_path, "w", encoding="utf-8", newline="\n") as f:
+            json.dump(structured, f, ensure_ascii=False, indent=2)
+            f.write("\n")
+
+    if not args.json:
+        delivery = send_report_to_telegram(
+            report,
+            report_path=report_path,
+            failure_path=os.path.join(ROOT, "output", "delivery_failures.jsonl"),
+        )
+        if delivery["status"] == "failed":
+            print("[通知失敗] Telegram 未確認收到結論；失敗已持久化，可重試。")
+    if args.validate_schema and not structured["schema_validation"]["valid"]:
+        return 1
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

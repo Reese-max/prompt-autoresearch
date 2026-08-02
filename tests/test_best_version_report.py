@@ -749,3 +749,45 @@ def test_build_report_includes_rerun_and_verification_sections(sandbox):
     assert "## 8. 證據驗證（產生時重新驗證）" in report
     assert "winner_input" in report
     assert "prompts/baseline.md" in report
+
+
+def test_build_structured_report_is_complete_and_unlimited(sandbox):
+    baseline_prompt = sandbox / "prompts" / "baseline.md"
+    baseline_prompt.write_text("完整 winner 提示詞\n", encoding="utf-8")
+    write_baseline_meta(sandbox, prompt_hash=bvr.sha256_file(str(baseline_prompt)))
+    write_config(sandbox)
+    write_evolution_log(sandbox, [
+        {"event": "start", "timestamp": "2026-01-01 00:00:00", "args": {"max_rounds": 1}},
+        {"event": "stop", "timestamp": "2026-01-01 00:01:00", "reason": "done"},
+    ])
+    for index in range(3):
+        candidate = sandbox / "prompts" / "candidates" / f"cand_{index}.md"
+        candidate.write_text(f"candidate {index}\n", encoding="utf-8")
+        write_scorecard(
+            sandbox,
+            f"cand_{index}",
+            candidate_hash=bvr.sha256_file(str(candidate)),
+            final_decision="ACCEPT" if index == 0 else "REJECT",
+        )
+
+    data = bvr.build_structured_report(limit=1)
+
+    assert data["decision"]["status"] == "valid"
+    assert data["winner"]["candidate_id"] == data["champion"]["prompt_hash"]
+    assert data["winner"]["prompt"]["content"] == "完整 winner 提示詞\n"
+    assert data["winner"]["workflow"]["commands"]
+    assert len(data["candidate_comparison"]) == 3
+    assert data["quality"]["measurement_basis"]["datasets"]
+    assert data["reproduction"]["environment"]["python_version"]
+    assert data["reproduction"]["input_data_versions"]
+    assert data["execution"]["records"]
+    assert data["schema_validation"]["valid"] is True
+    assert bvr.validate_report_schema(data) is True
+
+
+def test_validate_report_schema_rejects_missing_required_field(sandbox):
+    data = bvr.build_structured_report()
+    del data["winner"]
+
+    assert bvr.validate_report_schema(data) is False
+    assert any("winner" in error for error in bvr.schema_validation_errors(data))

@@ -1,0 +1,129 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "best-version-evidence-report.schema.json",
+  "title": "最佳版本證據報告",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "report_type",
+    "generated_at",
+    "decision",
+    "winner",
+    "quality",
+    "candidate_comparison",
+    "reproduction",
+    "execution",
+    "evidence",
+    "schema_validation"
+  ],
+  "properties": {
+    "$schema": {"type": "string"},
+    "schema_version": {"type": "string", "minLength": 1},
+    "report_type": {"const": "best_version_evidence"},
+    "generated_at": {"type": "string", "minLength": 1},
+    "decision": {
+      "type": "object",
+      "required": ["status", "reason", "best_candidate_id"],
+      "properties": {
+        "status": {"type": "string", "enum": ["valid", "inconclusive"]},
+        "reason": {"type": "string"},
+        "best_candidate_id": {"type": ["string", "null"]}
+      }
+    },
+    "winner": {
+      "type": "object",
+      "required": ["candidate_id", "kind", "decision", "prompt", "workflow", "scores"],
+      "properties": {
+        "candidate_id": {"type": ["string", "null"]},
+        "kind": {"type": "string"},
+        "decision": {"type": "string"},
+        "prompt": {
+          "type": "object",
+          "required": ["path", "sha256", "content", "verified"],
+          "properties": {
+            "path": {"type": "string"},
+            "sha256": {"type": "string"},
+            "recorded_sha256": {"type": "string"},
+            "actual_sha256": {"type": "string"},
+            "verified": {"type": "boolean"},
+            "content": {"type": "string"}
+          }
+        },
+        "workflow": {
+          "type": "object",
+          "required": ["steps", "commands"],
+          "properties": {
+            "steps": {"type": "array", "items": {"type": "string"}},
+            "commands": {"type": "array"}
+          }
+        },
+        "scores": {"type": "object"}
+      }
+    },
+    "quality": {
+      "type": "object",
+      "required": ["baseline", "winner", "type_champions", "measurement_basis"],
+      "properties": {
+        "baseline": {"type": "object"},
+        "winner": {"type": "object"},
+        "type_champions": {"type": "array"},
+        "measurement_basis": {"type": "object"}
+      }
+    },
+    "candidate_comparison": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["candidate_id", "path", "sha256", "decision", "classification", "scores", "baseline_scores", "deltas"],
+        "properties": {
+          "candidate_id": {"type": "string", "minLength": 1},
+          "path": {"type": "string"},
+          "sha256": {"type": "string"},
+          "scorecard_path": {"type": "string"},
+          "decision": {"type": "string"},
+          "classification": {"type": "string", "enum": ["accepted", "rejected", "pending"]},
+          "scores": {"type": "object"},
+          "baseline_scores": {"type": "object"},
+          "deltas": {"type": "object"}
+        }
+      }
+    },
+    "reproduction": {
+      "type": "object",
+      "required": ["settings", "commands", "environment", "input_data_versions"],
+      "properties": {
+        "settings": {"type": "object"},
+        "commands": {"type": "array"},
+        "environment": {"type": "object"},
+        "input_data_versions": {"type": "array"}
+      }
+    },
+    "execution": {
+      "type": "object",
+      "required": ["log_path", "records", "sessions"],
+      "properties": {
+        "log_path": {"type": "string"},
+        "records": {"type": "array"},
+        "sessions": {"type": "array"}
+      }
+    },
+    "evidence": {
+      "type": "object",
+      "required": ["files", "input_data_versions", "checks"],
+      "properties": {
+        "files": {"type": "object"},
+        "input_data_versions": {"type": "array"},
+        "checks": {"type": "array"}
+      }
+    },
+    "schema_validation": {
+      "type": "object",
+      "required": ["schema_path", "valid", "errors"],
+      "properties": {
+        "schema_path": {"type": "string"},
+        "valid": {"type": "boolean"},
+        "errors": {"type": "array", "items": {"type": "string"}}
+      }
+    }
+  }
+}
