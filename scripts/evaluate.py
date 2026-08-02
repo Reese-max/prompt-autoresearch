@@ -33,6 +33,8 @@ C_PURPLE = "\033[95m"
 C_RESET  = "\033[0m"
 
 CACHE_DIR  = os.path.join(".cache", "eval")
+EVALUATOR_VERSION = "evaluate-v1"
+SCORE_METRIC = "average_score"
 
 
 # ---------------------------------------------------------------------------
@@ -475,10 +477,26 @@ def run_evaluation(prompt_file, question_file, max_workers=6, early_stop_thresho
     print(f"\n{C_GREEN}評估完成！耗時: {elapsed:.2f} 秒 (約 {elapsed/60:.1f} 分鐘)。{C_RESET}")
     
     # 3. 計算統計數據
-    summary_stats = calculate_statistics(results, elapsed, prompt_file, question_file, prompt_hash)
+    summary_stats = calculate_statistics(
+        results,
+        elapsed,
+        prompt_file,
+        question_file,
+        prompt_hash,
+        max_workers=max_workers,
+        early_stop_threshold=early_stop_threshold,
+    )
     return summary_stats, results
 
-def calculate_statistics(results, elapsed_seconds, prompt_file, question_file, prompt_hash):
+def calculate_statistics(
+    results,
+    elapsed_seconds,
+    prompt_file,
+    question_file,
+    prompt_hash,
+    max_workers=None,
+    early_stop_threshold=None,
+):
     """
     計算評估總結指標。
     """
@@ -535,6 +553,13 @@ def calculate_statistics(results, elapsed_seconds, prompt_file, question_file, p
         "cache_hit_count": cache_hit_count,
         "error_count": error_count,
         "estimated_api_calls": estimated_api_calls,
+        "metric": SCORE_METRIC,
+        "evaluator_version": EVALUATOR_VERSION,
+        "measurement_settings": {
+            "max_workers": max_workers,
+            "early_stop_threshold": early_stop_threshold,
+            "rubric_weights": {"general": 70, "type_specific": 20, "risk": 10},
+        },
     }
     completion = completion_disposition({
         "exit_code": 0,

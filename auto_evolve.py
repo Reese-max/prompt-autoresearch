@@ -41,6 +41,9 @@ BASELINE_META_PATH = "prompts/baseline.meta.json"
 NO_IMPROVE_LIMIT = 10
 RETRY_AFTER_NO_IMPROVE = 3
 
+_RANKING_STAGE_PRIORITY = {"dev": 0, "smoke": 1, "holdout": 2}
+_RANKING_FIELDS = ("dataset", "metric", "evaluator_version", "measurement_settings")
+
 
 def load_json(path, default=None):
     if default is None:
@@ -65,6 +68,213 @@ def baseline_dev_score():
         return float(meta.get("dev_avg") or 0.0)
     except (TypeError, ValueError):
         return 0.0
+
+
+def _canonical_comparison_value(value):
+    if isinstance(value, str):
+        return value.replace("\\", "/")
+    return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+
+
+def _first_value(sources, *keys):
+    for source in sources:
+        if not isinstance(source, dict):
+            continue
+        for key in keys:
+            value = source.get(key)
+            if value not in (None, "", {}):
+                return value
+    return None
+
+
+def _stage_comparison(card, stage, stage_data):
+    run_dir = stage_data.get("run")
+    summary = load_json(os.path.join(run_dir, "summary.json"), {}) if run_dir else {}
+    sources = [stage_data, card, summary]
+    evaluator = _first_value(sources, "evaluator")
+    evaluator_version = _first_value(
+        sources, "evaluator_version", "evaluatorVersion"
+    )
+    if evaluator_version is None and isinstance(evaluator, dict):
+        evaluator_version = evaluator.get("version")
+    metric = _first_value(sources, "metric", "metric_name", "score_metric")
+    if metric is None and stage_data.get("score") is not None:
+        metric = "average_score"
+    basis = {
+        "stage": stage,
+        "dataset": _first_value(sources, "dataset", "data_set", "dataset_id", "question_file"),
+        "metric": metric,
+        "evaluator_version": evaluator_version,
+        "measurement_settings": _first_value(
+            sources, "measurement_settings", "measurement", "measurement_config"
+        ),
+    }
+    missing = [field for field in _RANKING_FIELDS if basis[field] in (None, "", {})]
+    if missing:
+        return {
+            "stage": stage,
+            "score": stage_data.get("score"),
+            "comparable": False,
+            "basis": basis,
+            "missing_fields": missing,
+            "reason": "不可比較：缺少 " + "、".join(missing),
+        }
+    comparison_key = tuple(
+        [basis["stage"]]
+        + [_canonical_comparison_value(basis[field]) for field in _RANKING_FIELDS]
+    )
+    return {
+        "stage": stage,
+        "score": float(stage_data["score"]),
+        "comparable": True,
+        "basis": basis,
+        "comparison_key": comparison_key,
+    }
+
+
+def _candidate_stage_evaluations(card):
+    evaluations = []
+    for stage in ("smoke", "dev", "holdout"):
+        stage_data = card.get(stage) or {}
+        if not isinstance(stage_data, dict) or stage_data.get("score") is None:
+            continue
+        evaluations.append(_stage_comparison(card, stage, stage_data))
+    return evaluations
+
+
+def _preferred_stage_evaluation(evaluations):
+    rankable = [item for item in evaluations if item.get("comparable")]
+    return min(
+        rankable or evaluations,
+        key=lambda item: _RANKING_STAGE_PRIORITY.get(item["stage"], 99),
+        default=None,
+    )
+
+
+def _rank_candidate_evaluations(candidates):
+    """只在同一比較基準內排名，回傳（勝者、逐候選報告）。"""
+    entries = []
+    reports = {}
+    for candidate in candidates:
+        path = candidate.get("candidate_path") or ""
+        if not path:
+            continue
+        evaluations = candidate.get("stage_evaluations") or []
+        reports[path] = {
+            "candidate_path": path,
+            "status": candidate.get("status", ""),
+            "evaluations": evaluations,
+            "outcome": "淘汰",
+            "reason": "沒有可排名的同基準評測資料",
+            "elimination_basis": ["no_comparable_evaluation"],
+        }
+        for evaluation in evaluations:
+            item = {"candidate": candidate, "evaluation": evaluation}
+            if evaluation.get("comparable"):
+                entries.append(item)
+            else:
+                reports[path]["elimination_basis"].append(
+                    {"stage": evaluation["stage"], "missing_fields": evaluation["missing_fields"]}
+                )
+
+    groups = {}
+    for item in entries:
+        groups.setdefault(item["evaluation"]["comparison_key"], []).append(item)
+    winner = None
+    selected_key = None
+    if groups:
+        preferred_stage = min(
+            (item["evaluation"]["stage"] for item in entries),
+            key=lambda stage: _RANKING_STAGE_PRIORITY.get(stage, 99),
+        )
+        preferred_groups = [
+            (key, group)
+            for key, group in groups.items()
+            if group[0]["evaluation"]["stage"] == preferred_stage
+        ]
+        largest_groups = [
+            (key, group)
+            for key, group in preferred_groups
+            if len(group) == max(len(items) for _, items in preferred_groups)
+        ]
+        if len(largest_groups) == 1:
+            selected_key, group = largest_groups[0]
+            winner = max(
+                group,
+                key=lambda item: (
+                    item["evaluation"]["score"],
+                    item["candidate"].get("candidate_path", ""),
+                ),
+            )["candidate"]
+
+    winner_item = next(
+        (
+            item for item in entries
+            if selected_key is not None
+            and item["evaluation"]["comparison_key"] == selected_key
+            and item["candidate"] is winner
+        ),
+        None,
+    )
+    winner_score = winner_item["evaluation"]["score"] if winner_item else None
+    if winner_item is not None:
+        winner.setdefault("score", winner_score)
+    for path, report in reports.items():
+        matching = [
+            item for item in entries
+            if item["candidate"].get("candidate_path") == path
+        ]
+        selected = [
+            item for item in matching
+            if selected_key is not None
+            and item["evaluation"]["comparison_key"] == selected_key
+        ]
+        if winner and path == winner.get("candidate_path") and selected:
+            report.update({
+                "outcome": "勝出",
+                "reason": f"同一比較基準下最高分 {winner_score:.2f}",
+                "elimination_basis": [],
+            })
+        elif selected:
+            score = selected[0]["evaluation"]["score"]
+            report.update({
+                "outcome": "落敗",
+                "reason": f"同一比較基準下低於勝者 {score:.2f} < {winner_score:.2f}",
+                "elimination_basis": ["lower_score_in_same_comparison_group"],
+            })
+        elif matching:
+            report.update({
+                "reason": "未納入排名：與排名基準的資料集、指標、評測器版本或量測設定不一致",
+                "elimination_basis": ["comparison_basis_mismatch"],
+            })
+    return winner, list(reports.values())
+
+
+def _scorecard_elimination_reports(known_paths):
+    reports = []
+    cand_dir = "prompts/candidates"
+    if not os.path.isdir(cand_dir):
+        return reports
+    for name in sorted(os.listdir(cand_dir)):
+        if not name.endswith(".scorecard.json"):
+            continue
+        card = load_json(os.path.join(cand_dir, name), {})
+        path = card.get("candidate_path") or ""
+        status = card.get("status") or ""
+        if not path or path in known_paths or not (
+            status in {"failed", "incomplete"} or status.startswith("rejected_")
+        ):
+            continue
+        reasons = card.get("reject_reasons") or card.get("rejection_reasons") or []
+        reports.append({
+            "candidate_path": path,
+            "status": status,
+            "evaluations": [],
+            "outcome": "淘汰",
+            "reason": "；".join(str(reason) for reason in reasons) or status,
+            "elimination_basis": reasons or [status],
+        })
+    return reports
 
 
 def scan_candidate_evaluations():
@@ -97,12 +307,9 @@ def scan_candidate_evaluations():
             for stage in ("smoke", "dev", "holdout")
         ):
             continue
-        smoke = card.get("smoke") or {}
-        dev = card.get("dev") or {}
-        score = dev.get("score")
-        if score is None:
-            score = smoke.get("score")
-        if score is None:
+        stage_evaluations = _candidate_stage_evaluations(card)
+        preferred = _preferred_stage_evaluation(stage_evaluations)
+        if preferred is None:
             continue
 
         evidence_checks = {}
@@ -144,12 +351,13 @@ def scan_candidate_evaluations():
             continue
         results.append({
             "candidate_path": card.get("candidate_path") or "",
-            "smoke_score": smoke.get("score"),
-            "dev_score": dev.get("score"),
-            "score": float(score),
+            "smoke_score": (card.get("smoke") or {}).get("score"),
+            "dev_score": (card.get("dev") or {}).get("score"),
+            "score": float(preferred["score"]),
             "status": card.get("status", ""),
             "selected": bool(card.get("selected")),
             "evidence_validation": evidence_checks,
+            "stage_evaluations": stage_evaluations,
         })
     return results
 
@@ -167,7 +375,7 @@ def run_controlled_closed_loop(parallel_config):
     import run_opt
 
     existing = scan_candidate_evaluations()
-    prior_best = max(existing, key=lambda c: c.get("score", 0.0)) if existing else None
+    prior_best, prior_report = _rank_candidate_evaluations(existing)
 
     get_fn = getattr(run_opt, "get", None)
     multi_cfg = {}
@@ -185,7 +393,7 @@ def run_controlled_closed_loop(parallel_config):
         )
 
     existing_info = (
-        f"，最高 {prior_best['score']:.2f} ({prior_best['candidate_path']})"
+        f"，最高 {prior_best['candidate_path']} (score={prior_best['score']:.2f})"
         if prior_best
         else "（無）"
     )
@@ -196,7 +404,19 @@ def run_controlled_closed_loop(parallel_config):
 
     after = scan_candidate_evaluations()
     merged = {c["candidate_path"]: c for c in existing + after if c.get("candidate_path")}
-    best_candidate = max(merged.values(), key=lambda c: c.get("score", 0.0)) if merged else None
+    best_candidate, ranking_report = _rank_candidate_evaluations(list(merged.values()))
+    known_paths = set(merged)
+    ranking_report.extend(_scorecard_elimination_reports(known_paths))
+    append_jsonl(
+        LOG_PATH,
+        {
+            "event": "controlled_closed_loop_ranking",
+            "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
+            "winner": best_candidate,
+            "candidate_reports": ranking_report,
+            "prior_candidate_reports": prior_report,
+        },
+    )
     if best_candidate:
         print(f"{C_CYAN}[受控閉環] 全域最高品質候選: {best_candidate['candidate_path']} "
               f"(score={best_candidate['score']:.2f}, status={best_candidate['status']}){C_RESET}")
