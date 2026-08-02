@@ -111,3 +111,19 @@ def test_explicit_benchmark_id_keeps_each_group_winner_separate():
     assert report[0]["best_versions_by_benchmark"] == {
         group["id"]: group["winner"] for group in groups.values()
     }
+
+
+def test_same_benchmark_selects_highest_quality_version():
+    candidates = [
+        _candidate("quality", "quality-v3", 0.88, "0-1"),
+        _candidate("quality", "quality-v1", 0.91, "0-1"),
+        _candidate("quality", "quality-v2", 0.86, "0-1"),
+    ]
+
+    winner, report = auto_evolve._rank_candidate_evaluations(candidates)
+
+    assert winner["candidate_path"] == "quality-v1"
+    assert winner["score"] == 0.91
+    by_path = {row["candidate_path"]: row for row in report}
+    assert by_path["quality-v1"]["outcome"] == "勝出"
+    assert {by_path[path]["outcome"] for path in ("quality-v2", "quality-v3")} == {"落敗"}
