@@ -36,6 +36,24 @@ def test_ranking_does_not_mix_smoke_and_dev_scores():
     assert "排名基準" in next(row["reason"] for row in report if row["candidate_path"] == "smoke-99")
 
 
+def test_ranking_marks_group_winner_unproven_when_candidate_lacks_selected_basis():
+    dev = _candidate("dev-90", [_evaluation("dev", 90.0)])
+    smoke = _candidate("smoke-99", [_evaluation("smoke", 99.0, "questions/smoke.jsonl")])
+
+    winner, report = auto_evolve._rank_candidate_evaluations([dev, smoke])
+
+    assert winner["best_status"] == "unproven"
+    assert winner["best_scope"] == "comparison_group"
+    assert winner["best_label"] == "該比較群組內最佳"
+    assert winner["missing_candidates"] == ["smoke-99"]
+    assert winner["pending_evaluation_fields"]["smoke-99"] == [
+        "stage", "dataset", "metric", "evaluator_version", "measurement_settings"
+    ]
+    assert "該比較群組內最佳" in next(
+        row["reason"] for row in report if row["candidate_path"] == "dev-90"
+    )
+
+
 def test_ranking_rejects_mismatched_evaluator_basis_but_keeps_same_group():
     good_a = _candidate("dev-90", [_evaluation("dev", 90.0)])
     good_b = _candidate("dev-80", [_evaluation("dev", 80.0)])

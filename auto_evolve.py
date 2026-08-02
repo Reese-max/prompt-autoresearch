@@ -154,11 +154,16 @@ def _preferred_stage_evaluation(evaluations):
 def _rank_candidate_evaluations(candidates):
     """只在同一比較基準內排名，回傳（勝者、逐候選報告）。"""
     entries = []
+    qualified_candidates = []
     reports = {}
     for candidate in candidates:
         path = candidate.get("candidate_path") or ""
         if not path:
             continue
+        status = str(candidate.get("status", "")).lower()
+        qualified = status not in {"failed", "incomplete"} and not status.startswith("rejected_")
+        if qualified:
+            qualified_candidates.append(candidate)
         evaluations = candidate.get("stage_evaluations") or []
         reports[path] = {
             "candidate_path": path,
@@ -170,7 +175,7 @@ def _rank_candidate_evaluations(candidates):
         }
         for evaluation in evaluations:
             item = {"candidate": candidate, "evaluation": evaluation}
-            if evaluation.get("comparable"):
+            if evaluation.get("comparable") and qualified:
                 entries.append(item)
             else:
                 reports[path]["elimination_basis"].append(
@@ -217,9 +222,69 @@ def _rank_candidate_evaluations(candidates):
         None,
     )
     winner_score = winner_item["evaluation"]["score"] if winner_item else None
+    best_status = "unproven"
+    best_scope = "comparison_group"
+    best_label = "該比較群組內最佳"
+    missing_candidates = []
+    pending_evaluations = []
+    if selected_key is not None:
+        selected_evaluation = next(
+            item["evaluation"]
+            for item in entries
+            if item["evaluation"]["comparison_key"] == selected_key
+        )
+        expected_basis = selected_evaluation["basis"]
+        expected_fields = ("stage",) + _RANKING_FIELDS
+        for candidate in qualified_candidates:
+            evaluations = candidate.get("stage_evaluations") or []
+            if any(
+                evaluation.get("comparable")
+                and evaluation.get("comparison_key") == selected_key
+                for evaluation in evaluations
+            ):
+                continue
+            path = candidate["candidate_path"]
+            missing_candidates.append(path)
+            same_stage = [
+                evaluation for evaluation in evaluations
+                if evaluation.get("stage") == expected_basis["stage"]
+            ]
+            pending_fields = [
+                field for field in expected_fields
+                if not any(
+                    _canonical_comparison_value(
+                        (evaluation.get("basis") or {}).get(field)
+                    ) == _canonical_comparison_value(expected_basis.get(field))
+                    for evaluation in same_stage
+                )
+            ]
+            pending_evaluations.append({
+                "candidate_path": path,
+                "required_basis": expected_basis,
+                "missing_fields": pending_fields or ["comparison_key"],
+            })
+        if not missing_candidates:
+            best_status = "proven"
+            best_scope = "global"
+            best_label = "全域最佳版本"
+
+    ranking_metadata = {
+        "best_status": best_status,
+        "best_scope": best_scope,
+        "best_label": best_label,
+        "missing_candidates": missing_candidates,
+        "pending_evaluation_fields": {
+            item["candidate_path"]: item["missing_fields"]
+            for item in pending_evaluations
+        },
+        "pending_evaluations": pending_evaluations,
+    }
     if winner_item is not None:
+        winner = dict(winner)
         winner.setdefault("score", winner_score)
+        winner.update(ranking_metadata)
     for path, report in reports.items():
+        report.update(ranking_metadata)
         matching = [
             item for item in entries
             if item["candidate"].get("candidate_path") == path
@@ -232,19 +297,21 @@ def _rank_candidate_evaluations(candidates):
         if winner and path == winner.get("candidate_path") and selected:
             report.update({
                 "outcome": "勝出",
-                "reason": f"同一比較基準下最高分 {winner_score:.2f}",
+                "reason": (
+                    f"{best_label}，同一比較基準下最高分 {winner_score:.2f}"
+                ),
                 "elimination_basis": [],
             })
         elif selected:
             score = selected[0]["evaluation"]["score"]
             report.update({
                 "outcome": "落敗",
-                "reason": f"同一比較基準下低於勝者 {score:.2f} < {winner_score:.2f}",
+                "reason": f"{best_label}，同一比較基準下低於勝者 {score:.2f} < {winner_score:.2f}",
                 "elimination_basis": ["lower_score_in_same_comparison_group"],
             })
         elif matching:
             report.update({
-                "reason": "未納入排名：與排名基準的資料集、指標、評測器版本或量測設定不一致",
+                "reason": "未納入排名：與選定排名基準的資料集、指標、評測器版本或量測設定不一致",
                 "elimination_basis": ["comparison_basis_mismatch"],
             })
     return winner, list(reports.values())
@@ -363,12 +430,12 @@ def scan_candidate_evaluations():
 
 
 def run_controlled_closed_loop(parallel_config):
-    """受控執行路徑：串接「評測既有候選 → 依結果產生迭代候選 → 比較並淘汰 → 回傳全域最高品質候選」。
+    """受控執行路徑：串接「評測既有候選 → 依結果產生迭代候選 → 比較並淘汰 → 回傳排名結論」。
 
     1. 評測既有候選：scan_candidate_evaluations() 收錄既有候選評估證據。
     2. 依結果產生迭代候選：run_opt.run_opt_pass 依歷史結果產生多候選並評估。
     3. 比較並淘汰：run_opt_pass 以 smoke/dev/holdout 比較並淘汰較差候選。
-    4. 回傳全域最高品質候選：回傳 (success, best_candidate)。
+    4. 回傳排名結論：回傳 (success, best_candidate)。
 
     multi_candidate 停用或 count<2 時直接 raise，避免單一候選捷徑跳過「比較並淘汰」階段。
     """
@@ -418,7 +485,7 @@ def run_controlled_closed_loop(parallel_config):
         },
     )
     if best_candidate:
-        print(f"{C_CYAN}[受控閉環] 全域最高品質候選: {best_candidate['candidate_path']} "
+        print(f"{C_CYAN}[受控閉環] {best_candidate.get('best_label', '排名候選')}: {best_candidate['candidate_path']} "
               f"(score={best_candidate['score']:.2f}, status={best_candidate['status']}){C_RESET}")
     return success, best_candidate
 
@@ -672,7 +739,7 @@ def main():
     print(f"  - 總嘗試次數: {total_attempts} 次")
     print(f"  - 成功晉升數: {successful_evolutions} 次")
     if best_candidate:
-        print(f"  - 全域最高品質候選: {best_candidate['candidate_path']} "
+        print(f"  - {best_candidate.get('best_label', '排名候選')}: {best_candidate['candidate_path']} "
               f"(score={best_candidate['score']:.2f}, status={best_candidate['status']})")
     print(f"  - 總運行耗時: {total_elapsed/3600:.2f} 小時 ({total_elapsed/60:.1f} 分鐘)")
     print(f"{C_PURPLE}=================================================={C_RESET}")
