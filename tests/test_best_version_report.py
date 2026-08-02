@@ -263,6 +263,59 @@ def test_candidate_comparison_separates_failed_attempt_from_quality_score(sandbo
     assert row["execution_reliability"]["timeout_attempt_count"] == 1
 
 
+@pytest.mark.parametrize("failure_status", ["timeout", "model_or_evaluator_error"])
+def test_report_marks_failed_candidate_unproven_and_lists_supplemental_evaluation(
+    sandbox, failure_status
+):
+    write_complete_report_evidence(
+        sandbox,
+        cand_1={
+            "dev": {
+                "score": 99.0,
+                "execution_status": failure_status,
+                "completion": {"status": "failed"},
+            },
+            "execution_records": [{
+                "candidate_id": "cand_1",
+                "stage": "dev",
+                "attempt": 1,
+                "model": "free-model",
+                "execution_status": failure_status,
+                "error_evidence": {"stderr": "timed out"},
+            }],
+        },
+    )
+
+    data = bvr.build_structured_report()
+    report = bvr.build_report(structured=data)
+
+    assert data["decision"]["code"] == "INCOMPLETE_EVIDENCE"
+    assert data["decision"]["best_candidate_id"] is None
+    assert data["winner"]["decision"] == "INCOMPLETE_EVIDENCE"
+    assert data["quality_ranking"]["best_status"] == "unproven"
+    affected = data["incomplete_evidence"]["affected_candidates"]
+    assert len(affected) == 1
+    assert affected[0]["candidate_path"] == "prompts/candidates/cand_1.md"
+    assert affected[0]["failed_attempts"][0]["execution_status"] == failure_status
+    assert affected[0]["missing_quality_measurements"] == [{
+        "dataset": "dev",
+        "metric": "average_score",
+        "reasons": [
+            "execution_status_not_completed",
+            "measurement_completion_not_completed",
+        ],
+    }]
+    commands = affected[0]["supplemental_evaluation_commands"]
+    assert len(commands) == 1
+    assert commands[0]["cwd"] == "."
+    assert commands[0]["candidate_path"] == "prompts/candidates/cand_1.md"
+    assert "questions/dev.jsonl" in commands[0]["argv"]
+    assert "INCOMPLETE_EVIDENCE" in report
+    assert "unproven" in report
+    assert "不得據此宣稱其他候選為全域最佳" in report
+    assert "可獨立執行的補評命令" in report
+
+
 # ---------- load_evolution_summary ----------
 
 def test_load_evolution_summary_empty(tmp_path, monkeypatch):

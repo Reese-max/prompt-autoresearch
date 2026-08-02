@@ -696,6 +696,92 @@ def build_candidate_comparisons(cards, baseline_meta):
     return comparisons
 
 
+def _incomplete_quality_evidence(comparisons, config):
+    """找出模型失敗／逾時且沒有足夠成功量測的候選。"""
+    affected = []
+    parallel = config.get("parallel", {}) if isinstance(config, dict) else {}
+    for comparison in comparisons:
+        if comparison.get("quality_eligible"):
+            continue
+        failed_attempts = [
+            dict(record)
+            for record in comparison.get("execution_records", [])
+            if isinstance(record, dict)
+            and record.get("execution_status") not in _EXECUTION_COMPLETED_STATUSES
+        ]
+        failed_stages = {record.get("stage") for record in failed_attempts}
+        for dataset in _SCORE_DATASETS:
+            if dataset in failed_stages:
+                continue
+            stage_data = comparison.get("quality_measurement_evidence", {}).get(dataset, {})
+            raw_stage = comparison.get("scores", {}).get(dataset) or {}
+            status = raw_stage.get("execution_status") or stage_data.get("execution_status")
+            if status in _EXECUTION_COMPLETED_STATUSES or not status:
+                continue
+            failed_attempts.append({
+                "stage": dataset,
+                "attempt": raw_stage.get("attempt", "-"),
+                "model": raw_stage.get("model", ""),
+                "execution_status": status,
+                "failure_classification": raw_stage.get("failure_classification", status),
+                "error_evidence": raw_stage.get("error_evidence", {}),
+            })
+        if not failed_attempts:
+            continue
+        missing = []
+        for dataset in _REQUIRED_SCORE_DATASETS:
+            evidence = comparison.get("quality_measurement_evidence", {}).get(dataset, {})
+            score = (comparison.get("scores", {}).get(dataset) or {}).get("score")
+            if not evidence.get("eligible") or score is None:
+                missing.append({
+                    "dataset": dataset,
+                    "metric": "average_score",
+                    "reasons": evidence.get("quality_exclusion_reasons", []),
+                })
+        commands = []
+        for measurement in missing:
+            dataset = measurement["dataset"]
+            path = comparison.get("path")
+            if not path:
+                continue
+            workers = parallel.get(dataset, 6)
+            command = _command(
+                [
+                    sys.executable,
+                    "scripts/evaluate.py",
+                    path,
+                    f"questions/{dataset}.jsonl",
+                    "--parallel",
+                    str(workers),
+                ],
+                f"補評候選：{dataset}",
+            )
+            command.update({
+                "candidate_id": comparison.get("candidate_id", ""),
+                "candidate_path": path,
+                "dataset": dataset,
+                "metric": measurement["metric"],
+            })
+            commands.append(command)
+        affected.append({
+            "candidate_id": comparison.get("candidate_id", ""),
+            "candidate_path": comparison.get("path", ""),
+            "status": "unproven",
+            "failed_attempts": failed_attempts,
+            "missing_quality_measurements": missing,
+            "supplemental_evaluation_commands": commands,
+        })
+    return {
+        "status": "unproven" if affected else "not_triggered",
+        "affected_candidates": affected,
+        "supplemental_evaluation_commands": [
+            command
+            for item in affected
+            for command in item["supplemental_evaluation_commands"]
+        ],
+    }
+
+
 def _run_dir_from_value(value):
     if not isinstance(value, str) or not value:
         return ""
@@ -958,6 +1044,7 @@ def verify_evidence_integrity(
     candidate_comparison=None,
     evidence_checks=None,
     execution_records=None,
+    incomplete_evidence=None,
 ):
     """驗證冠軍選優所需的關鍵證據是否齊全。
 
@@ -1062,6 +1149,17 @@ def verify_evidence_integrity(
                 errors.append(
                     f"最高分同分（dev={highest:.6g}；候選未定義可稽核 tie-breaker）"
                 )
+
+    if incomplete_evidence and incomplete_evidence.get("affected_candidates"):
+        affected = incomplete_evidence["affected_candidates"]
+        names = ", ".join(
+            item.get("candidate_path") or item.get("candidate_id", "-")
+            for item in affected
+        )
+        errors.append(
+            "候選因免費模型失敗或逾時而缺少足夠成功品質量測"
+            f"（{names}；不得宣稱其他候選為全域最佳）"
+        )
 
     # 3. 有效比較對象／淘汰依據：至少有一個候選且有有效的決策記錄
     has_comparison = False
@@ -1348,6 +1446,43 @@ def build_candidate_comparison_section(cards, limit, baseline_meta=None):
     return lines
 
 
+def build_incomplete_evidence_section(incomplete_evidence):
+    lines = [
+        "## ⚠️ 比較證據不足：INCOMPLETE_EVIDENCE / unproven",
+        "",
+        "免費模型失敗或逾時使下列候選缺少足夠可比較的成功品質量測；不得據此宣稱其他候選為全域最佳。",
+        "",
+    ]
+    for item in incomplete_evidence.get("affected_candidates", []):
+        candidate = item.get("candidate_path") or item.get("candidate_id", "-")
+        lines.append(f"### 候選：`{candidate}`（unproven）")
+        lines.append("")
+        lines.append("失敗 attempt：")
+        for attempt in item.get("failed_attempts", []):
+            lines.append(
+                "- "
+                f"stage={attempt.get('stage', '-')}, "
+                f"attempt={attempt.get('attempt', '-')}, "
+                f"status={attempt.get('execution_status', '-')}, "
+                f"model={attempt.get('model', '-')}"
+            )
+        lines.append("")
+        lines.append("缺少的品質量測：")
+        for measurement in item.get("missing_quality_measurements", []):
+            reasons = ", ".join(measurement.get("reasons", [])) or "未取得成功量測"
+            lines.append(
+                f"- `{measurement.get('dataset', '-')}.{measurement.get('metric', '-')}`：{reasons}"
+            )
+        lines.append("")
+        lines.append("可獨立執行的補評命令：")
+        for command in item.get("supplemental_evaluation_commands", []):
+            lines.append(f"- `{command['command']}`")
+        if not item.get("supplemental_evaluation_commands"):
+            lines.append("- 無法建立：候選提示詞路徑不存在或不在 repo 內")
+        lines.append("")
+    return lines
+
+
 def build_reproduction_section(sessions, config):
     lines = []
     lines.append("## 5. 重現設定")
@@ -1523,6 +1658,7 @@ def build_structured_report(limit=10):
     input_versions = collect_input_versions(baseline_meta, champions, cards, sessions)
     measurement_basis = collect_measurement_basis(config, baseline_meta, input_versions)
     candidate_comparison = build_candidate_comparisons(cards, baseline_meta)
+    incomplete_evidence = _incomplete_quality_evidence(candidate_comparison, config)
     evidence_checks = collect_evidence_verification(baseline_meta, champions, cards)
     is_valid, evidence_errors = verify_evidence_integrity(
         baseline_meta,
@@ -1535,6 +1671,7 @@ def build_structured_report(limit=10):
         candidate_comparison=candidate_comparison,
         evidence_checks=evidence_checks,
         execution_records=records,
+        incomplete_evidence=incomplete_evidence,
     )
     verification_valid = all(c["ok"] for c in evidence_checks)
     if not verification_valid and not any("有效執行證據" in error for error in evidence_errors):
@@ -1603,6 +1740,16 @@ def build_structured_report(limit=10):
         },
         "quality_ranking": {
             "policy": "same_benchmark_completed_measurement_only",
+            "best_status": (
+                "unproven"
+                if incomplete_evidence["affected_candidates"]
+                else ("proven" if is_valid else "inconclusive")
+            ),
+            "best_scope": "global" if is_valid else "none",
+            "affected_candidates": incomplete_evidence["affected_candidates"],
+            "supplemental_evaluation_commands": incomplete_evidence[
+                "supplemental_evaluation_commands"
+            ],
             "eligible_candidate_ids": [
                 row["candidate_id"] for row in candidate_comparison
                 if row.get("quality_eligible")
@@ -1612,6 +1759,7 @@ def build_structured_report(limit=10):
                 if not row.get("quality_eligible")
             ],
         },
+        "incomplete_evidence": incomplete_evidence,
         "candidate_comparison": candidate_comparison,
         "commands": commands,
         "environment": environment,
@@ -1627,6 +1775,9 @@ def build_structured_report(limit=10):
         "reproduction": {
             "settings": rerun_settings,
             "commands": commands,
+            "supplemental_evaluation_commands": incomplete_evidence[
+                "supplemental_evaluation_commands"
+            ],
             "environment": environment,
             "input_data_versions": input_versions,
         },
@@ -1720,6 +1871,9 @@ def build_report(limit=10, structured=None):
     else:
         lines.append("## ✅ 證據完整性閘門：PASS")
         lines.append("")
+
+    if json_data.get("incomplete_evidence", {}).get("affected_candidates"):
+        lines.extend(build_incomplete_evidence_section(json_data["incomplete_evidence"]))
 
     lines.append(f"- 產生時間：{now}")
     lines.append(f"- 候選總數：{len(cards)}")
