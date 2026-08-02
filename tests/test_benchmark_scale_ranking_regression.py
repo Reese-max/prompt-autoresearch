@@ -113,6 +113,52 @@ def test_explicit_benchmark_id_keeps_each_group_winner_separate():
     }
 
 
+def test_each_benchmark_best_isolated_from_extreme_other_benchmark_scores():
+    fractional = [
+        _candidate("fractional", "fractional-v1", 0.81, "0-1"),
+        _candidate("fractional", "fractional-v2", 0.94, "0-1"),
+    ]
+    percentage = [
+        _candidate("percentage", "percentage-v1", 72, "0-100"),
+        _candidate("percentage", "percentage-v2", 88, "0-100"),
+    ]
+
+    def group_winner(candidates, dataset):
+        _, report = auto_evolve._rank_candidate_evaluations(candidates)
+        return next(
+            group["winner"]
+            for group in report[0]["benchmark_groups"]
+            if group["basis"]["dataset"] == dataset
+        )
+
+    fractional_best = group_winner(fractional, "benchmarks/fractional.jsonl")
+    fractional_with_extreme_percentage = group_winner(
+        fractional + [_candidate("percentage", "percentage-extreme", 999999, "0-1000000")],
+        "benchmarks/fractional.jsonl",
+    )
+    percentage_best = group_winner(percentage, "benchmarks/percentage.jsonl")
+    percentage_with_extreme_fractional = group_winner(
+        percentage + [_candidate("fractional", "fractional-extreme", 999999, "0-1000000")],
+        "benchmarks/percentage.jsonl",
+    )
+
+    assert fractional_with_extreme_percentage == fractional_best
+    assert percentage_with_extreme_fractional == percentage_best
+
+    winner, report = auto_evolve._rank_candidate_evaluations(fractional + percentage)
+
+    assert winner is None
+    best_versions = report[0]["best_versions_by_benchmark"]
+    assert len(best_versions) == 2
+    assert {
+        evidence["basis"]["dataset"]: evidence["candidate_path"]
+        for evidence in best_versions.values()
+    } == {
+        "benchmarks/fractional.jsonl": "fractional-v2",
+        "benchmarks/percentage.jsonl": "percentage-v2",
+    }
+
+
 def test_same_benchmark_selects_highest_quality_version():
     candidates = [
         _candidate("quality", "quality-v3", 0.88, "0-1"),
