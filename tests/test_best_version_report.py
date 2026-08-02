@@ -94,6 +94,42 @@ def write_config(tmp_path, content="thresholds:\n  dev_min_improvement: 2.0\n"):
     path.write_text(content, encoding="utf-8")
 
 
+def write_complete_report_evidence(tmp_path, **card_overrides):
+    baseline_prompt = tmp_path / "prompts" / "baseline.md"
+    baseline_prompt.write_text("完整 baseline 提示詞\n", encoding="utf-8")
+    write_baseline_meta(tmp_path, prompt_hash=bvr.sha256_file(str(baseline_prompt)))
+    for name, score in (("cand_1", 92.0), ("cand_2", 90.0)):
+        candidate = tmp_path / "prompts" / "candidates" / f"{name}.md"
+        candidate.write_text(f"完整候選 {name}\n", encoding="utf-8")
+        card_kwargs = {
+            "candidate_hash": bvr.sha256_file(str(candidate)),
+            "final_decision": "ACCEPT",
+            "dev": {"score": score},
+        }
+        card_kwargs.update(card_overrides.get(name, {}))
+        write_scorecard(
+            tmp_path,
+            name,
+            **card_kwargs,
+        )
+    write_config(tmp_path)
+    write_evolution_log(tmp_path, [
+        {"event": "start", "timestamp": "2026-01-01 00:00:00", "args": {}},
+        {"event": "stop", "timestamp": "2026-01-01 00:01:00"},
+    ])
+
+
+def assert_inconclusive_with_reproduction_commands(data, report):
+    assert data["decision"]["status"] == "inconclusive"
+    assert data["decision"]["code"] == "INCOMPLETE_EVIDENCE"
+    assert data["decision"]["best_candidate_id"] is None
+    assert data["winner"]["decision"] == "INCOMPLETE_EVIDENCE"
+    commands = data["reproduction"]["commands"]
+    assert commands
+    assert all(command["argv"] and command["command"] and command["cwd"] == "." for command in commands)
+    assert "可獨立執行的補證命令" in report
+
+
 # ---------- load functions ----------
 
 def test_load_json_missing_and_present(tmp_path):
@@ -811,3 +847,81 @@ def test_validate_report_schema_rejects_missing_required_field(sandbox):
 
     assert bvr.validate_report_schema(data) is False
     assert any("winner" in error for error in bvr.schema_validation_errors(data))
+
+
+def test_report_rejects_candidates_with_different_evaluation_bases(sandbox):
+    basis = {
+        "dataset": "questions/dev.jsonl",
+        "metric": "average_score",
+        "evaluator_version": "evaluate-v1",
+        "measurement_settings": {"parallel": 1},
+    }
+    other_basis = dict(basis, dataset="questions/dev-v2.jsonl")
+    write_complete_report_evidence(
+        sandbox,
+        cand_1={"comparison_basis": basis},
+        cand_2={"comparison_basis": other_basis},
+    )
+
+    data = bvr.build_structured_report()
+    report = bvr.build_report(structured=data)
+
+    assert_inconclusive_with_reproduction_commands(data, report)
+    assert any("評測基準不同" in error for error in data["evidence_integrity"]["errors"])
+
+
+def test_report_rejects_accepted_candidate_with_missing_measurement_field(sandbox):
+    basis = {
+        "dataset": "questions/dev.jsonl",
+        "metric": "average_score",
+        "evaluator_version": "evaluate-v1",
+        "measurement_settings": {"parallel": 1},
+    }
+    write_complete_report_evidence(
+        sandbox,
+        cand_1={"comparison_basis": basis},
+        cand_2={"comparison_basis": {key: value for key, value in basis.items() if key != "metric"}},
+    )
+
+    data = bvr.build_structured_report()
+    report = bvr.build_report(structured=data)
+
+    assert_inconclusive_with_reproduction_commands(data, report)
+    assert any("關鍵量測欄位" in error for error in data["evidence_integrity"]["errors"])
+
+
+@pytest.mark.parametrize("unreadable", [False, True])
+def test_report_rejects_missing_or_unreadable_evidence_file(sandbox, monkeypatch, unreadable):
+    write_complete_report_evidence(sandbox)
+    config = sandbox / "config.yaml"
+    if not unreadable:
+        config.unlink()
+    else:
+        real_open = open
+
+        def unreadable_open(path, *args, **kwargs):
+            if str(path).replace("\\", "/").endswith("/config.yaml"):
+                raise PermissionError("evidence is unreadable")
+            return real_open(path, *args, **kwargs)
+
+        monkeypatch.setattr("builtins.open", unreadable_open)
+
+    data = bvr.build_structured_report()
+    report = bvr.build_report(structured=data)
+
+    assert_inconclusive_with_reproduction_commands(data, report)
+    assert any("有效執行證據" in error for error in data["evidence_integrity"]["errors"])
+
+
+def test_report_rejects_tied_highest_accepted_score(sandbox):
+    write_complete_report_evidence(
+        sandbox,
+        cand_1={"dev": {"score": 92.0}},
+        cand_2={"dev": {"score": 92.0}},
+    )
+
+    data = bvr.build_structured_report()
+    report = bvr.build_report(structured=data)
+
+    assert_inconclusive_with_reproduction_commands(data, report)
+    assert any("最高分同分" in error for error in data["evidence_integrity"]["errors"])

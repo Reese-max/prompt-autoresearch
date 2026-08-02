@@ -49,29 +49,38 @@ def load_json(path, default=None):
         default = {}
     if not os.path.exists(path):
         return default
-    with open(path, "r", encoding="utf-8", errors="replace") as f:
-        return json.load(f)
+    try:
+        with open(path, "r", encoding="utf-8", errors="replace") as f:
+            return json.load(f)
+    except (OSError, json.JSONDecodeError):
+        return default
 
 
 def read_text(path):
     if not os.path.exists(path):
         return ""
-    with open(path, "r", encoding="utf-8", errors="replace") as f:
-        return f.read()
+    try:
+        with open(path, "r", encoding="utf-8", errors="replace") as f:
+            return f.read()
+    except OSError:
+        return ""
 
 
 def read_jsonl(path):
     rows = []
     if not os.path.exists(path):
         return rows
-    with open(path, "r", encoding="utf-8", errors="replace") as f:
-        for line in f:
-            line = line.strip()
-            if line:
-                try:
-                    rows.append(json.loads(line))
-                except json.JSONDecodeError:
-                    continue
+    try:
+        with open(path, "r", encoding="utf-8", errors="replace") as f:
+            for line in f:
+                line = line.strip()
+                if line:
+                    try:
+                        rows.append(json.loads(line))
+                    except json.JSONDecodeError:
+                        continue
+    except OSError:
+        return []
     return rows
 
 
@@ -233,16 +242,26 @@ def verify_evidence_file(path_rel, recorded_hash=None):
         "recorded_hash": recorded_hash or "",
         "actual_hash": "",
         "hash_match": None,
+        "readable": False,
     }
     if path_rel and os.path.isfile(abs_path):
         result["exists"] = True
-        result["nonempty"] = os.path.getsize(abs_path) > 0
-        if recorded_hash:
-            result["actual_hash"] = sha256_file(abs_path)
-            result["hash_match"] = result["actual_hash"] == recorded_hash
+        try:
+            result["nonempty"] = os.path.getsize(abs_path) > 0
+            with open(abs_path, "rb") as evidence_file:
+                digest = hashlib.sha256()
+                for chunk in iter(lambda: evidence_file.read(65536), b""):
+                    digest.update(chunk)
+            result["readable"] = True
+            if recorded_hash:
+                result["actual_hash"] = digest.hexdigest()
+                result["hash_match"] = result["actual_hash"] == recorded_hash
+        except OSError:
+            pass
     result["ok"] = (
         result["exists"]
         and result["nonempty"]
+        and result["readable"]
         and (result["hash_match"] is True or not recorded_hash)
     )
     return result
@@ -368,9 +387,12 @@ def _path_hash(path_rel):
     if path_rel:
         path = os.path.join(ROOT, path_rel)
         if os.path.isfile(path):
-            result["exists"] = True
-            result["size"] = os.path.getsize(path)
-            result["sha256"] = sha256_file(path)
+            try:
+                result["exists"] = True
+                result["size"] = os.path.getsize(path)
+                result["sha256"] = sha256_file(path)
+            except OSError:
+                result["exists"] = False
     result["version"] = result["sha256"] or "missing"
     return result
 
@@ -383,7 +405,10 @@ def _prompt_artifact(path, recorded_hash=""):
         absolute = os.path.join(ROOT, path_rel)
         if os.path.isfile(absolute):
             content = read_text(absolute)
-            actual_hash = sha256_file(absolute)
+            try:
+                actual_hash = sha256_file(absolute)
+            except OSError:
+                actual_hash = ""
     return {
         "path": path_rel,
         "sha256": recorded_hash or actual_hash,
@@ -425,6 +450,77 @@ def _baseline_scores(baseline_meta):
     }
 
 
+_COMPARISON_BASIS_FIELDS = (
+    "dataset",
+    "metric",
+    "evaluator_version",
+    "measurement_settings",
+)
+_SCORE_DATASETS = ("smoke", "dev", "holdout")
+_REQUIRED_SCORE_DATASETS = ("dev", "holdout")
+
+
+def _canonical_value(value):
+    return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+
+
+def _basis_from_card(card, baseline_scores):
+    """取得候選明確記錄的比較基準；舊 scorecard 沿用全域 baseline。"""
+    explicit = card.get("comparison_basis")
+    if not isinstance(explicit, dict):
+        explicit = card.get("measurement_basis")
+    if not isinstance(explicit, dict):
+        explicit = card.get("basis")
+    if isinstance(explicit, dict):
+        return explicit, "explicit"
+
+    evaluations = card.get("stage_evaluations")
+    if isinstance(evaluations, list):
+        preferred = sorted(
+            (item for item in evaluations if isinstance(item, dict)),
+            key=lambda item: {"dev": 0, "smoke": 1, "holdout": 2}.get(item.get("stage"), 99),
+        )
+        if preferred and isinstance(preferred[0].get("basis"), dict):
+            return preferred[0]["basis"], "explicit"
+        return {}, "explicit"
+
+    return {
+        "baseline_scores": {
+            dataset: (baseline_scores.get(dataset) or {}).get("score")
+            for dataset in _SCORE_DATASETS
+        }
+    }, "baseline_scores"
+
+
+def _measurement_gaps(card, scores, basis, basis_source):
+    gaps = [
+        f"{dataset}.score"
+        for dataset in _REQUIRED_SCORE_DATASETS
+        if _number((scores.get(dataset) or {}).get("score")) is None
+    ]
+    if basis_source == "explicit":
+        evaluations = card.get("stage_evaluations")
+        if isinstance(evaluations, list):
+            for item in evaluations:
+                if not isinstance(item, dict):
+                    gaps.append("stage_evaluations")
+                    continue
+                missing = item.get("missing_fields")
+                if item.get("comparable") is False:
+                    gaps.extend(str(field) for field in (missing or _COMPARISON_BASIS_FIELDS))
+                item_basis = item.get("basis")
+                if isinstance(item_basis, dict):
+                    gaps.extend(
+                        field for field in _COMPARISON_BASIS_FIELDS
+                        if item_basis.get(field) in (None, "", {})
+                    )
+        gaps.extend(
+            field for field in _COMPARISON_BASIS_FIELDS
+            if basis.get(field) in (None, "", {})
+        )
+    return sorted(set(gaps))
+
+
 def build_candidate_comparisons(cards, baseline_meta):
     """保留所有候選，並以同一組 smoke/dev/holdout 基準呈現。"""
     baseline = _baseline_scores(baseline_meta)
@@ -435,12 +531,25 @@ def build_candidate_comparisons(cards, baseline_meta):
         candidate_hash = card.get("candidate_hash") or actual_hash
         scores = {
             dataset: _score_entry(card.get(dataset))
-            for dataset in ("smoke", "dev", "holdout")
+            for dataset in _SCORE_DATASETS
         }
+        supplied_baseline = card.get("baseline_scores")
+        if not isinstance(supplied_baseline, dict):
+            supplied_baseline = card.get("baseline")
+        baseline_scores = {
+            dataset: _score_entry(supplied_baseline.get(dataset))
+            if isinstance(supplied_baseline, dict) and dataset in supplied_baseline
+            else baseline[dataset]
+            for dataset in _SCORE_DATASETS
+        }
+        comparison_basis, basis_source = _basis_from_card(card, baseline_scores)
+        measurement_gaps = _measurement_gaps(
+            card, scores, comparison_basis, basis_source,
+        )
         deltas = {}
         for dataset, score in scores.items():
             value = score["score"]
-            base = baseline[dataset]["score"]
+            base = baseline_scores[dataset]["score"]
             deltas[dataset] = round(value - base, 6) if value is not None and base is not None else None
         comparisons.append({
             "ordinal": index,
@@ -453,8 +562,11 @@ def build_candidate_comparisons(cards, baseline_meta):
             "direction": card.get("direction", ""),
             "target_failures": _list(card.get("target_failures")),
             "scores": scores,
-            "baseline_scores": baseline,
+            "baseline_scores": baseline_scores,
             "deltas": deltas,
+            "comparison_basis": comparison_basis,
+            "comparison_basis_source": basis_source,
+            "measurement_gaps": measurement_gaps,
             "reject_reasons": _list(card.get("reject_reasons")),
             "hypothesis": card.get("hypothesis", ""),
         })
@@ -787,8 +899,45 @@ def verify_evidence_integrity(
                 for dataset in ("dev", "holdout")
             )
         ]
-        if not baseline_rows:
+        if len(baseline_rows) != len(candidate_comparison):
             errors.append("缺少同基準評測結果（候選未攜帶可驗證的 dev/holdout baseline 分數）")
+
+        measurement_gaps = [
+            row for row in candidate_comparison
+            if isinstance(row, dict)
+            and row.get("classification") == "accepted"
+            and row.get("measurement_gaps")
+        ]
+        if measurement_gaps:
+            errors.append(
+                "缺少關鍵量測欄位（" + "；".join(
+                    f"{row.get('path') or row.get('candidate_id')}: {', '.join(row['measurement_gaps'])}"
+                    for row in measurement_gaps
+                ) + "）"
+            )
+
+        basis_signatures = {
+            _canonical_value((row.get("comparison_basis_source"), row.get("comparison_basis")))
+            for row in candidate_comparison
+            if isinstance(row, dict)
+        }
+        if len(basis_signatures) > 1:
+            errors.append("候選評測基準不同（不得在不同資料集、指標、評測器版本或量測設定間選優）")
+
+        accepted_rows = [
+            row for row in candidate_comparison
+            if isinstance(row, dict)
+            and row.get("classification") == "accepted"
+            and not row.get("measurement_gaps")
+            and _number((row.get("scores", {}).get("dev") or {}).get("score")) is not None
+        ]
+        if accepted_rows:
+            highest = max(row["scores"]["dev"]["score"] for row in accepted_rows)
+            tied = [row for row in accepted_rows if row["scores"]["dev"]["score"] == highest]
+            if len(tied) > 1:
+                errors.append(
+                    f"最高分同分（dev={highest:.6g}；候選未定義可稽核 tie-breaker）"
+                )
 
     # 3. 有效比較對象／淘汰依據：至少有一個候選且有有效的決策記錄
     has_comparison = False
@@ -1409,6 +1558,12 @@ def build_report(limit=10, structured=None):
         lines.append("4. 量測方法")
         lines.append("5. 重現設定")
         lines.append("6. 有效執行證據")
+        lines.append("")
+        lines.append("### 可獨立執行的補證命令")
+        lines.append("")
+        lines.append("以下命令各自可在 repo 根目錄獨立執行，用於補齊缺失證據：")
+        for command in json_data["reproduction"]["commands"]:
+            lines.append(f"- `{command['command']}`")
         lines.append("")
     else:
         lines.append("## ✅ 證據完整性閘門：PASS")
