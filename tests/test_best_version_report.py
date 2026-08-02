@@ -538,9 +538,30 @@ class TestEvidenceIntegrityGate:
 
     def test_report_valid_when_evidence_complete(self, sandbox):
         """報告在證據完整時應正常顯示冠軍。"""
-        write_baseline_meta(sandbox)
+        baseline_prompt = sandbox / "prompts" / "baseline.md"
+        baseline_prompt.write_text("baseline content", encoding="utf-8")
+        write_baseline_meta(
+            sandbox,
+            prompt_hash=bvr.sha256_file(str(baseline_prompt)),
+        )
+        champion_prompt = sandbox / "prompts" / "champions" / "legal_case.md"
+        champion_prompt.write_text("champion content", encoding="utf-8")
         write_champion_meta(sandbox, "legal_case")
-        write_scorecard(sandbox, "cand_1", final_decision="ACCEPT")
+        champion_meta = json.loads(
+            (sandbox / "prompts" / "champions" / "legal_case.meta.json").read_text(encoding="utf-8")
+        )
+        champion_meta["candidate_hash"] = bvr.sha256_file(str(champion_prompt))
+        (sandbox / "prompts" / "champions" / "legal_case.meta.json").write_text(
+            json.dumps(champion_meta, ensure_ascii=False), encoding="utf-8"
+        )
+        candidate_prompt = sandbox / "prompts" / "candidates" / "cand_1.md"
+        candidate_prompt.write_text("candidate content", encoding="utf-8")
+        write_scorecard(
+            sandbox,
+            "cand_1",
+            final_decision="ACCEPT",
+            candidate_hash=bvr.sha256_file(str(candidate_prompt)),
+        )
         write_config(sandbox)
 
         rows = [

@@ -784,6 +784,9 @@ def build_report(limit=10):
     # 產生時重新驗證所有證據引用 + 收集重跑所需設定
     evidence_checks = collect_evidence_verification(baseline_meta, champions, cards)
     verification_valid = all(c["ok"] for c in evidence_checks)
+    if not verification_valid:
+        evidence_errors.append("關鍵證據檔案缺漏或雜湊不一致")
+    is_valid = is_valid and verification_valid
     rerun_settings = collect_rerun_settings(baseline_meta, champions, config, sessions)
 
     json_data = {
