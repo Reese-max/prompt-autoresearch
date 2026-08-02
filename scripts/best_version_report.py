@@ -484,6 +484,23 @@ def _basis_from_card(card, baseline_scores):
             return preferred[0]["basis"], "explicit"
         return {}, "explicit"
 
+    for stage in ("dev", "smoke", "holdout"):
+        stage_data = card.get(stage)
+        if not isinstance(stage_data, dict):
+            continue
+        run = repo_rel(stage_data.get("run"))
+        summary = load_json(os.path.join(ROOT, run, "summary.json"), {}) if run else {}
+        if not isinstance(summary, dict):
+            continue
+        basis = {
+            "dataset": summary.get("dataset") or summary.get("question_file"),
+            "metric": summary.get("metric") or summary.get("score_metric"),
+            "evaluator_version": summary.get("evaluator_version"),
+            "measurement_settings": summary.get("measurement_settings") or summary.get("measurement"),
+        }
+        if all(basis[field] not in (None, "", {}) for field in _COMPARISON_BASIS_FIELDS):
+            return basis, "explicit"
+
     return {
         "baseline_scores": {
             dataset: (baseline_scores.get(dataset) or {}).get("score")

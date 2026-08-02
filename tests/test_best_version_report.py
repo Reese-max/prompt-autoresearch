@@ -870,6 +870,31 @@ def test_report_rejects_candidates_with_different_evaluation_bases(sandbox):
     assert any("評測基準不同" in error for error in data["evidence_integrity"]["errors"])
 
 
+def test_report_derives_evaluation_basis_from_run_summaries(sandbox):
+    for name, version in (("dev_v1", "evaluate-v1"), ("dev_v2", "evaluate-v2")):
+        run = sandbox / "runs" / name
+        run.mkdir()
+        (run / "summary.json").write_text(json.dumps({
+            "question_file": "questions/dev.jsonl",
+            "dataset": "questions/dev.jsonl",
+            "metric": "average_score",
+            "evaluator_version": version,
+            "measurement_settings": {"max_workers": 1},
+        }), encoding="utf-8")
+
+    write_complete_report_evidence(
+        sandbox,
+        cand_1={"dev": {"score": 92.0, "run": "runs/dev_v1"}},
+        cand_2={"dev": {"score": 90.0, "run": "runs/dev_v2"}},
+    )
+
+    data = bvr.build_structured_report()
+    report = bvr.build_report(structured=data)
+
+    assert_inconclusive_with_reproduction_commands(data, report)
+    assert any("評測基準不同" in error for error in data["evidence_integrity"]["errors"])
+
+
 def test_report_rejects_accepted_candidate_with_missing_measurement_field(sandbox):
     basis = {
         "dataset": "questions/dev.jsonl",
