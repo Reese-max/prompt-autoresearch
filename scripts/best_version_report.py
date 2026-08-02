@@ -24,6 +24,8 @@ import os
 import subprocess
 import time
 
+from lib.notifications import send_report_to_telegram
+
 if hasattr(__import__("sys").stdout, "reconfigure"):
     __import__("sys").stdout.reconfigure(encoding="utf-8", errors="replace")
 
@@ -893,11 +895,21 @@ def main():
 
     report = build_report(limit=args.limit)
     print(report)
+    report_path = None
     if args.out:
         out_path = os.path.abspath(os.path.join(ROOT, args.out))
         os.makedirs(os.path.dirname(out_path), exist_ok=True)
         with open(out_path, "w", encoding="utf-8", newline="\n") as f:
             f.write(report)
+        report_path = repo_rel(out_path)
+
+    delivery = send_report_to_telegram(
+        report,
+        report_path=report_path,
+        failure_path=os.path.join(ROOT, "output", "delivery_failures.jsonl"),
+    )
+    if delivery["status"] == "failed":
+        print("[通知失敗] Telegram 未確認收到結論；失敗已持久化，可重試。")
 
 
 if __name__ == "__main__":
