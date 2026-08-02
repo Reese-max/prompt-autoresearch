@@ -1,0 +1,9 @@
+測試：test_ranking_keeps_same_benchmark_best_version_over_extreme_other_benchmark
+修復後基準：49a578e82013610deadffef6c18f0d1db11f3a22
+命令：
+python -m pytest -q --no-cov --color=no tests/test_controlled_closed_loop_ranking.py::test_ranking_keeps_same_benchmark_best_version_over_extreme_other_benchmark
+exit code：0
+
+原始輸出：
+.                                                                        [100%]
+1 passed in 0.09s

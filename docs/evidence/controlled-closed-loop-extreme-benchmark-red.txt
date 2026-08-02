@@ -1,0 +1,63 @@
+測試：test_ranking_keeps_same_benchmark_best_version_over_extreme_other_benchmark
+修復前基準：8bb84954d0a3af386a1509a26472eb92704769e6
+執行方式：以 git show 載入 8bb8495 的 auto_evolve.py，再執行目前 HEAD 的同一個 pytest case。
+命令：
+@'
+import subprocess
+import sys
+import types
+import pytest
+
+source = subprocess.check_output(
+    ["git", "show", "8bb8495:auto_evolve.py"],
+    text=True,
+    encoding="utf-8",
+)
+module = types.ModuleType("auto_evolve")
+module.__file__ = "auto_evolve.py"
+sys.modules["auto_evolve"] = module
+exec(compile(source, "auto_evolve.py", "exec"), module.__dict__)
+raise SystemExit(pytest.main([
+    "-q",
+    "--no-cov",
+    "--color=no",
+    "tests/test_controlled_closed_loop_ranking.py::test_ranking_keeps_same_benchmark_best_version_over_extreme_other_benchmark",
+]))
+'@ | python -
+exit code：1
+
+原始輸出：
+F                                                                        [100%]
+================================== FAILURES ===================================
+_ test_ranking_keeps_same_benchmark_best_version_over_extreme_other_benchmark _
+
+    def test_ranking_keeps_same_benchmark_best_version_over_extreme_other_benchmark():
+        a_v1 = _candidate(
+            "benchmark-a-v1",
+            [_evaluation("dev", 0.91, "benchmarks/a.jsonl", settings={"scale": "0-1"})],
+        )
+        a_v2 = _candidate(
+            "benchmark-a-v2",
+            [_evaluation("dev", 0.97, "benchmarks/a.jsonl", settings={"scale": "0-1"})],
+        )
+        b_extreme = _candidate(
+            "benchmark-b-extreme",
+            [_evaluation("dev", 999999.0, "benchmarks/b.jsonl", settings={"scale": "0-1000000"})],
+        )
+
+        without_other_benchmark, _ = auto_evolve._rank_candidate_evaluations([a_v1, a_v2])
+        with_other_benchmark, report = auto_evolve._rank_candidate_evaluations(
+            [a_v1, a_v2, b_extreme]
+        )
+
+        assert without_other_benchmark["candidate_path"] == "benchmark-a-v2"
+        assert with_other_benchmark["candidate_path"] == without_other_benchmark["candidate_path"]
+        assert with_other_benchmark["score"] == without_other_benchmark["score"] == 0.97
+>       assert with_other_benchmark["selected_benchmark_group"]["basis"]["dataset"] == "benchmarks/a.jsonl"
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       KeyError: 'selected_benchmark_group'
+
+tests\test_controlled_closed_loop_ranking.py:185: KeyError
+=========================== short test summary info ===========================
+FAILED tests/test_controlled_closed_loop_ranking.py::test_ranking_keeps_same_benchmark_best_version_over_extreme_other_benchmark
+1 failed in 0.20s
