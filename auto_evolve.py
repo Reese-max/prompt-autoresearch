@@ -91,6 +91,14 @@ def _benchmark_group_id(comparison_key):
     return "|".join(comparison_key)
 
 
+def _finite_score(value):
+    try:
+        score = float(value)
+    except (TypeError, ValueError):
+        return None
+    return score if math.isfinite(score) else None
+
+
 def _group_winner_evidence(comparison_key, group):
     ranked = sorted(
         group,
@@ -153,6 +161,16 @@ def _stage_comparison(card, stage, stage_data):
             sources, "measurement_settings", "measurement", "measurement_config"
         ),
     }
+    score = _finite_score(stage_data.get("score"))
+    if score is None:
+        return {
+            "stage": stage,
+            "score": stage_data.get("score"),
+            "comparable": False,
+            "basis": basis,
+            "missing_fields": [],
+            "reason": "不可比較：score 必須是有限數值",
+        }
     missing = [field for field in _RANKING_FIELDS if basis[field] in (None, "", {})]
     if missing:
         return {
@@ -166,7 +184,7 @@ def _stage_comparison(card, stage, stage_data):
     comparison_key = _comparison_key_from_basis(basis)
     return {
         "stage": stage,
-        "score": float(stage_data["score"]),
+        "score": score,
         "comparable": True,
         "basis": basis,
         "comparison_key": comparison_key,
@@ -178,6 +196,11 @@ def _normalise_ranking_evaluation(evaluation):
     if not isinstance(evaluation, dict) or evaluation.get("comparable") is False:
         return None
     basis = evaluation.get("basis")
+    if not isinstance(basis, dict):
+        return None
+    stage = basis.get("stage")
+    if not isinstance(stage, str) or stage not in _RANKING_STAGE_PRIORITY:
+        return None
     comparison_key = _comparison_key_from_basis(basis)
     if comparison_key is None:
         return None
@@ -188,11 +211,8 @@ def _normalise_ranking_evaluation(evaluation):
                 return None
         except TypeError:
             return None
-    try:
-        score = float(evaluation["score"])
-    except (KeyError, TypeError, ValueError):
-        return None
-    if not math.isfinite(score):
+    score = _finite_score(evaluation.get("score"))
+    if score is None:
         return None
     return dict(
         evaluation,
@@ -252,13 +272,14 @@ def _rank_candidate_evaluations(candidates):
             if normalized is not None and qualified:
                 entries.append(item)
             else:
-                reports[path]["elimination_basis"].append(
-                    {
-                        "stage": evaluation.get("stage"),
-                        "missing_fields": evaluation.get("missing_fields")
-                        or _RANKING_FIELDS,
-                    }
-                )
+                detail = {"stage": evaluation.get("stage")}
+                if evaluation.get("reason"):
+                    detail["reason"] = evaluation["reason"]
+                else:
+                    detail["missing_fields"] = (
+                        evaluation.get("missing_fields") or _RANKING_FIELDS
+                    )
+                reports[path]["elimination_basis"].append(detail)
 
     groups = {}
     for item in entries:
@@ -369,6 +390,8 @@ def _rank_candidate_evaluations(candidates):
             best_label = "全域最佳版本"
 
     ranking_metadata = {
+        "ranking_policy": "same_benchmark_basis_only",
+        "cross_benchmark_aggregation": False,
         "best_status": best_status,
         "best_scope": best_scope,
         "best_label": best_label,

@@ -36,6 +36,39 @@ def test_ranking_does_not_mix_smoke_and_dev_scores():
     assert "排名基準" in next(row["reason"] for row in report if row["candidate_path"] == "smoke-99")
 
 
+def test_ranking_declares_no_cross_benchmark_score_aggregation():
+    candidate = _candidate("dev-90", [_evaluation("dev", 90.0)])
+
+    winner, report = auto_evolve._rank_candidate_evaluations([candidate])
+
+    assert winner["ranking_policy"] == "same_benchmark_basis_only"
+    assert winner["cross_benchmark_aggregation"] is False
+    assert report[0]["cross_benchmark_aggregation"] is False
+
+
+def test_ranking_rejects_non_finite_score_before_grouping():
+    card = {
+        "candidate_path": "nan-score",
+        "status": "evaluated",
+        "question_file": "questions/dev.jsonl",
+        "metric": "average_score",
+        "evaluator_version": "evaluate-v1",
+        "measurement_settings": {"score_scale": "0-100"},
+        "dev": {"score": float("nan")},
+    }
+
+    evaluation = auto_evolve._candidate_stage_evaluations(card)
+    winner, report = auto_evolve._rank_candidate_evaluations([
+        {**card, "stage_evaluations": evaluation},
+    ])
+
+    assert winner is None
+    assert report[0]["elimination_basis"][-1] == {
+        "stage": "dev",
+        "reason": "不可比較：score 必須是有限數值",
+    }
+
+
 def test_ranking_does_not_claim_unique_winner_on_equal_scores():
     first = _candidate("candidate-b", [_evaluation("dev", 90.0)])
     second = _candidate("candidate-a", [_evaluation("dev", 90.0)])
