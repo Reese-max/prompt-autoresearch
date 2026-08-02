@@ -686,34 +686,51 @@ def _winner_data(baseline_meta, is_valid, rerun_settings, commands):
     return {
         "candidate_id": baseline_meta.get("prompt_hash") if baseline_meta and is_valid else None,
         "kind": "global_baseline",
-        "decision": "ADOPT" if is_valid else "INCONCLUSIVE",
+        "decision": "ADOPT" if is_valid else INCOMPLETE_EVIDENCE,
         "prompt": prompt,
-        "workflow": {
-            "steps": [
-                "讀取完整 winner 提示詞",
-                "依序以 smoke、dev、holdout 題庫評測",
-                "執行 gatekeeper 與接受條件檢查",
-                "保留 scorecard、summary、details 與執行紀錄",
-            ],
-            "commands": commands,
-        },
+        "workflow": _winner_workflow(commands),
         "scores": _baseline_scores(baseline_meta or {}) if is_valid else {},
+    }
+
+
+def _winner_workflow(commands):
+    return {
+        "steps": [
+            "讀取完整 winner 提示詞",
+            "依序以 smoke、dev、holdout 題庫評測",
+            "執行 gatekeeper 與接受條件檢查",
+            "保留 scorecard、summary、details 與執行紀錄",
+        ],
+        "commands": commands,
     }
 
 
 # ---------- 證據完整性閘門 ----------
 
 EVIDENCE_INTEGRITY_ERRORS = []
+INCOMPLETE_EVIDENCE = "INCOMPLETE_EVIDENCE"
 
 
-def verify_evidence_integrity(baseline_meta, champions, cards, sessions, config):
+def verify_evidence_integrity(
+    baseline_meta,
+    champions,
+    cards,
+    sessions,
+    config,
+    *,
+    workflow=None,
+    measurement_basis=None,
+    candidate_comparison=None,
+    evidence_checks=None,
+    execution_records=None,
+):
     """驗證冠軍選優所需的關鍵證據是否齊全。
 
     回傳 (is_valid: bool, errors: list[str])：
     - is_valid: True 表示所有關鍵證據齊全，可安全選優。
     - errors: 缺失的證據類型描述列表。
 
-    缺少任一項關鍵證據時，報告必須輸出 inconclusive 並拒絕選優。
+    缺少任一項關鍵證據時，報告必須輸出 INCOMPLETE_EVIDENCE 並拒絕選優。
     """
     global EVIDENCE_INTEGRITY_ERRORS
     errors = []
@@ -726,6 +743,17 @@ def verify_evidence_integrity(baseline_meta, champions, cards, sessions, config)
             has_prompt = True
     if not has_prompt:
         errors.append("缺少可讀提示詞／流程（baseline.meta.json 中無有效 prompt_hash）")
+
+    if workflow is not None:
+        steps = workflow.get("steps") if isinstance(workflow, dict) else None
+        commands = workflow.get("commands") if isinstance(workflow, dict) else None
+        if not (
+            isinstance(steps, list)
+            and any(isinstance(step, str) and step.strip() for step in steps)
+            and isinstance(commands, list)
+            and any(commands)
+        ):
+            errors.append("缺少提示詞／流程內容（workflow steps 或 commands 為空）")
 
     # 2. 可驗證分數與量測基準：baseline_meta 必須含有 dev_avg 和 holdout_avg
     has_scores = False
@@ -741,11 +769,40 @@ def verify_evidence_integrity(baseline_meta, champions, cards, sessions, config)
     if not has_scores:
         errors.append("缺少可驗證分數與量測基準（baseline.meta.json 中無有效 dev_avg/holdout_avg）")
 
+    if candidate_comparison is not None:
+        incomplete_candidates = [
+            row for row in candidate_comparison
+            if isinstance(row, dict)
+            and row.get("classification") in {"accepted", "rejected"}
+            and not row.get("path")
+        ]
+        if incomplete_candidates:
+            errors.append("缺少提示詞／流程內容（候選沒有可讀 candidate_path）")
+        baseline_rows = [
+            row for row in candidate_comparison
+            if isinstance(row, dict)
+            and isinstance(row.get("baseline_scores"), dict)
+            and all(
+                _number((row["baseline_scores"].get(dataset) or {}).get("score")) is not None
+                for dataset in ("dev", "holdout")
+            )
+        ]
+        if not baseline_rows:
+            errors.append("缺少同基準評測結果（候選未攜帶可驗證的 dev/holdout baseline 分數）")
+
     # 3. 有效比較對象／淘汰依據：至少有一個候選且有有效的決策記錄
     has_comparison = False
     if cards:
         accepted, rejected, pending = classify_candidates(cards)
         has_comparison = len(accepted) > 0 or len(rejected) > 0
+    if candidate_comparison is not None:
+        has_comparison = any(
+            isinstance(row, dict)
+            and row.get("candidate_id")
+            and row.get("path")
+            and row.get("classification") in {"accepted", "rejected"}
+            for row in candidate_comparison
+        )
     if not has_comparison:
         errors.append("缺少有效比較對象／淘汰依據（無候選分數卡或無有效決策記錄）")
 
@@ -767,6 +824,30 @@ def verify_evidence_integrity(baseline_meta, champions, cards, sessions, config)
         has_config = len(config) > 0
     if not has_config:
         errors.append("缺少重現設定（config.yaml 無法讀取或為空）")
+
+    if measurement_basis is not None:
+        thresholds = config.get("thresholds") if isinstance(config, dict) else None
+        if not (
+            isinstance(measurement_basis, dict)
+            and measurement_basis.get("datasets")
+            and measurement_basis.get("acceptance_criteria")
+            and isinstance(thresholds, dict)
+            and thresholds
+        ):
+            errors.append("缺少量測方法（datasets、acceptance_criteria 或 thresholds 不完整）")
+
+    if execution_records is not None and not isinstance(execution_records, list):
+        errors.append("缺少有效執行證據（execution records 格式無效）")
+    elif execution_records is not None and not execution_records:
+        errors.append("缺少有效執行證據（沒有可追溯的 execution records）")
+
+    if evidence_checks is not None:
+        invalid_checks = [
+            check for check in evidence_checks
+            if not isinstance(check, dict) or check.get("ok") is not True
+        ]
+        if invalid_checks:
+            errors.append("缺少有效執行證據（關鍵證據檔案不存在、為空或雜湊不一致）")
 
     EVIDENCE_INTEGRITY_ERRORS = errors
     return len(errors) == 0, errors
@@ -1146,21 +1227,30 @@ def build_structured_report(limit=10):
     records = read_jsonl(EVOLUTION_LOG_PATH)
     now = time.strftime("%Y-%m-%d %H:%M:%S")
 
-    is_valid, evidence_errors = verify_evidence_integrity(
-        baseline_meta, champions, cards, sessions, config
-    )
-    evidence_checks = collect_evidence_verification(baseline_meta, champions, cards)
-    verification_valid = all(c["ok"] for c in evidence_checks)
-    if not verification_valid:
-        evidence_errors.append("關鍵證據檔案缺漏或雜湊不一致")
-    is_valid = is_valid and verification_valid
-
     rerun_settings = collect_rerun_settings(baseline_meta, champions, config, sessions)
     commands = collect_reproduction_commands(baseline_meta, config)
     environment = collect_environment()
     input_versions = collect_input_versions(baseline_meta, champions, cards, sessions)
     measurement_basis = collect_measurement_basis(config, baseline_meta, input_versions)
     candidate_comparison = build_candidate_comparisons(cards, baseline_meta)
+    evidence_checks = collect_evidence_verification(baseline_meta, champions, cards)
+    is_valid, evidence_errors = verify_evidence_integrity(
+        baseline_meta,
+        champions,
+        cards,
+        sessions,
+        config,
+        workflow=_winner_workflow(commands),
+        measurement_basis=measurement_basis,
+        candidate_comparison=candidate_comparison,
+        evidence_checks=evidence_checks,
+        execution_records=records,
+    )
+    verification_valid = all(c["ok"] for c in evidence_checks)
+    if not verification_valid and not any("有效執行證據" in error for error in evidence_errors):
+        evidence_errors.append("關鍵證據檔案缺漏或雜湊不一致")
+    is_valid = is_valid and verification_valid
+
     winner = _winner_data(baseline_meta, is_valid, rerun_settings, commands)
 
     type_champions = []
@@ -1191,11 +1281,13 @@ def build_structured_report(limit=10):
         "generated_at": now,
         "decision": {
             "status": "valid" if is_valid else "inconclusive",
+            "code": "VALID" if is_valid else INCOMPLETE_EVIDENCE,
             "reason": "證據完整且通過重新驗證" if is_valid else "證據不完整，拒絕選優",
             "best_candidate_id": winner["candidate_id"],
         },
         "evidence_integrity": {
             "valid": is_valid,
+            "status": "VALID" if is_valid else INCOMPLETE_EVIDENCE,
             "errors": evidence_errors,
         },
         "evidence_verification": {
@@ -1216,7 +1308,7 @@ def build_structured_report(limit=10):
         "quality": {
             "baseline": _baseline_scores(baseline_meta),
             "winner": winner["scores"],
-            "type_champions": type_champions,
+            "type_champions": type_champions if is_valid else [],
             "measurement_basis": measurement_basis,
         },
         "candidate_comparison": candidate_comparison,
@@ -1303,6 +1395,7 @@ def build_report(limit=10, structured=None):
     if not is_valid:
         lines.append("## ⚠️ 證據完整性閘門：INCONCLUSIVE")
         lines.append("")
+        lines.append(f"**選優狀態碼：{INCOMPLETE_EVIDENCE}**")
         lines.append("**報告判定：inconclusive** — 缺少關鍵證據，拒絕選優。")
         lines.append("")
         lines.append("缺失項目：")
@@ -1310,10 +1403,12 @@ def build_report(limit=10, structured=None):
             lines.append(f"- {err}")
         lines.append("")
         lines.append("根據證據完整性閘門規則，缺少以下任一關鍵證據時，不得宣稱任何版本為最佳：")
-        lines.append("1. 可讀提示詞／流程")
-        lines.append("2. 可驗證分數與量測基準")
-        lines.append("3. 有效比較對象／淘汰依據")
-        lines.append("4. 重現設定與執行紀錄")
+        lines.append("1. 提示詞／流程內容")
+        lines.append("2. 同基準評測結果")
+        lines.append("3. 有效比較母體／淘汰依據")
+        lines.append("4. 量測方法")
+        lines.append("5. 重現設定")
+        lines.append("6. 有效執行證據")
         lines.append("")
     else:
         lines.append("## ✅ 證據完整性閘門：PASS")

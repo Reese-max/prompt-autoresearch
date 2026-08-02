@@ -785,6 +785,26 @@ def test_build_structured_report_is_complete_and_unlimited(sandbox):
     assert bvr.validate_report_schema(data) is True
 
 
+def test_incomplete_evidence_has_explicit_code_and_no_best_claim(sandbox):
+    write_baseline_meta(sandbox)
+    write_champion_meta(sandbox, "legal_case")
+    write_scorecard(sandbox, "cand_1", final_decision="ACCEPT")
+    write_config(sandbox)
+    write_evolution_log(sandbox, [
+        {"event": "start", "timestamp": "2026-01-01 00:00:00", "args": {}},
+        {"event": "stop", "timestamp": "2026-01-01 00:01:00"},
+    ])
+
+    data = bvr.build_structured_report()
+
+    assert data["decision"]["code"] == "INCOMPLETE_EVIDENCE"
+    assert data["evidence_integrity"]["status"] == "INCOMPLETE_EVIDENCE"
+    assert data["decision"]["best_candidate_id"] is None
+    assert data["winner"]["decision"] == "INCOMPLETE_EVIDENCE"
+    assert data["quality"]["type_champions"] == []
+    assert "INCOMPLETE_EVIDENCE" in bvr.build_report(structured=data)
+
+
 def test_validate_report_schema_rejects_missing_required_field(sandbox):
     data = bvr.build_structured_report()
     del data["winner"]
