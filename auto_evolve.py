@@ -187,6 +187,8 @@ def _rank_candidate_evaluations(candidates):
         groups.setdefault(item["evaluation"]["comparison_key"], []).append(item)
     winner = None
     selected_key = None
+    tied_paths = []
+    tied_score = None
     if groups:
         preferred_stage = min(
             (item["evaluation"]["stage"] for item in entries),
@@ -204,13 +206,19 @@ def _rank_candidate_evaluations(candidates):
         ]
         if len(largest_groups) == 1:
             selected_key, group = largest_groups[0]
-            winner = max(
-                group,
-                key=lambda item: (
-                    item["evaluation"]["score"],
-                    item["candidate"].get("candidate_path", ""),
-                ),
-            )["candidate"]
+            top_score = max(item["evaluation"]["score"] for item in group)
+            top_items = [
+                item for item in group
+                if item["evaluation"]["score"] == top_score
+            ]
+            if len(top_items) == 1:
+                winner = top_items[0]["candidate"]
+            else:
+                tied_score = top_score
+                tied_paths = [
+                    item["candidate"].get("candidate_path", "")
+                    for item in top_items
+                ]
 
     winner_item = next(
         (
@@ -221,7 +229,11 @@ def _rank_candidate_evaluations(candidates):
         ),
         None,
     )
-    winner_score = winner_item["evaluation"]["score"] if winner_item else None
+    winner_score = (
+        winner_item["evaluation"]["score"]
+        if winner_item
+        else tied_score
+    )
     best_status = "unproven"
     best_scope = "comparison_group"
     best_label = "該比較群組內最佳"
@@ -263,7 +275,10 @@ def _rank_candidate_evaluations(candidates):
                 "required_basis": expected_basis,
                 "missing_fields": pending_fields or ["comparison_key"],
             })
-        if not missing_candidates:
+        if tied_paths:
+            best_status = "inconclusive"
+            best_label = "並列最佳"
+        elif not missing_candidates:
             best_status = "proven"
             best_scope = "global"
             best_label = "全域最佳版本"
@@ -272,6 +287,7 @@ def _rank_candidate_evaluations(candidates):
         "best_status": best_status,
         "best_scope": best_scope,
         "best_label": best_label,
+        "best_candidates": tied_paths,
         "missing_candidates": missing_candidates,
         "pending_evaluation_fields": {
             item["candidate_path"]: item["missing_fields"]
@@ -294,7 +310,13 @@ def _rank_candidate_evaluations(candidates):
             if selected_key is not None
             and item["evaluation"]["comparison_key"] == selected_key
         ]
-        if winner and path == winner.get("candidate_path") and selected:
+        if tied_paths and path in tied_paths and selected:
+            report.update({
+                "outcome": "並列最佳",
+                "reason": f"同一比較基準下最高分 {winner_score:.2f}，沒有預先定義且可稽核的 tie-breaker",
+                "elimination_basis": [],
+            })
+        elif winner and path == winner.get("candidate_path") and selected:
             report.update({
                 "outcome": "勝出",
                 "reason": (
@@ -304,9 +326,10 @@ def _rank_candidate_evaluations(candidates):
             })
         elif selected:
             score = selected[0]["evaluation"]["score"]
+            comparison_target = "並列最佳" if tied_paths else "勝者"
             report.update({
                 "outcome": "落敗",
-                "reason": f"{best_label}，同一比較基準下低於勝者 {score:.2f} < {winner_score:.2f}",
+                "reason": f"{best_label}，同一比較基準下低於{comparison_target} {score:.2f} < {winner_score:.2f}",
                 "elimination_basis": ["lower_score_in_same_comparison_group"],
             })
         elif matching:

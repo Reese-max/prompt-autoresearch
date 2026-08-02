@@ -36,6 +36,21 @@ def test_ranking_does_not_mix_smoke_and_dev_scores():
     assert "排名基準" in next(row["reason"] for row in report if row["candidate_path"] == "smoke-99")
 
 
+def test_ranking_does_not_claim_unique_winner_on_equal_scores():
+    first = _candidate("candidate-b", [_evaluation("dev", 90.0)])
+    second = _candidate("candidate-a", [_evaluation("dev", 90.0)])
+
+    winner, report = auto_evolve._rank_candidate_evaluations([first, second])
+
+    assert winner is None
+    by_path = {row["candidate_path"]: row for row in report}
+    assert {row["outcome"] for row in by_path.values()} == {"並列最佳"}
+    assert {row["best_status"] for row in by_path.values()} == {"inconclusive"}
+    assert set(next(iter(by_path.values()))["best_candidates"]) == {
+        "candidate-a", "candidate-b"
+    }
+
+
 def test_ranking_marks_group_winner_unproven_when_candidate_lacks_selected_basis():
     dev = _candidate("dev-90", [_evaluation("dev", 90.0)])
     smoke = _candidate("smoke-99", [_evaluation("smoke", 99.0, "questions/smoke.jsonl")])
