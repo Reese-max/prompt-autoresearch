@@ -74,3 +74,40 @@ def test_inverted_score_scales_never_share_a_global_winner():
     }
     assert groups["benchmarks/normalized.jsonl"]["winner"]["candidate_path"] == "normalized-v2"
     assert groups["benchmarks/percentage.jsonl"]["winner"]["candidate_path"] == "percentage-v2"
+
+
+def test_explicit_benchmark_id_keeps_each_group_winner_separate():
+    def candidate(path, benchmark_id, score, scale):
+        return {
+            "candidate_path": path,
+            "benchmark_id": benchmark_id,
+            "status": "evaluated",
+            "stage_evaluations": [{
+                "stage": "dev",
+                "score": score,
+                "comparable": True,
+                "basis": {
+                    "stage": "dev",
+                    "metric": "raw_score",
+                    "evaluator_version": "judge-v1",
+                    "measurement_settings": {"score_scale": scale},
+                },
+            }],
+        }
+
+    candidates = [
+        candidate("fractional-v1", "fractional", 0.81, "0-1"),
+        candidate("fractional-v2", "fractional", 0.94, "0-1"),
+        candidate("percentage-v1", "percentage", 72, "0-100"),
+        candidate("percentage-v2", "percentage", 88, "0-100"),
+    ]
+
+    winner, report = auto_evolve._rank_candidate_evaluations(candidates)
+
+    assert winner is None
+    groups = {group["benchmark_id"]: group for group in report[0]["benchmark_groups"]}
+    assert groups["fractional"]["winner"]["candidate_path"] == "fractional-v2"
+    assert groups["percentage"]["winner"]["candidate_path"] == "percentage-v2"
+    assert report[0]["best_versions_by_benchmark"] == {
+        group["id"]: group["winner"] for group in groups.values()
+    }
