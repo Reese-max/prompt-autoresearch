@@ -14,10 +14,12 @@ run_opt.py — Prompt AutoResearch v3 單次演化優化入口
 import os
 import sys
 import json
+import math
 import re
 import time
 import shutil
 import subprocess
+from datetime import datetime, timezone
 
 from lib.api import call_minimax
 from lib.config import get
@@ -67,6 +69,12 @@ SMOKE_MIN_SCORE = get("thresholds", "smoke_min_score", 75.0)
 SMOKE_WORD_RATE_MIN = get("thresholds", "smoke_word_rate_min", 70.0)
 DEV_WORD_RATE_MIN = get("thresholds", "word_rate_min", 85.0)
 RISK_PERFECT_RATE_MIN = get("thresholds", "risk_perfect_rate_min", 100.0)
+
+EXECUTION_STATUS_QUALITY_MEASUREMENT = "quality_measurement_obtained"
+EXECUTION_STATUS_MODEL_ERROR = "model_or_evaluator_error"
+EXECUTION_STATUS_TIMEOUT = "timeout"
+EXECUTION_STATUS_QUOTA_ROUTING = "quota_or_routing_failure"
+EXECUTION_STATUS_INVALID_OUTPUT = "invalid_output"
 
 def int_env(name, default):
     try:
@@ -246,6 +254,174 @@ def update_candidate_scorecard(cand_path, **updates):
     write_json(card_path, card)
 
 
+def _execution_timestamp():
+    return datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")
+
+
+def _text_value(value):
+    if value is None:
+        return ""
+    if isinstance(value, bytes):
+        return value.decode("utf-8", errors="replace")
+    return str(value)
+
+
+def _api_execution_settings():
+    try:
+        model = get("api", "model", "")
+        timeout = get("api", "timeout", None)
+    except Exception:
+        model, timeout = "", None
+    return {"model": model, "timeout": timeout, "timeout_seconds": timeout}
+
+
+def _execution_error_evidence(result, run_dir, summary, completion):
+    errors = []
+    details_error = ""
+    try:
+        detail_rows = read_details(run_dir) if run_dir else []
+    except (OSError, ValueError, TypeError) as exc:
+        detail_rows = []
+        details_error = f"details.jsonl: {_text_value(exc)}"
+    for row in detail_rows:
+        if row.get("error"):
+            errors.append({
+                "id": row.get("id"),
+                "error": _text_value(row.get("error")),
+                "raw_output": _text_value(row.get("raw_judge_output")),
+            })
+    return {
+        "returncode": getattr(result, "returncode", None),
+        "stdout": _text_value(getattr(result, "stdout", "")),
+        "stderr": _text_value(getattr(result, "stderr", "")),
+        "exception": _text_value(getattr(result, "error", "")),
+        "rejection_reason": completion.get("rejection_reason", ""),
+        "rejection_reasons": completion.get("rejection_reasons", []),
+        "missing_evidence_types": completion.get("missing_evidence_types", []),
+        "evidence_errors": completion.get("evidence_errors", []) or summary.get("evidence_errors", []),
+        "result_errors": errors,
+        "details_error": details_error,
+    }
+
+
+def _execution_text(result, summary, completion, error_evidence):
+    return " ".join(
+        _text_value(value)
+        for value in (
+            getattr(result, "error", ""),
+            getattr(result, "stdout", ""),
+            getattr(result, "stderr", ""),
+            completion.get("rejection_reason", ""),
+            " ".join(completion.get("rejection_reasons", [])),
+            " ".join(summary.get("evidence_errors", []) or []),
+            json.dumps(error_evidence.get("result_errors", []), ensure_ascii=False),
+            error_evidence.get("details_error", ""),
+        )
+    ).lower()
+
+
+def _quality_score(summary):
+    value = summary.get("score", summary.get("average_score"))
+    try:
+        value = float(value)
+    except (TypeError, ValueError):
+        return None
+    return value if math.isfinite(value) and value > 0 else None
+
+
+def _classify_execution_status(result, run_dir, summary, completion, error_evidence):
+    text = _execution_text(result, summary, completion, error_evidence)
+    if (
+        getattr(result, "timed_out", False)
+        or isinstance(getattr(result, "error", None), subprocess.TimeoutExpired)
+        or re.search(r"timeout|timed out|time out|逾時|超時", text)
+    ):
+        return EXECUTION_STATUS_TIMEOUT
+    if re.search(
+        r"\b(?:401|402|403|408|429|500|502|503|504)\b|quota|rate[ _-]?limit|routing|route|路由|配額|限流|unauthori[sz]ed|forbidden|api key",
+        text,
+    ):
+        return EXECUTION_STATUS_QUOTA_ROUTING
+    if (
+        completion.get("status") == "completed"
+        and not summary.get("error_count", 0)
+        and run_dir
+        and _quality_score(summary) is not None
+    ):
+        return EXECUTION_STATUS_QUALITY_MEASUREMENT
+    if re.search(r"json|parse|解析|格式|invalid output|malformed|missing evidence|no valid output", text):
+        return EXECUTION_STATUS_INVALID_OUTPUT
+    return EXECUTION_STATUS_MODEL_ERROR
+
+
+def build_candidate_execution_record(
+    stage,
+    attempt,
+    result,
+    run_dir,
+    summary,
+    completion,
+    candidate_id="",
+):
+    """建立候選評測 attempt；只有取得有效品質量測才附帶 quality_measurement。"""
+    summary = summary if isinstance(summary, dict) else {}
+    completion = completion if isinstance(completion, dict) else {}
+    error_evidence = _execution_error_evidence(result, run_dir, summary, completion)
+    status = _classify_execution_status(result, run_dir, summary, completion, error_evidence)
+    started_at = getattr(result, "execution_started_at", "") or _execution_timestamp()
+    ended_at = getattr(result, "execution_ended_at", "") or _execution_timestamp()
+    settings = _api_execution_settings()
+    record = {
+        "candidate_id": candidate_id,
+        "stage": stage,
+        "attempt": attempt,
+        "model": settings["model"],
+        "timeout": settings["timeout"],
+        "timeout_seconds": settings["timeout_seconds"],
+        "started_at": started_at,
+        "ended_at": ended_at,
+        "run": run_dir or "",
+        "execution_status": status,
+        "failure_classification": None if status == EXECUTION_STATUS_QUALITY_MEASUREMENT else status,
+        "error_evidence": {} if status == EXECUTION_STATUS_QUALITY_MEASUREMENT else error_evidence,
+    }
+    if status == EXECUTION_STATUS_QUALITY_MEASUREMENT:
+        record["quality_measurement"] = {
+            "metric": "average_score",
+            "score": _quality_score(summary),
+        }
+    return record
+
+
+def append_candidate_execution_record(cand_path, record):
+    """將 attempt 追加到 scorecard；失敗 record 不會產生 score 欄位。"""
+    card_path = scorecard_path(cand_path)
+    card = load_json(card_path)
+    records = card.get("execution_records", [])
+    if not isinstance(records, list):
+        records = []
+    record = dict(record)
+    stage = record.get("stage")
+    record["attempt"] = 1 + sum(1 for item in records if isinstance(item, dict) and item.get("stage") == stage)
+    records.append(record)
+    card["execution_records"] = records
+    card["updated_at"] = time.strftime("%Y-%m-%d %H:%M:%S")
+    write_json(card_path, card)
+
+
+def _execution_stage_fields(record):
+    return {
+        "execution_status": record["execution_status"],
+        "failure_classification": record["failure_classification"],
+        "attempt": record["attempt"],
+        "model": record["model"],
+        "timeout": record["timeout"],
+        "started_at": record["started_at"],
+        "ended_at": record["ended_at"],
+        "error_evidence": record["error_evidence"],
+    }
+
+
 def _workspace_root_for_run(run_dir):
     """由 runs/<name> 或測試用單層目錄推導證據工作區。"""
     if not run_dir:
@@ -290,12 +466,33 @@ def evaluation_completion(result, run_dir, summary):
         })
     elif disposition["status"] == "failed" and disposition["reason_code"] == "NO_VALID_EVIDENCE":
         disposition["reason_code"] = "NO_VALID_OUTPUT"
+    if disposition["status"] == "completed" and normalized_summary.get("error_count", 0):
+        disposition.update({
+            "status": "failed",
+            "reason_code": "MODEL_OR_EVALUATOR_ERROR",
+            "rejection_reason": "評測結果含有錯誤，品質量測不可用",
+            "rejection_reasons": ["summary.error_count > 0"],
+            "missing_evidence_types": ["quality_measurement"],
+        })
+    details_path = os.path.join(run_dir, "details.jsonl") if run_dir else ""
+    if disposition["status"] == "completed" and os.path.isfile(details_path) and not results:
+        disposition.update({
+            "status": "failed",
+            "reason_code": "INVALID_OUTPUT",
+            "rejection_reason": "details.jsonl 無法提供可解析的評測結果",
+            "rejection_reasons": ["details.jsonl is missing or invalid"],
+            "missing_evidence_types": ["results", "quality_measurement"],
+        })
     return disposition
 
 
 def mark_candidate_evaluation_failed(cand_path, stage, result, run_dir, summary):
     """將無有效產出的候選標為 failed，並留下可解析的拒絕證據。"""
     disposition = evaluation_completion(result, run_dir, summary)
+    execution_record = build_candidate_execution_record(
+        stage, 1, result, run_dir, summary, disposition, candidate_id=cand_path,
+    )
+    append_candidate_execution_record(cand_path, execution_record)
     stage_data = {
         "passed": False,
         "run": run_dir,
@@ -303,6 +500,7 @@ def mark_candidate_evaluation_failed(cand_path, stage, result, run_dir, summary)
         "completion": disposition,
         "reason_code": disposition["reason_code"],
         "missing_evidence_types": disposition["missing_evidence_types"],
+        **_execution_stage_fields(execution_record),
     }
     reasons = [f"{stage}:{reason}" for reason in disposition["rejection_reasons"]]
     update_candidate_scorecard(
@@ -572,17 +770,35 @@ def newest_run_after(before_dirs):
 def run_evaluate(prompt_path, question_file, parallel, capture=False):
     before_dirs = list_run_dirs()
     cmd = [PYTHON_BIN, "scripts/evaluate.py", prompt_path, question_file, "--parallel", str(parallel)]
+    started_at = _execution_timestamp()
     if capture:
-        res = subprocess.run(
-            cmd,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-        )
+        try:
+            res = subprocess.run(
+                cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+            )
+        except subprocess.TimeoutExpired as exc:
+            res = subprocess.CompletedProcess(
+                cmd,
+                124,
+                stdout=_text_value(exc.stdout),
+                stderr=_text_value(exc.stderr),
+            )
+            res.timed_out = True
+            res.error = exc
     else:
-        res = subprocess.run(cmd)
+        try:
+            res = subprocess.run(cmd)
+        except subprocess.TimeoutExpired as exc:
+            res = subprocess.CompletedProcess(cmd, 124)
+            res.timed_out = True
+            res.error = exc
+    res.execution_started_at = started_at
+    res.execution_ended_at = _execution_timestamp()
     run_dir = newest_run_after(before_dirs)
     return res, run_dir, read_summary(run_dir) if run_dir else {}
 
@@ -892,6 +1108,11 @@ def run_opt_pass(smoke_parallel=None, dev_parallel=None, holdout_parallel=None, 
             and not smoke_governance_notes
         )
         if passed_smoke:
+            smoke_execution = build_candidate_execution_record(
+                "smoke", 1, smoke_res, smoke_run, smoke_summary, smoke_completion,
+                candidate_id=cand_path,
+            )
+            append_candidate_execution_record(cand_path, smoke_execution)
             print(f"  - {C_GREEN}✅ 候選 {ci+1} (temp={temp}) Smoke 通過：{smoke_score:.2f}{C_RESET}")
             update_candidate_scorecard(
                 cand_path,
@@ -906,6 +1127,7 @@ def run_opt_pass(smoke_parallel=None, dev_parallel=None, holdout_parallel=None, 
                     "error_count": smoke_summary.get("error_count", 0),
                     "type_averages": smoke_summary.get("type_averages", {}),
                     "completion": smoke_completion,
+                    **_execution_stage_fields(smoke_execution),
                 },
                 status="smoke_passed",
             )
@@ -962,7 +1184,9 @@ def run_opt_pass(smoke_parallel=None, dev_parallel=None, holdout_parallel=None, 
     # 步驟 5：第三層 — 全量開發測試（Dev Test）
     # --------------------------------------------------
     print(f"\n{C_YELLOW}[步驟 5] 第三層：全量開發測試 (Dev Test，36題，併緒 {dev_parallel})...{C_RESET}")
-    dev_res, dev_run_dir, dev_summary = run_evaluate(PROMPT_PATH, "questions/dev.jsonl", dev_parallel)
+    dev_res, dev_run_dir, dev_summary = run_evaluate(
+        PROMPT_PATH, "questions/dev.jsonl", dev_parallel, capture=True,
+    )
     dev_completion = evaluation_completion(dev_res, dev_run_dir, dev_summary)
     if dev_completion["status"] != "completed":
         mark_candidate_evaluation_failed(cand_path, "dev", dev_res, dev_run_dir, dev_summary)
@@ -974,6 +1198,11 @@ def run_opt_pass(smoke_parallel=None, dev_parallel=None, holdout_parallel=None, 
             f"# Decision\n\n- decision: REVERT\n- stage: dev\n- direction: {direction}\n- hypothesis: {hypothesis}\n- reason: {reason}\n",
         )
         return False
+    dev_execution = build_candidate_execution_record(
+        "dev", 1, dev_res, dev_run_dir, dev_summary, dev_completion,
+        candidate_id=cand_path,
+    )
+    append_candidate_execution_record(cand_path, dev_execution)
     dev_governance_notes = governance_notes(dev_summary, "dev")
     if dev_governance_notes:
         print(f"  - {C_RED}❌ Dev 治理門檻未通過：{'；'.join(dev_governance_notes)}{C_RESET}")
@@ -989,6 +1218,7 @@ def run_opt_pass(smoke_parallel=None, dev_parallel=None, holdout_parallel=None, 
             "governance_notes": dev_governance_notes,
             "type_averages": dev_summary.get("type_averages", {}),
             "completion": dev_completion,
+            **_execution_stage_fields(dev_execution),
         },
         status="dev_evaluated",
     )
@@ -1057,7 +1287,9 @@ def run_opt_pass(smoke_parallel=None, dev_parallel=None, holdout_parallel=None, 
 
     if accept:
         print(f"\n{C_YELLOW}[步驟 7] 啟動防過擬合 Holdout 盲測題庫驗證（併緒 {holdout_parallel}）...{C_RESET}")
-        holdout_res, holdout_run_dir, holdout_summary = run_evaluate(PROMPT_PATH, "questions/holdout.jsonl", holdout_parallel)
+        holdout_res, holdout_run_dir, holdout_summary = run_evaluate(
+            PROMPT_PATH, "questions/holdout.jsonl", holdout_parallel, capture=True,
+        )
         holdout_completion = evaluation_completion(holdout_res, holdout_run_dir, holdout_summary)
         if holdout_completion["status"] != "completed":
             mark_candidate_evaluation_failed(cand_path, "holdout", holdout_res, holdout_run_dir, holdout_summary)
@@ -1068,6 +1300,11 @@ def run_opt_pass(smoke_parallel=None, dev_parallel=None, holdout_parallel=None, 
                 f"# Decision\n\n- decision: REVERT\n- stage: holdout\n- reason: {reason}\n",
             )
             return False
+        holdout_execution = build_candidate_execution_record(
+            "holdout", 1, holdout_res, holdout_run_dir, holdout_summary, holdout_completion,
+            candidate_id=cand_path,
+        )
+        append_candidate_execution_record(cand_path, holdout_execution)
         holdout_governance_notes = governance_notes(holdout_summary, "holdout")
         if holdout_res.returncode != 0 or not holdout_run_dir:
             holdout_accept = False
@@ -1099,6 +1336,7 @@ def run_opt_pass(smoke_parallel=None, dev_parallel=None, holdout_parallel=None, 
                 "governance_notes": holdout_governance_notes,
                 "type_averages": holdout_summary.get("type_averages", {}),
                 "completion": holdout_completion,
+                **_execution_stage_fields(holdout_execution),
             },
         )
 

@@ -581,6 +581,7 @@ def build_candidate_comparisons(cards, baseline_meta):
             "scores": scores,
             "baseline_scores": baseline_scores,
             "deltas": deltas,
+            "execution_records": card.get("execution_records", []),
             "comparison_basis": comparison_basis,
             "comparison_basis_source": basis_source,
             "measurement_gaps": measurement_gaps,
