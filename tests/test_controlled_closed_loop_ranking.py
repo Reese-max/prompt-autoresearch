@@ -83,6 +83,50 @@ def test_ranking_rejects_mismatched_evaluator_basis_but_keeps_same_group():
     assert by_path["dev-v2-100"]["elimination_basis"] == ["comparison_basis_mismatch"]
 
 
+def test_controlled_loop_does_not_mix_incompatible_benchmark_scales(tmp_path, monkeypatch):
+    benchmark_a_settings = {"score_scale": "0-1", "max_workers": 24}
+    benchmark_b_settings = {"score_scale": "0-100", "max_workers": 24}
+    a_lower = _candidate(
+        "benchmark-a-lower",
+        [_evaluation("dev", 0.90, "benchmarks/a.jsonl", settings=benchmark_a_settings)],
+    )
+    a_best = _candidate(
+        "benchmark-a-best",
+        [_evaluation("dev", 0.95, "benchmarks/a.jsonl", settings=benchmark_a_settings)],
+    )
+    b_high_raw = _candidate(
+        "benchmark-b-high-raw",
+        [_evaluation("dev", 95.0, "benchmarks/b.jsonl", settings=benchmark_b_settings)],
+    )
+    a_lower["score"] = 0.90
+    a_best["score"] = 0.95
+    b_high_raw["score"] = 95.0
+
+    snapshots = iter(([], [a_lower, a_best, b_high_raw]))
+    reports = []
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(auto_evolve, "scan_candidate_evaluations", lambda: next(snapshots))
+    monkeypatch.setattr(auto_evolve, "append_jsonl", lambda _path, payload: reports.append(payload))
+    import run_opt
+    monkeypatch.setattr(run_opt, "get", lambda section, key=None, default=None: {
+        "enabled": True,
+        "count": 2,
+    } if section == "multi_candidate" and key is None else default)
+    monkeypatch.setattr(run_opt, "run_opt_pass", lambda **_kwargs: True)
+
+    success, winner = auto_evolve.run_controlled_closed_loop({})
+
+    assert success is True
+    assert winner["candidate_path"] == "benchmark-a-best"
+    assert winner["best_scope"] == "comparison_group"
+    by_path = {row["candidate_path"]: row for row in reports[0]["candidate_reports"]}
+    assert by_path["benchmark-a-lower"]["outcome"] == "落敗"
+    assert by_path["benchmark-b-high-raw"]["outcome"] == "淘汰"
+    assert by_path["benchmark-b-high-raw"]["elimination_basis"] == [
+        "comparison_basis_mismatch"
+    ]
+
+
 def test_controlled_loop_persists_candidate_reasons(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     smoke = _candidate("smoke-99", [_evaluation("smoke", 99.0, "questions/smoke.jsonl")])

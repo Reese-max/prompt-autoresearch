@@ -1,0 +1,20 @@
+受控閉環排名回歸測試 red 證據
+
+命令：
+python -m pytest -q tests/test_controlled_closed_loop_ranking.py -k incompatible_benchmark_scales
+
+前提：暫時以未整合修復前的 raw score max 取代受控閉環排名器，僅用於取得 red 證據；該暫時變更未提交，之後已還原。
+
+輸出重點：
+F                                                                        [100%]
+_______ test_controlled_loop_does_not_mix_incompatible_benchmark_scales _______
+E       AssertionError: assert 'benchmark-b-high-raw' == 'benchmark-a-best'
+E
+E         - benchmark-a-best
+E         + benchmark-b-high-raw
+
+Captured stdout：
+[受控閉環] 既有已評測候選 0 個（無），本輪多候選 count=2，產生迭代候選...
+[受控閉環] 排名候選: benchmark-b-high-raw (score=95.00, status=evaluated)
+
+結果：1 failed，5 deselected。
