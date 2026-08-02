@@ -49,3 +49,28 @@ def test_raw_scores_select_each_benchmark_highest_version_without_cross_scale_mi
     }
     assert groups["benchmarks/fractional.jsonl"]["winner"]["candidate_path"] == "fractional-v2"
     assert groups["benchmarks/percentage.jsonl"]["winner"]["candidate_path"] == "percentage-v2"
+
+
+def test_inverted_score_scales_never_share_a_global_winner():
+    candidates = [
+        _candidate("normalized", "normalized-v1", 0.83, "0-1"),
+        _candidate("normalized", "normalized-v2", 0.97, "0-1"),
+        _candidate("percentage", "percentage-v1", 74, "0-100"),
+        _candidate("percentage", "percentage-v2", 91, "0-100"),
+    ]
+
+    # 舊版會直接比較 raw score，因而把 91 當成比 0.97 好。
+    assert max(
+        candidates,
+        key=lambda candidate: candidate["stage_evaluations"][0]["score"],
+    )["candidate_path"] == "percentage-v2"
+
+    winner, report = auto_evolve._rank_candidate_evaluations(candidates)
+
+    assert winner is None
+    groups = {
+        group["basis"]["dataset"]: group
+        for group in report[0]["benchmark_groups"]
+    }
+    assert groups["benchmarks/normalized.jsonl"]["winner"]["candidate_path"] == "normalized-v2"
+    assert groups["benchmarks/percentage.jsonl"]["winner"]["candidate_path"] == "percentage-v2"
