@@ -554,3 +554,177 @@ class TestEvidenceIntegrityGate:
         assert "PASS" in report
         assert "valid" in report
         assert "_尚無全域冠軍_" not in report
+
+
+# ---------- 路徑正規化 ----------
+
+def test_repo_rel_relative_forward_slash(sandbox):
+    assert bvr.repo_rel("prompts/baseline.md") == "prompts/baseline.md"
+
+
+def test_repo_rel_backslashes_normalized(sandbox):
+    assert bvr.repo_rel(r"prompts\champions\compare.md") == "prompts/champions/compare.md"
+
+
+def test_repo_rel_absolute_inside_repo(sandbox):
+    abs_path = str(sandbox / "prompts" / "baseline.md").replace("\\", "/")
+    assert bvr.repo_rel(abs_path) == "prompts/baseline.md"
+
+
+def test_repo_rel_outside_repo_returns_none(sandbox, tmp_path):
+    outside = str(tmp_path / ".." / "outside.md").replace("\\", "/")
+    assert bvr.repo_rel(outside) is None
+
+
+def test_repo_rel_empty_returns_none(sandbox):
+    assert bvr.repo_rel("") is None
+    assert bvr.repo_rel(None) is None
+
+
+def test_display_path_inside_repo(sandbox):
+    assert bvr.display_path(r"prompts\champions\compare.md") == "prompts/champions/compare.md"
+
+
+def test_display_path_unresolvable_dash(sandbox, tmp_path):
+    outside = str(tmp_path / ".." / "outside.md").replace("\\", "/")
+    assert bvr.display_path(outside) == "-"
+
+
+# ---------- 證據驗證 ----------
+
+def test_verify_evidence_file_present_and_hash_match(sandbox):
+    (sandbox / "prompts").mkdir(exist_ok=True)
+    p = sandbox / "prompts" / "p.md"
+    p.write_text("hello evidence", encoding="utf-8")
+    digest = bvr.sha256_file(str(p))
+    result = bvr.verify_evidence_file("prompts/p.md", recorded_hash=digest)
+    assert result["exists"] is True
+    assert result["nonempty"] is True
+    assert result["hash_match"] is True
+    assert result["ok"] is True
+
+
+def test_verify_evidence_file_missing(sandbox):
+    result = bvr.verify_evidence_file("prompts/nope.md", recorded_hash="abc")
+    assert result["exists"] is False
+    assert result["nonempty"] is False
+    assert result["hash_match"] is None
+    assert result["ok"] is False
+
+
+def test_verify_evidence_file_empty(sandbox):
+    (sandbox / "prompts").mkdir(exist_ok=True)
+    p = sandbox / "prompts" / "empty.md"
+    p.write_text("", encoding="utf-8")
+    result = bvr.verify_evidence_file("prompts/empty.md", recorded_hash="abc")
+    assert result["exists"] is True
+    assert result["nonempty"] is False
+    assert result["ok"] is False
+
+
+def test_verify_evidence_file_hash_mismatch(sandbox):
+    (sandbox / "prompts").mkdir(exist_ok=True)
+    p = sandbox / "prompts" / "p.md"
+    p.write_text("content", encoding="utf-8")
+    result = bvr.verify_evidence_file("prompts/p.md", recorded_hash="deadbeef")
+    assert result["exists"] is True
+    assert result["hash_match"] is False
+    assert result["ok"] is False
+
+
+def test_verify_evidence_file_no_recorded_hash(sandbox):
+    (sandbox / "prompts").mkdir(exist_ok=True)
+    p = sandbox / "prompts" / "p.md"
+    p.write_text("content", encoding="utf-8")
+    result = bvr.verify_evidence_file("prompts/p.md")
+    assert result["exists"] is True
+    assert result["hash_match"] is None
+    assert result["ok"] is True
+
+
+# ---------- 證據驗證收集 ----------
+
+def test_collect_evidence_verification_includes_baseline_prompt(sandbox):
+    write_baseline_meta(sandbox)
+    (sandbox / "prompts").mkdir(exist_ok=True)
+    (sandbox / "prompts" / "baseline.md").write_text("baseline content", encoding="utf-8")
+    checks = bvr.collect_evidence_verification(
+        {"prompt_path": "prompts/baseline.md", "prompt_hash": "abc123def456"},
+        [], [],
+    )
+    prompts = [c for c in checks if c["path"] == "prompts/baseline.md"]
+    assert len(prompts) == 1
+    assert prompts[0]["exists"] is True
+    assert prompts[0]["hash_match"] is False  # recorded hash 與實際不符
+
+
+def test_collect_evidence_verification_champion_prompt_missing(sandbox):
+    write_champion_meta(sandbox, "legal_case")
+    champions = bvr.load_champion_metas()
+    checks = bvr.collect_evidence_verification({}, champions, [])
+    missing = [c for c in checks if c["path"] == "prompts/champions/legal_case.md"]
+    assert len(missing) == 1
+    assert missing[0]["exists"] is False
+    assert missing[0]["ok"] is False
+
+
+def test_collect_evidence_verification_candidate_scorecard(sandbox):
+    write_scorecard(sandbox, "cand_1")
+    cards = bvr.load_candidate_scorecards()
+    checks = bvr.collect_evidence_verification({}, [], cards)
+    sc = [c for c in checks if c["path"] == "prompts/candidates/cand_1.scorecard.json"]
+    assert len(sc) == 1
+    assert sc[0]["exists"] is True
+    assert sc[0]["ok"] is True
+
+
+# ---------- 重跑設定 ----------
+
+def test_collect_rerun_settings_winner_and_evaluator(sandbox):
+    write_config(sandbox, content="api:\n  url: https://example.invalid/v1\n  model: Test-Model\nthresholds:\n  dev_min_improvement: 2.0\n")
+    config = bvr.load_config()
+    settings = bvr.collect_rerun_settings(
+        {"prompt_path": "prompts/baseline.md", "prompt_hash": "abc123def456"},
+        [], config, [],
+    )
+    assert settings["winner_input"]["prompt_path"] == "prompts/baseline.md"
+    assert settings["winner_input"]["prompt_hash"] == "abc123def456"
+    assert settings["evaluator"]["url"] == "https://example.invalid/v1"
+    assert settings["evaluator"]["model"] == "Test-Model"
+    assert settings["evaluator"]["evaluate_script"] == "scripts/evaluate.py"
+    assert "commit" in settings["version"]
+    assert settings["seed"] in ("not set", "")
+
+
+def test_collect_rerun_settings_candidate_identification(sandbox):
+    write_champion_meta(sandbox, "legal_case")
+    write_champion_meta(sandbox, "compare", type="比較題", type_slug="compare")
+    champions = bvr.load_champion_metas()
+    settings = bvr.collect_rerun_settings({}, champions, {}, [])
+    ids = settings["candidate_identification"]
+    assert any(x["prompt_path"] == "prompts/champions/legal_case.md" for x in ids)
+    assert any(x["type"] == "比較題" for x in ids)
+
+
+def test_collect_rerun_settings_execution_time(sandbox):
+    sessions = [
+        {"start": "2026-01-01 00:00:00", "stop": "2026-01-01 01:00:00", "elapsed": 3600},
+        {"start": "2026-01-02 00:00:00", "stop": "2026-01-02 02:00:00", "elapsed": 7200},
+    ]
+    settings = bvr.collect_rerun_settings({}, [], {}, sessions)
+    assert settings["execution_time"]["sessions"] == 2
+    assert settings["execution_time"]["first_start"] == "2026-01-01 00:00:00"
+    assert settings["execution_time"]["last_stop"] == "2026-01-02 02:00:00"
+    assert settings["execution_time"]["total_elapsed_seconds"] == 10800.0
+
+
+def test_build_report_includes_rerun_and_verification_sections(sandbox):
+    write_baseline_meta(sandbox)
+    write_champion_meta(sandbox, "legal_case")
+    write_scorecard(sandbox, "cand_1", final_decision="ACCEPT")
+    write_config(sandbox)
+    report = bvr.build_report(limit=10)
+    assert "## 7. 重跑所需設定（Rerun Settings）" in report
+    assert "## 8. 證據驗證（產生時重新驗證）" in report
+    assert "winner_input" in report
+    assert "prompts/baseline.md" in report

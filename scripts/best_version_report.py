@@ -17,9 +17,11 @@ scripts/best_version_report.py — 最佳版本證據報告產生器。
   python scripts/best_version_report.py --limit 20
 """
 import argparse
+import hashlib
 import json
 import math
 import os
+import subprocess
 import time
 
 if hasattr(__import__("sys").stdout, "reconfigure"):
@@ -77,9 +79,7 @@ def load_champion_metas():
         if name.endswith(".meta.json"):
             meta = load_json(os.path.join(CHAMPIONS_DIR, name))
             if meta:
-                meta["_meta_file"] = os.path.relpath(
-                    os.path.join(CHAMPIONS_DIR, name), ROOT
-                )
+                meta["_meta_file"] = repo_rel(os.path.join(CHAMPIONS_DIR, name))
                 champions.append(meta)
     return champions
 
@@ -95,9 +95,7 @@ def load_candidate_scorecards(limit=None):
         card = load_json(os.path.join(CANDIDATES_DIR, name))
         if not card:
             continue
-        card["_scorecard_file"] = os.path.relpath(
-            os.path.join(CANDIDATES_DIR, name), ROOT
-        )
+        card["_scorecard_file"] = repo_rel(os.path.join(CANDIDATES_DIR, name))
         cards.append(card)
         count += 1
         if limit and count >= limit:
@@ -172,6 +170,164 @@ def classify_candidate(card):
     if decision in ("REVERT", "REJECT") or status.startswith("rejected"):
         return "rejected"
     return "pending"
+
+
+# ---------- 路徑正規化、證據驗證與重跑設定 ----------
+
+
+def sha256_file(path):
+    """計算檔案的 sha256 十六進位摘要。"""
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(65536), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def repo_rel(path):
+    """把任意路徑（絕對或相對、反斜線分隔）轉成 repo 相對路徑（正斜線）。
+
+    若路徑無法解析進 repo 內（例如在 repo 之外），回傳 None。
+    回傳值一律為正斜線分隔，確保跨平台可存取。
+    """
+    if not path:
+        return None
+    text = str(path).replace("\\", "/")
+    if os.path.isabs(text):
+        abs_path = os.path.abspath(text)
+    else:
+        abs_path = os.path.abspath(os.path.join(ROOT, text))
+    try:
+        rel = os.path.relpath(abs_path, ROOT).replace("\\", "/")
+    except ValueError:
+        return None
+    if rel == ".." or rel.startswith("../"):
+        return None
+    return rel
+
+
+def display_path(value):
+    """將路徑顯示為 repo 相對路徑；無法存取時顯示 '-'。"""
+    rel = repo_rel(value)
+    return rel if rel else "-"
+
+
+def verify_evidence_file(path_rel, recorded_hash=None):
+    """驗證單一證據檔：存在性、非空性、與已記錄雜湊一致性。
+
+    回傳 dict，欄位皆可機械解析。
+    """
+    abs_path = os.path.join(ROOT, path_rel) if path_rel else ""
+    result = {
+        "path": path_rel or "",
+        "exists": False,
+        "nonempty": False,
+        "recorded_hash": recorded_hash or "",
+        "actual_hash": "",
+        "hash_match": None,
+    }
+    if path_rel and os.path.isfile(abs_path):
+        result["exists"] = True
+        result["nonempty"] = os.path.getsize(abs_path) > 0
+        if recorded_hash:
+            result["actual_hash"] = sha256_file(abs_path)
+            result["hash_match"] = result["actual_hash"] == recorded_hash
+    result["ok"] = (
+        result["exists"]
+        and result["nonempty"]
+        and (result["hash_match"] is True or not recorded_hash)
+    )
+    return result
+
+
+def collect_evidence_verification(baseline_meta, champions, cards):
+    """在產生報告時，重新驗證所有被引用的證據檔。
+
+    含核心檔案、baseline 提示詞（比對已記錄 prompt_hash）、
+    題型冠軍 meta 與提示詞、候選 scorecard 與候選提示詞。
+    """
+    checks = []
+    for rel in (
+        repo_rel(BASELINE_META_PATH),
+        repo_rel(EVOLUTION_LOG_PATH),
+        repo_rel(CONFIG_PATH),
+    ):
+        if rel:
+            checks.append(verify_evidence_file(rel))
+    if baseline_meta:
+        prompt_rel = repo_rel(baseline_meta.get("prompt_path")) or "prompts/baseline.md"
+        checks.append(verify_evidence_file(prompt_rel, baseline_meta.get("prompt_hash")))
+    for ch in champions:
+        meta_rel = ch.get("_meta_file")
+        if meta_rel:
+            checks.append(verify_evidence_file(meta_rel))
+        prompt_rel = repo_rel(ch.get("champion_prompt_path"))
+        if prompt_rel:
+            checks.append(verify_evidence_file(prompt_rel, ch.get("candidate_hash")))
+    for card in cards:
+        sc_rel = card.get("_scorecard_file")
+        if sc_rel:
+            checks.append(verify_evidence_file(sc_rel))
+        cand_rel = repo_rel(card.get("candidate_path"))
+        if cand_rel:
+            checks.append(verify_evidence_file(cand_rel, card.get("candidate_hash")))
+    return checks
+
+
+def collect_git_commit():
+    """取得目前 repo 的 git commit（唯讀）。失敗時回傳空字串。"""
+    try:
+        r = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            cwd=ROOT, capture_output=True, text=True, timeout=10,
+        )
+        if r.returncode == 0:
+            return r.stdout.strip()
+    except Exception:
+        pass
+    return ""
+
+
+def collect_rerun_settings(baseline_meta, champions, config, sessions):
+    """收集重跑所需的設定：winner 輸入、評測器／模型、seed、版本／commit、
+    候選識別、執行時間。
+    """
+    api = config.get("api", {}) if config else {}
+    settings = {
+        "winner_input": {},
+        "evaluator": {
+            "url": api.get("url", ""),
+            "model": api.get("model", ""),
+            "evaluate_script": "scripts/evaluate.py",
+            "compare_script": "scripts/compare_runs.py",
+            "gatekeeper_script": "scripts/gatekeeper.py",
+        },
+        "seed": os.environ.get("PYTHONHASHSEED", "not set"),
+        "version": {"commit": collect_git_commit()},
+        "candidate_identification": [],
+        "execution_time": {},
+    }
+    if baseline_meta:
+        settings["winner_input"] = {
+            "prompt_path": repo_rel(baseline_meta.get("prompt_path")) or "prompts/baseline.md",
+            "prompt_hash": baseline_meta.get("prompt_hash", ""),
+        }
+    for ch in champions:
+        settings["candidate_identification"].append({
+            "type": ch.get("type", ""),
+            "prompt_path": repo_rel(ch.get("champion_prompt_path")) or "",
+            "candidate_hash": ch.get("candidate_hash", ""),
+        })
+    if sessions:
+        settings["execution_time"] = {
+            "sessions": len(sessions),
+            "first_start": sessions[0].get("start", ""),
+            "last_stop": sessions[-1].get("stop", ""),
+            "total_elapsed_seconds": round(
+                sum(s.get("elapsed", 0) for s in sessions), 2
+            ),
+        }
+    return settings
 
 
 # ---------- 證據完整性閘門 ----------
@@ -305,8 +461,8 @@ def build_champion_section(baseline_meta, champions):
         lines.append(f"- **全域冠軍 prompt hash**：`{prompt_hash}`")
         lines.append(f"- **dev 均分**：{dev_avg}")
         lines.append(f"- **holdout 均分**：{holdout_avg}")
-        lines.append(f"- **dev run**：`{dev_run}`")
-        lines.append(f"- **holdout run**：`{holdout_run}`")
+        lines.append(f"- **dev run**：`{display_path(dev_run)}`")
+        lines.append(f"- **holdout run**：`{display_path(holdout_run)}`")
     else:
         lines.append("_尚無全域冠軍_")
 
@@ -320,7 +476,7 @@ def build_champion_section(baseline_meta, champions):
             ch_score = ch.get("candidate_avg", ch.get("diff", "-"))
             ch_hash = ch.get("candidate_hash", "-")[:12]
             ch_decision = ch.get("decision", "-")
-            ch_prompt = ch.get("champion_prompt_path", "-")
+            ch_prompt = display_path(ch.get("champion_prompt_path"))
             table_rows.append([ch_type, ch_score, ch_hash, ch_decision, ch_prompt])
         lines.append(format_table(
             ["題型", "均分/提升", "hash", "決策", "提示詞路徑"],
@@ -513,9 +669,9 @@ def build_evidence_section(baseline_meta, champions, cards, sessions):
     lines.append("")
     evidence_files = []
     if baseline_meta:
-        evidence_files.append(("baseline.meta.json", os.path.relpath(BASELINE_META_PATH, ROOT)))
-    evidence_files.append(("evolution_log.jsonl", os.path.relpath(EVOLUTION_LOG_PATH, ROOT)))
-    evidence_files.append(("config.yaml", os.path.relpath(CONFIG_PATH, ROOT)))
+        evidence_files.append(("baseline.meta.json", display_path(BASELINE_META_PATH)))
+    evidence_files.append(("evolution_log.jsonl", display_path(EVOLUTION_LOG_PATH)))
+    evidence_files.append(("config.yaml", display_path(CONFIG_PATH)))
     table_rows = [[name, path] for name, path in evidence_files]
     lines.append(format_table(["檔案", "路徑"], table_rows))
     lines.append("")
@@ -527,8 +683,8 @@ def build_evidence_section(baseline_meta, champions, cards, sessions):
         for ch in champions:
             ch_type = ch.get("type", "-")
             meta_file = ch.get("_meta_file", "-")
-            prompt_file = ch.get("champion_prompt_path", "-")
-            dev_run = ch.get("dev_run", "-")
+            prompt_file = display_path(ch.get("champion_prompt_path"))
+            dev_run = display_path(ch.get("dev_run"))
             table_rows.append([ch_type, meta_file, prompt_file, dev_run])
         lines.append(format_table(
             ["題型", "meta 檔", "提示詞", "dev run"],
@@ -559,6 +715,56 @@ def build_evidence_section(baseline_meta, champions, cards, sessions):
     return lines
 
 
+def build_rerun_section(rerun_settings):
+    lines = []
+    lines.append("## 7. 重跑所需設定（Rerun Settings）")
+    lines.append("")
+    lines.append("以下欄位為重跑本選優所需的最小可複現設定：")
+    lines.append("")
+    lines.append("```json")
+    lines.append(json.dumps(rerun_settings, ensure_ascii=False, indent=2))
+    lines.append("```")
+    lines.append("")
+    return lines
+
+
+def build_evidence_verification_section(evidence_checks):
+    lines = []
+    lines.append("## 8. 證據驗證（產生時重新驗證）")
+    lines.append("")
+    ok_count = sum(1 for c in evidence_checks if c["ok"])
+    lines.append(
+        f"共 {len(evidence_checks)} 項證據，通過 {ok_count} 項，"
+        f"未通過 {len(evidence_checks) - ok_count} 項。"
+    )
+    lines.append("")
+
+    if not evidence_checks:
+        lines.append("_無證據可驗證_")
+        lines.append("")
+        return lines
+
+    table_rows = []
+    for c in evidence_checks:
+        exists = "✔" if c["exists"] else "✘"
+        nonempty = "✔" if c["nonempty"] else "✘"
+        if c["hash_match"] is True:
+            hash_mark = "✔"
+        elif c["hash_match"] is False:
+            hash_mark = "✘"
+        else:
+            hash_mark = "-"
+        table_rows.append([
+            c["path"], exists, nonempty, hash_mark, "OK" if c["ok"] else "FAIL",
+        ])
+    lines.append(format_table(
+        ["證據路徑", "存在", "非空", "雜湊一致", "結果"],
+        table_rows,
+    ))
+    lines.append("")
+    return lines
+
+
 def build_report(limit=10):
     baseline_meta = load_baseline_meta()
     champions = load_champion_metas()
@@ -573,6 +779,11 @@ def build_report(limit=10):
         baseline_meta, champions, cards, sessions, config
     )
 
+    # 產生時重新驗證所有證據引用 + 收集重跑所需設定
+    evidence_checks = collect_evidence_verification(baseline_meta, champions, cards)
+    verification_valid = all(c["ok"] for c in evidence_checks)
+    rerun_settings = collect_rerun_settings(baseline_meta, champions, config, sessions)
+
     json_data = {
         "report_type": "best_version_evidence",
         "generated_at": now,
@@ -580,20 +791,26 @@ def build_report(limit=10):
             "valid": is_valid,
             "errors": evidence_errors,
         },
+        "evidence_verification": {
+            "valid": verification_valid,
+            "total": len(evidence_checks),
+            "checks": evidence_checks,
+        },
+        "rerun_settings": rerun_settings,
         "champion": {
             "prompt_hash": baseline_meta.get("prompt_hash", "") if is_valid else "",
             "dev_avg": baseline_meta.get("dev_avg") if is_valid else None,
             "holdout_avg": baseline_meta.get("holdout_avg") if is_valid else None,
-            "dev_run": baseline_meta.get("dev_run", "") if is_valid else "",
-            "holdout_run": baseline_meta.get("holdout_run", "") if is_valid else "",
+            "dev_run": display_path(baseline_meta.get("dev_run", "")) if is_valid else "",
+            "holdout_run": display_path(baseline_meta.get("holdout_run", "")) if is_valid else "",
         },
         "type_champions": [
             {
                 "type": ch.get("type", ""),
                 "candidate_avg": ch.get("candidate_avg"),
                 "diff": ch.get("diff"),
-                "champion_prompt_path": ch.get("champion_prompt_path", ""),
-                "dev_run": ch.get("dev_run", ""),
+                "champion_prompt_path": display_path(ch.get("champion_prompt_path", "")),
+                "dev_run": display_path(ch.get("dev_run", "")),
             }
             for ch in champions
         ] if is_valid else [],
@@ -610,11 +827,11 @@ def build_report(limit=10):
             "multi_candidate": config.get("multi_candidate", {}),
         },
         "evidence_files": {
-            "baseline_meta": os.path.relpath(BASELINE_META_PATH, ROOT),
-            "evolution_log": os.path.relpath(EVOLUTION_LOG_PATH, ROOT),
-            "config": os.path.relpath(CONFIG_PATH, ROOT),
-            "champions_dir": os.path.relpath(CHAMPIONS_DIR, ROOT),
-            "candidates_dir": os.path.relpath(CANDIDATES_DIR, ROOT),
+            "baseline_meta": display_path(BASELINE_META_PATH),
+            "evolution_log": display_path(EVOLUTION_LOG_PATH),
+            "config": display_path(CONFIG_PATH),
+            "champions_dir": display_path(CHAMPIONS_DIR),
+            "candidates_dir": display_path(CANDIDATES_DIR),
         },
     }
 
@@ -662,6 +879,8 @@ def build_report(limit=10):
     lines.extend(build_candidate_comparison_section(cards, limit))
     lines.extend(build_reproduction_section(sessions, config))
     lines.extend(build_evidence_section(baseline_meta, champions, cards, sessions))
+    lines.extend(build_rerun_section(rerun_settings))
+    lines.extend(build_evidence_verification_section(evidence_checks))
 
     return "\n".join(lines) + "\n"
 
