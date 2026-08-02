@@ -1,0 +1,385 @@
+# -*- coding: utf-8 -*-
+"""tests/test_best_version_report.py — scripts/best_version_report.py 單元測試（tmp_path 隔離、無網路）。"""
+import json
+import os
+import sys
+
+import pytest
+
+import scripts.best_version_report as bvr
+
+
+# ---------- fixtures / helpers ----------
+
+@pytest.fixture
+def sandbox(tmp_path, monkeypatch):
+    """把所有路徑指到 tmp_path，隔離真實 repo。"""
+    champions = tmp_path / "prompts" / "champions"
+    champions.mkdir(parents=True)
+    candidates = tmp_path / "prompts" / "candidates"
+    candidates.mkdir(parents=True)
+    runs = tmp_path / "runs"
+    runs.mkdir()
+    monkeypatch.setattr(bvr, "ROOT", str(tmp_path))
+    monkeypatch.setattr(bvr, "BASELINE_META_PATH", str(tmp_path / "prompts" / "baseline.meta.json"))
+    monkeypatch.setattr(bvr, "CHAMPIONS_DIR", str(champions))
+    monkeypatch.setattr(bvr, "CANDIDATES_DIR", str(candidates))
+    monkeypatch.setattr(bvr, "EVOLUTION_LOG_PATH", str(tmp_path / "evolution_log.jsonl"))
+    monkeypatch.setattr(bvr, "CONFIG_PATH", str(tmp_path / "config.yaml"))
+    monkeypatch.setattr(bvr, "RUNS_DIR", str(runs))
+    return tmp_path
+
+
+def write_baseline_meta(tmp_path, **overrides):
+    meta = {
+        "prompt_hash": "abc123def456",
+        "dev_avg": 88.5,
+        "holdout_avg": 87.0,
+        "dev_run": "runs/dev_run_001",
+        "holdout_run": "runs/holdout_run_001",
+        "smoke_avg": 90.0,
+    }
+    meta.update(overrides)
+    path = tmp_path / "prompts" / "baseline.meta.json"
+    path.write_text(json.dumps(meta, ensure_ascii=False), encoding="utf-8")
+    return meta
+
+
+def write_champion_meta(tmp_path, name, **overrides):
+    meta = {
+        "kind": "type_champion",
+        "type": "法律案例題",
+        "type_slug": "legal_case",
+        "candidate_hash": "hash123abc",
+        "champion_prompt_path": f"prompts/champions/{name}.md",
+        "dev_run": "runs/dev_champion",
+        "baseline_avg": 74.0,
+        "candidate_avg": 84.0,
+        "diff": 10.0,
+        "risk_rate": 100.0,
+        "decision": "SPECIALTY_RETAINED",
+    }
+    meta.update(overrides)
+    path = tmp_path / "prompts" / "champions" / f"{name}.meta.json"
+    path.write_text(json.dumps(meta, ensure_ascii=False), encoding="utf-8")
+    return meta
+
+
+def write_scorecard(tmp_path, name, **overrides):
+    card = {
+        "candidate_path": f"prompts/candidates/{name}.md",
+        "direction": "D01",
+        "target_failures": ["F03"],
+        "status": "completed",
+        "final_decision": "ACCEPT",
+        "smoke": {"score": 85.0, "passed": True},
+        "dev": {"score": 88.0},
+        "holdout": {"score": 87.0},
+    }
+    card.update(overrides)
+    path = tmp_path / "prompts" / "candidates" / f"{name}.scorecard.json"
+    path.write_text(json.dumps(card, ensure_ascii=False), encoding="utf-8")
+    return card
+
+
+def write_evolution_log(tmp_path, rows):
+    path = tmp_path / "evolution_log.jsonl"
+    with open(path, "w", encoding="utf-8") as f:
+        for row in rows:
+            f.write(json.dumps(row, ensure_ascii=False) + "\n")
+
+
+def write_config(tmp_path, content="thresholds:\n  dev_min_improvement: 2.0\n"):
+    path = tmp_path / "config.yaml"
+    path.write_text(content, encoding="utf-8")
+
+
+# ---------- load functions ----------
+
+def test_load_json_missing_and_present(tmp_path):
+    assert bvr.load_json(str(tmp_path / "nope.json")) == {}
+    p = tmp_path / "a.json"
+    p.write_text('{"k": 1}', encoding="utf-8")
+    assert bvr.load_json(str(p)) == {"k": 1}
+
+
+def test_read_text_missing_and_present(tmp_path):
+    assert bvr.read_text(str(tmp_path / "nope.md")) == ""
+    p = tmp_path / "a.md"
+    p.write_text("hello", encoding="utf-8")
+    assert bvr.read_text(str(p)) == "hello"
+
+
+def test_read_jsonl_missing_and_present(tmp_path):
+    assert bvr.read_jsonl(str(tmp_path / "nope.jsonl")) == []
+    path = tmp_path / "data.jsonl"
+    with open(path, "w", encoding="utf-8") as f:
+        f.write('{"a": 1}\n{"b": 2}\n\n{"c": 3}\n')
+    rows = bvr.read_jsonl(str(path))
+    assert len(rows) == 3
+    assert rows[0] == {"a": 1}
+    assert rows[2] == {"c": 3}
+
+
+def test_read_jsonl_malformed_lines(tmp_path):
+    path = tmp_path / "bad.jsonl"
+    path.write_text('{"ok": 1}\nBAD JSON\n{"ok": 2}\n', encoding="utf-8")
+    rows = bvr.read_jsonl(str(path))
+    assert len(rows) == 2
+
+
+# ---------- load_baseline_meta ----------
+
+def test_load_baseline_meta_missing(tmp_path, monkeypatch):
+    monkeypatch.setattr(bvr, "BASELINE_META_PATH", str(tmp_path / "nope.json"))
+    assert bvr.load_baseline_meta() == {}
+
+
+def test_load_baseline_meta_present(sandbox):
+    meta = write_baseline_meta(sandbox)
+    result = bvr.load_baseline_meta()
+    assert result["prompt_hash"] == "abc123def456"
+    assert result["dev_avg"] == 88.5
+
+
+# ---------- load_champion_metas ----------
+
+def test_load_champion_metas_empty(sandbox):
+    assert bvr.load_champion_metas() == []
+
+
+def test_load_champion_metas_multiple(sandbox):
+    write_champion_meta(sandbox, "legal_case")
+    write_champion_meta(sandbox, "compare", type="比較題", type_slug="compare")
+    champions = bvr.load_champion_metas()
+    assert len(champions) == 2
+    types = {ch["type"] for ch in champions}
+    assert "法律案例題" in types
+    assert "比較題" in types
+
+
+def test_load_champion_metas_includes_meta_file(sandbox):
+    write_champion_meta(sandbox, "practical")
+    champions = bvr.load_champion_metas()
+    assert "_meta_file" in champions[0]
+    assert champions[0]["_meta_file"].endswith("practical.meta.json")
+
+
+# ---------- load_candidate_scorecards ----------
+
+def test_load_candidate_scorecards_empty(sandbox):
+    assert bvr.load_candidate_scorecards() == []
+
+
+def test_load_candidate_scorecards_limit(sandbox):
+    for i in range(5):
+        write_scorecard(sandbox, f"cand_{i}")
+    cards = bvr.load_candidate_scorecards(limit=3)
+    assert len(cards) == 3
+
+
+def test_load_candidate_scorecards_includes_file(sandbox):
+    write_scorecard(sandbox, "test_cand")
+    cards = bvr.load_candidate_scorecards()
+    assert "_scorecard_file" in cards[0]
+    assert cards[0]["_scorecard_file"].endswith("test_cand.scorecard.json")
+
+
+def test_load_candidate_scorecards_skips_missing(tmp_path, monkeypatch):
+    monkeypatch.setattr(bvr, "CANDIDATES_DIR", str(tmp_path / "nonexistent"))
+    assert bvr.load_candidate_scorecards() == []
+
+
+# ---------- load_evolution_summary ----------
+
+def test_load_evolution_summary_empty(tmp_path, monkeypatch):
+    monkeypatch.setattr(bvr, "EVOLUTION_LOG_PATH", str(tmp_path / "nope.jsonl"))
+    assert bvr.load_evolution_summary() == []
+
+
+def test_load_evolution_summary_single_session(sandbox):
+    rows = [
+        {"event": "start", "timestamp": "2026-01-01 00:00:00", "args": {"max_rounds": 3}, "baseline_dev_score": 80.0},
+        {"event": "round_complete", "round": 1, "promoted": True},
+        {"event": "round_complete", "round": 2, "promoted": False},
+        {"event": "stop", "timestamp": "2026-01-01 01:00:00", "reason": "done", "best_score": 85.0, "estimated_api_calls_total": 100, "elapsed_seconds": 3600},
+    ]
+    write_evolution_log(sandbox, rows)
+    sessions = bvr.load_evolution_summary()
+    assert len(sessions) == 1
+    assert sessions[0]["promotions"] == 1
+    assert sessions[0]["best_score"] == 85.0
+    assert len(sessions[0]["rounds"]) == 2
+
+
+def test_load_evolution_summary_multiple_sessions(sandbox):
+    rows = [
+        {"event": "start", "timestamp": "2026-01-01 00:00:00", "args": {}, "baseline_dev_score": 80.0},
+        {"event": "stop", "timestamp": "2026-01-01 01:00:00", "reason": "done", "best_score": 82.0, "estimated_api_calls_total": 50, "elapsed_seconds": 1800},
+        {"event": "start", "timestamp": "2026-01-02 00:00:00", "args": {}, "baseline_dev_score": 82.0},
+        {"event": "round_complete", "round": 1, "promoted": True},
+        {"event": "stop", "timestamp": "2026-01-02 02:00:00", "reason": "done", "best_score": 85.0, "estimated_api_calls_total": 60, "elapsed_seconds": 3600},
+    ]
+    write_evolution_log(sandbox, rows)
+    sessions = bvr.load_evolution_summary()
+    assert len(sessions) == 2
+    assert sessions[1]["promotions"] == 1
+
+
+def test_load_evolution_summary_unclosed_session(sandbox):
+    rows = [
+        {"event": "start", "timestamp": "2026-01-01 00:00:00", "args": {}, "baseline_dev_score": 80.0},
+        {"event": "round_complete", "round": 1, "promoted": False},
+    ]
+    write_evolution_log(sandbox, rows)
+    sessions = bvr.load_evolution_summary()
+    assert len(sessions) == 1
+    assert len(sessions[0]["rounds"]) == 1
+
+
+# ---------- classify_candidates ----------
+
+def test_classify_candidates():
+    cards = [
+        {"final_decision": "ACCEPT"},
+        {"final_decision": "REVERT"},
+        {"final_decision": "SPECIALTY_RETAINED"},
+        {"status": "rejected_smoke"},
+        {},
+    ]
+    accepted, rejected, pending = bvr.classify_candidates(cards)
+    assert len(accepted) == 2
+    assert len(rejected) == 2
+    assert len(pending) == 1
+
+
+# ---------- format_table ----------
+
+def test_format_table():
+    out = bvr.format_table(["a", "b"], [[1, "x"], [2, "y"]])
+    lines = out.splitlines()
+    assert lines[0] == "| a | b |"
+    assert lines[1] == "| --- | --- |"
+    assert lines[2] == "| 1 | x |"
+    assert lines[3] == "| 2 | y |"
+
+
+def test_format_table_empty():
+    out = bvr.format_table(["col"], [])
+    lines = out.splitlines()
+    assert len(lines) == 2  # header + separator only
+
+
+# ---------- build_json_block ----------
+
+def test_build_json_block():
+    block = bvr.build_json_block({"key": "value"})
+    assert block.startswith("```json\n")
+    assert block.endswith("\n```")
+    inner = block[len("```json\n"):-len("\n```")]
+    parsed = json.loads(inner)
+    assert parsed == {"key": "value"}
+
+
+# ---------- build_report integration ----------
+
+def test_build_report_empty(sandbox):
+    report = bvr.build_report(limit=5)
+    assert "# 最佳版本證據報告" in report
+    assert "```json" in report
+    assert "## 1. Winner（冠軍）" in report
+    assert "## 4. 逐候選比較" in report
+    assert "_尚無全域冠軍_" in report
+    assert "_無候選記錄_" in report
+
+
+def test_build_report_full(sandbox):
+    write_baseline_meta(sandbox)
+    write_champion_meta(sandbox, "legal_case")
+    write_champion_meta(sandbox, "compare", type="比較題", type_slug="compare")
+    write_scorecard(sandbox, "cand_1", final_decision="ACCEPT", direction="D01")
+    write_scorecard(sandbox, "cand_2", final_decision="REVERT",
+                    status="completed", reject_reasons=["dev score too low"])
+    write_scorecard(sandbox, "cand_3", final_decision="REJECT", status="rejected_smoke")
+    write_config(sandbox)
+
+    rows = [
+        {"event": "start", "timestamp": "2026-01-01 00:00:00", "args": {"max_rounds": 5}, "baseline_dev_score": 85.0},
+        {"event": "round_complete", "round": 1, "promoted": True},
+        {"event": "round_complete", "round": 2, "promoted": False},
+        {"event": "stop", "timestamp": "2026-01-01 02:00:00", "reason": "done", "best_score": 89.0, "estimated_api_calls_total": 200, "elapsed_seconds": 7200},
+    ]
+    write_evolution_log(sandbox, rows)
+
+    report = bvr.build_report(limit=10)
+
+    assert "# 最佳版本證據報告" in report
+    assert "abc123def456" in report
+    assert "88.5" in report
+    assert "87.0" in report
+    assert "法律案例題" in report
+    assert "比較題" in report
+    assert "ACCEPTED：1" in report
+    assert "REJECTED：2" in report
+    assert "最大輪次" in report
+    assert "thresholds" in report
+    assert "evolution_log.jsonl" in report
+    assert "baseline.meta.json" in report
+
+
+def test_build_report_limit_candidates(sandbox):
+    write_baseline_meta(sandbox)
+    for i in range(20):
+        write_scorecard(sandbox, f"cand_{i}", final_decision="ACCEPT")
+    report = bvr.build_report(limit=5)
+    # Should only show 5 candidates in the table
+    assert "| ACCEPT |" in report
+
+
+def test_build_report_with_sessions(sandbox):
+    write_baseline_meta(sandbox)
+    rows = [
+        {"event": "start", "timestamp": "2026-01-01 00:00:00", "args": {"max_rounds": 3, "parallel": 24}, "baseline_dev_score": 80.0},
+        {"event": "round_complete", "round": 1, "promoted": True},
+        {"event": "round_complete", "round": 2, "promoted": True},
+        {"event": "stop", "timestamp": "2026-01-01 01:00:00", "reason": "done", "best_score": 85.0, "estimated_api_calls_total": 100, "elapsed_seconds": 3600},
+    ]
+    write_evolution_log(sandbox, rows)
+    report = bvr.build_report()
+    assert "演化 session 數：1" in report
+    assert "總輪次：2" in report
+    assert "成功晉升次數：2" in report
+
+
+# ---------- main ----------
+
+def test_main_stdout_only(sandbox, monkeypatch, capsys):
+    write_baseline_meta(sandbox)
+    monkeypatch.setattr(sys, "argv", ["best_version_report.py"])
+    bvr.main()
+    out = capsys.readouterr().out
+    assert "# 最佳版本證據報告" in out
+
+
+def test_main_with_out(sandbox, monkeypatch, capsys):
+    write_baseline_meta(sandbox)
+    monkeypatch.setattr(sys, "argv", ["best_version_report.py", "--out", "output/best_report.md"])
+    bvr.main()
+    out_file = sandbox / "output" / "best_report.md"
+    assert out_file.exists()
+    content = out_file.read_text(encoding="utf-8")
+    assert "# 最佳版本證據報告" in content
+    stdout = capsys.readouterr().out
+    assert "# 最佳版本證據報告" in stdout
+    assert len(content) > 100
+    assert len(stdout) > 100
+
+
+def test_main_with_limit(sandbox, monkeypatch, capsys):
+    write_baseline_meta(sandbox)
+    for i in range(10):
+        write_scorecard(sandbox, f"c{i}")
+    monkeypatch.setattr(sys, "argv", ["best_version_report.py", "--limit", "3"])
+    bvr.main()
+    out = capsys.readouterr().out
+    assert "# 最佳版本證據報告" in out
