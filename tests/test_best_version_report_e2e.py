@@ -216,6 +216,78 @@ def test_report_e2e_selects_best_candidate_from_single_report(report_workspace, 
     assert rounds[0]["score_diff"] > 0
 
 
+def test_report_e2e_contains_adoptable_complete_evidence(report_workspace, monkeypatch):
+    """最佳版本報告必須能獨立支撐採用、比較與重現，而非只顯示通過數。"""
+    report_path, report = _generate_report(report_workspace, monkeypatch)
+    data = _report_json(report)
+
+    assert list(report_path.parent.glob("best-version.md")) == [report_path]
+
+    winner = data["winner"]
+    prompt = winner["prompt"]
+    prompt_path = report_workspace / prompt["path"]
+    assert prompt["verified"] is True
+    assert prompt["content"] == prompt_path.read_text(encoding="utf-8")
+    assert len(prompt["content"]) >= 100
+    assert all(winner["workflow"][key] for key in ("steps", "commands"))
+    assert len(winner["workflow"]["steps"]) >= 3
+
+    quality = data["quality"]
+    for dataset in ("smoke", "dev", "holdout"):
+        assert isinstance(quality["winner"][dataset]["score"], (int, float))
+        assert isinstance(quality["baseline"][dataset]["score"], (int, float))
+    basis = quality["measurement_basis"]
+    assert basis["score_scale"] == {"minimum": 0, "maximum": 100}
+    assert {item["name"] for item in basis["datasets"]} == {"smoke", "dev", "holdout"}
+    assert basis["thresholds"]
+    assert basis["acceptance_criteria"]
+
+    scorecards = sorted(report_workspace.glob("prompts/candidates/*.scorecard.json"))
+    comparisons = data["candidate_comparison"]
+    assert len(comparisons) == len(scorecards) == 3
+    comparison_by_path = {row["path"]: row for row in comparisons}
+    assert len(comparison_by_path) == len(comparisons)
+    for scorecard_path in scorecards:
+        card = json.loads(scorecard_path.read_text(encoding="utf-8"))
+        candidate_path = card["candidate_path"]
+        row = comparison_by_path[candidate_path]
+        candidate = report_workspace / candidate_path
+        assert row["candidate_id"]
+        assert row["sha256"] == run_opt.sha256_text(candidate.read_text(encoding="utf-8"))
+        assert row["decision"]
+        assert row["classification"] in {"accepted", "rejected", "pending"}
+        assert set(row["scores"]) == {"smoke", "dev", "holdout"}
+        assert set(row["baseline_scores"]) == {"smoke", "dev", "holdout"}
+        assert set(row["deltas"]) == {"smoke", "dev", "holdout"}
+        for dataset in ("smoke", "dev", "holdout"):
+            expected = card.get(dataset, {}).get("score")
+            assert row["scores"][dataset]["score"] == expected
+
+    reproduction = data["reproduction"]
+    settings = reproduction["settings"]
+    assert settings["winner_input"]["prompt_path"] == prompt["path"]
+    assert settings["winner_input"]["prompt_hash"] == prompt["sha256"]
+    assert {"url", "model", "evaluate_script", "compare_script", "gatekeeper_script"} <= set(settings["evaluator"])
+    assert isinstance(settings["candidate_identification"], list)
+    assert settings["execution_time"]
+    assert all(
+        command["argv"] and command["command"] and command["cwd"] == "."
+        for command in reproduction["commands"]
+    )
+    assert {"scripts/evaluate.py", "scripts/gatekeeper.py"} <= {
+        part for command in reproduction["commands"] for part in command["argv"]
+    }
+
+    environment = reproduction["environment"]
+    assert all(environment.get(key) for key in ("python_version", "python_executable", "platform", "architecture", "os_name", "encoding", "cwd"))
+
+    records = data["execution"]["records"]
+    assert [record["event"] for record in records] == ["start", "round_complete", "stop"]
+    assert data["execution"]["sessions"]
+    assert data["execution"]["sessions"][0]["start"]
+    assert data["execution"]["sessions"][0]["stop"]
+
+
 def _remove_evidence(workspace, kind):
     if kind == "winner_prompt":
         (workspace / "prompts" / "baseline.md").unlink()
