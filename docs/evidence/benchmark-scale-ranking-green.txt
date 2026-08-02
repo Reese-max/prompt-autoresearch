@@ -1,0 +1,9 @@
+測試：tests/test_benchmark_scale_ranking_regression.py
+修復後基準：目前工作樹（修復 commit adec5e7f63cd0e03814dfd26d47aa3f21849a444 之後）
+命令：
+python -m pytest -q --no-cov --color=no tests/test_benchmark_scale_ranking_regression.py
+exit code：0
+
+原始輸出：
+.....                                                                    [100%]
+5 passed in 0.09s
