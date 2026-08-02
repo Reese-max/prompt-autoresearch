@@ -13,6 +13,7 @@ import time
 import subprocess
 import json
 import platform
+import math
 
 from lib.io import load_json
 from lib.metrics import record_event
@@ -76,6 +77,49 @@ def _canonical_comparison_value(value):
     return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
 
 
+def _comparison_key_from_basis(basis):
+    """只用完整、可稽核的 benchmark 身分建立排名鍵。"""
+    if not isinstance(basis, dict):
+        return None
+    fields = ("stage",) + _RANKING_FIELDS
+    if any(basis.get(field) in (None, "", {}) for field in fields):
+        return None
+    return tuple(_canonical_comparison_value(basis[field]) for field in fields)
+
+
+def _benchmark_group_id(comparison_key):
+    return "|".join(comparison_key)
+
+
+def _group_winner_evidence(comparison_key, group):
+    ranked = sorted(
+        group,
+        key=lambda item: item["candidate"].get("candidate_path", ""),
+    )
+    top_score = max(item["evaluation"]["score"] for item in ranked)
+    top_items = [item for item in ranked if item["evaluation"]["score"] == top_score]
+    basis = dict(ranked[0]["evaluation"]["basis"])
+    evidence = {
+        "id": _benchmark_group_id(comparison_key),
+        "comparison_key": list(comparison_key),
+        "basis": basis,
+        "candidate_paths": [item["candidate"].get("candidate_path", "") for item in ranked],
+        "winner_candidates": [
+            item["candidate"].get("candidate_path", "") for item in top_items
+        ],
+        "winner": None,
+    }
+    if len(top_items) == 1:
+        winner = top_items[0]
+        evidence["winner"] = {
+            "candidate_path": winner["candidate"].get("candidate_path", ""),
+            "score": winner["evaluation"]["score"],
+            "basis": basis,
+            "comparison_key": list(comparison_key),
+        }
+    return evidence
+
+
 def _first_value(sources, *keys):
     for source in sources:
         if not isinstance(source, dict):
@@ -119,10 +163,7 @@ def _stage_comparison(card, stage, stage_data):
             "missing_fields": missing,
             "reason": "不可比較：缺少 " + "、".join(missing),
         }
-    comparison_key = tuple(
-        [basis["stage"]]
-        + [_canonical_comparison_value(basis[field]) for field in _RANKING_FIELDS]
-    )
+    comparison_key = _comparison_key_from_basis(basis)
     return {
         "stage": stage,
         "score": float(stage_data["score"]),
@@ -130,6 +171,36 @@ def _stage_comparison(card, stage, stage_data):
         "basis": basis,
         "comparison_key": comparison_key,
     }
+
+
+def _normalise_ranking_evaluation(evaluation):
+    """以 basis 重建 key，拒絕與 benchmark 身分不一致的外部 key。"""
+    if not isinstance(evaluation, dict) or evaluation.get("comparable") is False:
+        return None
+    basis = evaluation.get("basis")
+    comparison_key = _comparison_key_from_basis(basis)
+    if comparison_key is None:
+        return None
+    supplied_key = evaluation.get("comparison_key")
+    if supplied_key is not None:
+        try:
+            if tuple(supplied_key) != comparison_key:
+                return None
+        except TypeError:
+            return None
+    try:
+        score = float(evaluation["score"])
+    except (KeyError, TypeError, ValueError):
+        return None
+    if not math.isfinite(score):
+        return None
+    return dict(
+        evaluation,
+        stage=basis["stage"],
+        score=score,
+        comparison_key=comparison_key,
+        comparable=True,
+    )
 
 
 def _candidate_stage_evaluations(card):
@@ -174,17 +245,31 @@ def _rank_candidate_evaluations(candidates):
             "elimination_basis": ["no_comparable_evaluation"],
         }
         for evaluation in evaluations:
-            item = {"candidate": candidate, "evaluation": evaluation}
-            if evaluation.get("comparable") and qualified:
+            if not isinstance(evaluation, dict):
+                evaluation = {}
+            normalized = _normalise_ranking_evaluation(evaluation)
+            item = {"candidate": candidate, "evaluation": normalized}
+            if normalized is not None and qualified:
                 entries.append(item)
             else:
                 reports[path]["elimination_basis"].append(
-                    {"stage": evaluation["stage"], "missing_fields": evaluation["missing_fields"]}
+                    {
+                        "stage": evaluation.get("stage"),
+                        "missing_fields": evaluation.get("missing_fields")
+                        or _RANKING_FIELDS,
+                    }
                 )
 
     groups = {}
     for item in entries:
         groups.setdefault(item["evaluation"]["comparison_key"], []).append(item)
+    benchmark_groups = [
+        _group_winner_evidence(key, group)
+        for key, group in sorted(groups.items(), key=lambda item: item[0])
+    ]
+    benchmark_groups_by_key = {
+        tuple(group["comparison_key"]): group for group in benchmark_groups
+    }
     winner = None
     selected_key = None
     tied_paths = []
@@ -250,8 +335,8 @@ def _rank_candidate_evaluations(candidates):
         for candidate in qualified_candidates:
             evaluations = candidate.get("stage_evaluations") or []
             if any(
-                evaluation.get("comparable")
-                and evaluation.get("comparison_key") == selected_key
+                (normalized := _normalise_ranking_evaluation(evaluation)) is not None
+                and normalized.get("comparison_key") == selected_key
                 for evaluation in evaluations
             ):
                 continue
@@ -294,10 +379,15 @@ def _rank_candidate_evaluations(candidates):
             for item in pending_evaluations
         },
         "pending_evaluations": pending_evaluations,
+        "benchmark_groups": benchmark_groups,
+        "group_winners": [
+            group["winner"] for group in benchmark_groups if group["winner"] is not None
+        ],
+        "selected_benchmark_group": benchmark_groups_by_key.get(selected_key),
     }
     if winner_item is not None:
         winner = dict(winner)
-        winner.setdefault("score", winner_score)
+        winner["score"] = winner_score
         winner.update(ranking_metadata)
     for path, report in reports.items():
         report.update(ranking_metadata)
@@ -310,6 +400,26 @@ def _rank_candidate_evaluations(candidates):
             if selected_key is not None
             and item["evaluation"]["comparison_key"] == selected_key
         ]
+        report_groups = [
+            group for group in benchmark_groups
+            if path in group["candidate_paths"]
+        ]
+        report["candidate_benchmark_groups"] = report_groups
+        report["benchmark_group"] = (
+            report_groups[0] if len(report_groups) == 1 else None
+        )
+        report["group_winner"] = (
+            report["benchmark_group"].get("winner")
+            if report["benchmark_group"]
+            else None
+        )
+        if report["benchmark_group"]:
+            group = report["benchmark_group"]
+            report["group_outcome"] = (
+                "並列最佳" if len(group["winner_candidates"]) > 1
+                else "勝出" if group["winner"] and group["winner"]["candidate_path"] == path
+                else "落敗"
+            )
         if tied_paths and path in tied_paths and selected:
             report.update({
                 "outcome": "並列最佳",
@@ -503,6 +613,10 @@ def run_controlled_closed_loop(parallel_config):
             "event": "controlled_closed_loop_ranking",
             "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
             "winner": best_candidate,
+            "benchmark_groups": (
+                ranking_report[0].get("benchmark_groups", [])
+                if ranking_report else []
+            ),
             "candidate_reports": ranking_report,
             "prior_candidate_reports": prior_report,
         },

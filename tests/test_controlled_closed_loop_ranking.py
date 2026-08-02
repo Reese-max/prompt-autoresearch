@@ -127,6 +127,51 @@ def test_controlled_loop_does_not_mix_incompatible_benchmark_scales(tmp_path, mo
     ]
 
 
+def test_ranking_preserves_each_benchmark_group_winner_evidence():
+    a_lower = _candidate(
+        "benchmark-a-lower",
+        [_evaluation("dev", 0.90, "benchmarks/a.jsonl", settings={"scale": "0-1"})],
+    )
+    a_best = _candidate(
+        "benchmark-a-best",
+        [_evaluation("dev", 0.95, "benchmarks/a.jsonl", settings={"scale": "0-1"})],
+    )
+    b_best = _candidate(
+        "benchmark-b-best",
+        [_evaluation("dev", 95.0, "benchmarks/b.jsonl", settings={"scale": "0-100"})],
+    )
+
+    winner, report = auto_evolve._rank_candidate_evaluations([a_lower, a_best, b_best])
+
+    groups = report[0]["benchmark_groups"]
+    by_dataset = {group["basis"]["dataset"]: group for group in groups}
+    assert by_dataset["benchmarks/a.jsonl"]["winner"]["candidate_path"] == "benchmark-a-best"
+    assert by_dataset["benchmarks/b.jsonl"]["winner"]["candidate_path"] == "benchmark-b-best"
+    assert winner["group_winners"] == [
+        by_dataset["benchmarks/a.jsonl"]["winner"],
+        by_dataset["benchmarks/b.jsonl"]["winner"],
+    ]
+    b_report = next(row for row in report if row["candidate_path"] == "benchmark-b-best")
+    assert b_report["group_outcome"] == "勝出"
+
+
+def test_ranking_rebuilds_key_from_benchmark_basis():
+    valid = _evaluation("dev", 90.0)
+    tampered = _evaluation("dev", 100.0, "benchmarks/other.jsonl")
+    tampered["comparison_key"] = valid["comparison_key"]
+
+    winner, report = auto_evolve._rank_candidate_evaluations([
+        _candidate("valid", [valid]),
+        _candidate("tampered", [tampered]),
+    ])
+
+    assert winner["candidate_path"] == "valid"
+    tampered_report = next(row for row in report if row["candidate_path"] == "tampered")
+    assert tampered_report["elimination_basis"][-1] == {
+        "stage": "dev", "missing_fields": auto_evolve._RANKING_FIELDS
+    }
+
+
 def test_controlled_loop_persists_candidate_reasons(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     smoke = _candidate("smoke-99", [_evaluation("smoke", 99.0, "questions/smoke.jsonl")])
