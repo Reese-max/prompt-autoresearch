@@ -45,6 +45,7 @@ RETRY_AFTER_NO_IMPROVE = 3
 _RANKING_STAGE_PRIORITY = {"dev": 0, "smoke": 1, "holdout": 2}
 _RANKING_FIELDS = ("dataset", "metric", "evaluator_version", "measurement_settings")
 _BENCHMARK_ID_FIELDS = ("benchmark_id", "benchmark", "benchmark_key")
+_EXECUTION_COMPLETED_STATUSES = {"completed", "quality_measurement_obtained"}
 
 
 def load_json(path, default=None):
@@ -136,6 +137,86 @@ def _finite_score(value):
     return score if math.isfinite(score) else None
 
 
+def _execution_records(card, stage=None):
+    records = card.get("execution_records") if isinstance(card, dict) else []
+    if not isinstance(records, list):
+        return []
+    return [
+        record for record in records
+        if isinstance(record, dict) and (stage is None or record.get("stage") == stage)
+    ]
+
+
+def _execution_reliability(card):
+    """把失敗 attempt 留在可靠性證據，不混入品質分數。"""
+    records = _execution_records(card)
+    failures = [
+        dict(record) for record in records
+        if record.get("execution_status") not in _EXECUTION_COMPLETED_STATUSES
+    ]
+    timeouts = [
+        record for record in failures
+        if record.get("execution_status") == "timeout"
+    ]
+    return {
+        "attempt_count": len(records),
+        "completed_attempt_count": len(records) - len(failures),
+        "failed_attempt_count": len(failures),
+        "timeout_attempt_count": len(timeouts),
+        "failed_attempts": failures,
+    }
+
+
+def _stage_quality_evidence(card, stage, stage_data, require_execution=False):
+    """回傳單一 stage 是否可作品質排名，以及排除理由。"""
+    stage_data = stage_data if isinstance(stage_data, dict) else {}
+    records = _execution_records(card, stage)
+    latest_record = records[-1] if records else {}
+    status = stage_data.get("execution_status") or latest_record.get("execution_status")
+    completion = stage_data.get("completion")
+    measurement = stage_data.get("measurement_evidence")
+    quality_measurement = stage_data.get("quality_measurement")
+    if not isinstance(quality_measurement, dict):
+        quality_measurement = latest_record.get("quality_measurement")
+    explicit = bool(
+        require_execution
+        or status
+        or records
+        or isinstance(completion, dict)
+        or isinstance(measurement, dict)
+        or stage_data.get("evidence_complete") is not None
+    )
+    score = _finite_score(stage_data.get("score"))
+    if score is None and isinstance(quality_measurement, dict):
+        score = _finite_score(quality_measurement.get("score"))
+    reasons = []
+    if explicit:
+        if status not in _EXECUTION_COMPLETED_STATUSES:
+            reasons.append("execution_status_not_completed")
+        if score is None:
+            reasons.append("quality_measurement_missing")
+        if isinstance(completion, dict):
+            if completion.get("status") != "completed":
+                reasons.append("measurement_completion_not_completed")
+            if completion.get("missing_evidence_types"):
+                reasons.append("measurement_evidence_incomplete")
+            if completion.get("evidence_errors"):
+                reasons.append("measurement_evidence_invalid")
+        elif isinstance(measurement, dict):
+            complete = measurement.get("complete")
+            if complete is not True and measurement.get("status") not in {"completed", "complete", "valid"}:
+                reasons.append("measurement_evidence_incomplete")
+        elif stage_data.get("evidence_complete") is not True and not isinstance(quality_measurement, dict):
+            reasons.append("measurement_evidence_missing")
+    return {
+        "eligible": not reasons,
+        "score": score,
+        "execution_status": status,
+        "measurement_evidence_complete": not reasons,
+        "quality_exclusion_reasons": reasons,
+    }
+
+
 def _group_winner_evidence(comparison_key, group):
     ranked = sorted(
         group,
@@ -180,7 +261,7 @@ def _first_value(sources, *keys):
     return None
 
 
-def _stage_comparison(card, stage, stage_data):
+def _stage_comparison(card, stage, stage_data, require_execution=False):
     run_dir = stage_data.get("run")
     summary = load_json(os.path.join(run_dir, "summary.json"), {}) if run_dir else {}
     sources = [stage_data, card, summary]
@@ -207,7 +288,10 @@ def _stage_comparison(card, stage, stage_data):
     }
     if benchmark_id is not None:
         basis["benchmark_id"] = benchmark_id
-    score = _finite_score(stage_data.get("score"))
+    quality_evidence = _stage_quality_evidence(
+        card, stage, stage_data, require_execution=require_execution,
+    )
+    score = quality_evidence["score"]
     if score is None:
         return {
             "stage": stage,
@@ -216,6 +300,20 @@ def _stage_comparison(card, stage, stage_data):
             "basis": basis,
             "missing_fields": [],
             "reason": "不可比較：score 必須是有限數值",
+            "execution_status": quality_evidence["execution_status"],
+            "quality_exclusion_reasons": quality_evidence["quality_exclusion_reasons"],
+        }
+    if not quality_evidence["eligible"]:
+        return {
+            "stage": stage,
+            "score": None,
+            "comparable": False,
+            "basis": basis,
+            "missing_fields": quality_evidence["quality_exclusion_reasons"],
+            "reason": "不可比較：品質量測證據不完整或執行未完成",
+            "execution_status": quality_evidence["execution_status"],
+            "measurement_evidence_complete": False,
+            "quality_exclusion_reasons": quality_evidence["quality_exclusion_reasons"],
         }
     missing = [field for field in _RANKING_FIELDS if basis[field] in (None, "", {})]
     if missing:
@@ -234,12 +332,22 @@ def _stage_comparison(card, stage, stage_data):
         "comparable": True,
         "basis": basis,
         "comparison_key": comparison_key,
+        "execution_status": quality_evidence["execution_status"],
+        "measurement_evidence_complete": quality_evidence["measurement_evidence_complete"],
+        "quality_exclusion_reasons": [],
     }
 
 
 def _normalise_ranking_evaluation(evaluation, candidate=None):
     """以 basis 重建 key，拒絕與 benchmark 身分不一致的外部 key。"""
     if not isinstance(evaluation, dict) or evaluation.get("comparable") is False:
+        return None
+    execution_status = evaluation.get("execution_status")
+    if execution_status is not None and execution_status not in _EXECUTION_COMPLETED_STATUSES:
+        return None
+    if execution_status is not None and evaluation.get("measurement_evidence_complete") is not True:
+        return None
+    if evaluation.get("quality_eligible") is False:
         return None
     basis = dict(evaluation.get("basis") or {})
     benchmark_id = _first_value((evaluation, candidate), *_BENCHMARK_ID_FIELDS)
@@ -277,20 +385,30 @@ def _normalise_ranking_evaluation(evaluation, candidate=None):
     )
 
 
-def _candidate_stage_evaluations(card):
+def _candidate_stage_evaluations(card, require_execution=False):
     evaluations = []
     for stage in ("smoke", "dev", "holdout"):
         stage_data = card.get(stage) or {}
-        if not isinstance(stage_data, dict) or stage_data.get("score") is None:
+        if not isinstance(stage_data, dict):
             continue
-        evaluations.append(_stage_comparison(card, stage, stage_data))
+        has_record_score = any(
+            _finite_score((record.get("quality_measurement") or {}).get("score")) is not None
+            for record in _execution_records(card, stage)
+        )
+        if stage_data.get("score") is None and not has_record_score:
+            continue
+        evaluations.append(
+            _stage_comparison(
+                card, stage, stage_data, require_execution=require_execution,
+            )
+        )
     return evaluations
 
 
 def _preferred_stage_evaluation(evaluations):
     rankable = [item for item in evaluations if item.get("comparable")]
     return min(
-        rankable or evaluations,
+        rankable,
         key=lambda item: _RANKING_STAGE_PRIORITY.get(item["stage"], 99),
         default=None,
     )
@@ -314,6 +432,7 @@ def _rank_candidate_evaluations(candidates):
             "candidate_path": path,
             "status": candidate.get("status", ""),
             "evaluations": evaluations,
+            "execution_reliability": _execution_reliability(candidate),
             "outcome": "淘汰",
             "reason": "沒有可排名的同基準評測資料",
             "elimination_basis": ["no_comparable_evaluation"],
@@ -550,6 +669,7 @@ def _scorecard_elimination_reports(known_paths):
             "candidate_path": path,
             "status": status,
             "evaluations": [],
+            "execution_reliability": _execution_reliability(card),
             "outcome": "淘汰",
             "reason": "；".join(str(reason) for reason in reasons) or status,
             "elimination_basis": reasons or [status],
@@ -587,10 +707,8 @@ def scan_candidate_evaluations():
             for stage in ("smoke", "dev", "holdout")
         ):
             continue
-        stage_evaluations = _candidate_stage_evaluations(card)
+        stage_evaluations = _candidate_stage_evaluations(card, require_execution=True)
         preferred = _preferred_stage_evaluation(stage_evaluations)
-        if preferred is None:
-            continue
 
         evidence_checks = {}
         evidence_errors = []
@@ -628,6 +746,8 @@ def scan_candidate_evaluations():
             })
             with open(os.path.join(cand_dir, name), "w", encoding="utf-8") as handle:
                 json.dump(card, handle, ensure_ascii=False, indent=2)
+            continue
+        if preferred is None:
             continue
         results.append({
             "candidate_path": card.get("candidate_path") or "",

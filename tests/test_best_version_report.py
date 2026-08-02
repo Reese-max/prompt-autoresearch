@@ -226,6 +226,43 @@ def test_load_candidate_scorecards_skips_missing(tmp_path, monkeypatch):
     assert bvr.load_candidate_scorecards() == []
 
 
+def test_candidate_comparison_separates_failed_attempt_from_quality_score(sandbox):
+    card = write_scorecard(
+        sandbox,
+        "timeout_candidate",
+        dev={
+            "score": 99.0,
+            "execution_status": "timeout",
+            "completion": {
+                "status": "failed",
+                "missing_evidence_types": ["quality_measurement"],
+                "evidence_errors": [],
+            },
+        },
+        holdout={
+            "score": 88.0,
+            "execution_status": "completed",
+            "measurement_evidence": {"complete": True},
+        },
+        execution_records=[{
+            "stage": "dev",
+            "attempt": 1,
+            "execution_status": "timeout",
+            "error_evidence": {"stderr": "timed out"},
+        }],
+    )
+
+    row = bvr.build_candidate_comparisons([{
+        **card,
+        "_scorecard_file": "prompts/candidates/timeout_candidate.scorecard.json",
+    }], {"dev_avg": 80.0, "holdout_avg": 80.0})[0]
+
+    assert row["scores"]["dev"]["score"] is None
+    assert row["deltas"]["dev"] is None
+    assert row["quality_exclusion_reasons"]["dev"] == ["execution_status_not_completed", "measurement_completion_not_completed", "measurement_evidence_incomplete"]
+    assert row["execution_reliability"]["timeout_attempt_count"] == 1
+
+
 # ---------- load_evolution_summary ----------
 
 def test_load_evolution_summary_empty(tmp_path, monkeypatch):

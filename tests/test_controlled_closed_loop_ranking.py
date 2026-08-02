@@ -235,6 +235,30 @@ def test_ranking_rebuilds_key_from_benchmark_basis():
     }
 
 
+def test_ranking_keeps_timeout_attempt_out_of_quality_score():
+    good = _evaluation("dev", 90.0)
+    good.update({"execution_status": "completed", "measurement_evidence_complete": True})
+    timeout = _evaluation("dev", 999.0)
+    timeout.update({"execution_status": "timeout", "measurement_evidence_complete": False})
+    good_candidate = _candidate("good", [good])
+    timeout_candidate = _candidate("timeout", [timeout])
+    timeout_candidate["execution_records"] = [{
+        "stage": "dev",
+        "attempt": 1,
+        "execution_status": "timeout",
+        "error_evidence": {"stderr": "timed out"},
+    }]
+
+    winner, report = auto_evolve._rank_candidate_evaluations(
+        [good_candidate, timeout_candidate]
+    )
+
+    assert winner["candidate_path"] == "good"
+    timeout_report = next(row for row in report if row["candidate_path"] == "timeout")
+    assert timeout_report["outcome"] == "淘汰"
+    assert timeout_report["execution_reliability"]["timeout_attempt_count"] == 1
+
+
 def test_controlled_loop_persists_candidate_reasons(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     smoke = _candidate("smoke-99", [_evaluation("smoke", 99.0, "questions/smoke.jsonl")])

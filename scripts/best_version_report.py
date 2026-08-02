@@ -419,6 +419,9 @@ def _prompt_artifact(path, recorded_hash=""):
     }
 
 
+_EXECUTION_COMPLETED_STATUSES = {"completed", "quality_measurement_obtained"}
+
+
 def _score_entry(value):
     if isinstance(value, dict):
         return {
@@ -434,6 +437,84 @@ def _score_entry(value):
         "risk_perfect_rate": None,
         "word_count_pass_rate": None,
         "run": "",
+    }
+
+
+def _execution_records(card, stage=None):
+    records = card.get("execution_records") if isinstance(card, dict) else []
+    if not isinstance(records, list):
+        return []
+    return [
+        record for record in records
+        if isinstance(record, dict) and (stage is None or record.get("stage") == stage)
+    ]
+
+
+def _execution_reliability(card):
+    """把失敗／逾時 attempt 作為可靠性證據獨立呈現。"""
+    records = _execution_records(card)
+    failures = [
+        dict(record) for record in records
+        if record.get("execution_status") not in _EXECUTION_COMPLETED_STATUSES
+    ]
+    timeouts = [
+        record for record in failures
+        if record.get("execution_status") == "timeout"
+    ]
+    return {
+        "attempt_count": len(records),
+        "completed_attempt_count": len(records) - len(failures),
+        "failed_attempt_count": len(failures),
+        "timeout_attempt_count": len(timeouts),
+        "failed_attempts": failures,
+    }
+
+
+def _stage_quality_evidence(card, dataset, stage_data):
+    """只允許完成執行且量測證據完整的 stage 進入品質分數。"""
+    stage_data = stage_data if isinstance(stage_data, dict) else {}
+    records = _execution_records(card, dataset)
+    latest_record = records[-1] if records else {}
+    status = stage_data.get("execution_status") or latest_record.get("execution_status")
+    completion = stage_data.get("completion")
+    measurement = stage_data.get("measurement_evidence")
+    quality_measurement = stage_data.get("quality_measurement")
+    if not isinstance(quality_measurement, dict):
+        quality_measurement = latest_record.get("quality_measurement")
+    explicit = bool(
+        status
+        or records
+        or isinstance(completion, dict)
+        or isinstance(measurement, dict)
+        or stage_data.get("evidence_complete") is not None
+    )
+    score = _number(stage_data.get("score"))
+    if score is None and isinstance(quality_measurement, dict):
+        score = _number(quality_measurement.get("score"))
+    reasons = []
+    if explicit:
+        if status not in _EXECUTION_COMPLETED_STATUSES:
+            reasons.append("execution_status_not_completed")
+        if score is None:
+            reasons.append("quality_measurement_missing")
+        if isinstance(completion, dict):
+            if completion.get("status") != "completed":
+                reasons.append("measurement_completion_not_completed")
+            if completion.get("missing_evidence_types"):
+                reasons.append("measurement_evidence_incomplete")
+            if completion.get("evidence_errors"):
+                reasons.append("measurement_evidence_invalid")
+        elif isinstance(measurement, dict):
+            if measurement.get("complete") is not True and measurement.get("status") not in {"completed", "complete", "valid"}:
+                reasons.append("measurement_evidence_incomplete")
+        elif stage_data.get("evidence_complete") is not True and not isinstance(quality_measurement, dict):
+            reasons.append("measurement_evidence_missing")
+    return {
+        "eligible": not reasons,
+        "score": score if not reasons else None,
+        "execution_status": status,
+        "measurement_evidence_complete": not reasons,
+        "quality_exclusion_reasons": reasons,
     }
 
 
@@ -546,10 +627,22 @@ def build_candidate_comparisons(cards, baseline_meta):
         path = repo_rel(card.get("candidate_path")) or ""
         actual_hash = _path_hash(path)["sha256"] if path else ""
         candidate_hash = card.get("candidate_hash") or actual_hash
-        scores = {
+        raw_scores = {
             dataset: _score_entry(card.get(dataset))
             for dataset in _SCORE_DATASETS
         }
+        quality_evidence = {
+            dataset: _stage_quality_evidence(card, dataset, card.get(dataset))
+            for dataset in _SCORE_DATASETS
+        }
+        scores = {}
+        for dataset in _SCORE_DATASETS:
+            evidence = quality_evidence[dataset]
+            stage_data = card.get(dataset) if isinstance(card.get(dataset), dict) else {}
+            scores[dataset] = _score_entry({
+                **stage_data,
+                "score": evidence["score"] if evidence["eligible"] else None,
+            })
         supplied_baseline = card.get("baseline_scores")
         if not isinstance(supplied_baseline, dict):
             supplied_baseline = card.get("baseline")
@@ -561,7 +654,7 @@ def build_candidate_comparisons(cards, baseline_meta):
         }
         comparison_basis, basis_source = _basis_from_card(card, baseline_scores)
         measurement_gaps = _measurement_gaps(
-            card, scores, comparison_basis, basis_source,
+            card, raw_scores, comparison_basis, basis_source,
         )
         deltas = {}
         for dataset, score in scores.items():
@@ -582,6 +675,18 @@ def build_candidate_comparisons(cards, baseline_meta):
             "baseline_scores": baseline_scores,
             "deltas": deltas,
             "execution_records": card.get("execution_records", []),
+            "execution_reliability": _execution_reliability(card),
+            "quality_measurement_evidence": quality_evidence,
+            "quality_eligible": all(
+                quality_evidence[dataset]["eligible"]
+                and scores[dataset]["score"] is not None
+                for dataset in _REQUIRED_SCORE_DATASETS
+            ),
+            "quality_exclusion_reasons": {
+                dataset: quality_evidence[dataset]["quality_exclusion_reasons"]
+                for dataset in _SCORE_DATASETS
+                if quality_evidence[dataset]["quality_exclusion_reasons"]
+            },
             "comparison_basis": comparison_basis,
             "comparison_basis_source": basis_source,
             "measurement_gaps": measurement_gaps,
@@ -946,6 +1051,7 @@ def verify_evidence_integrity(
             row for row in candidate_comparison
             if isinstance(row, dict)
             and row.get("classification") == "accepted"
+            and row.get("quality_eligible", True)
             and not row.get("measurement_gaps")
             and _number((row.get("scores", {}).get("dev") or {}).get("score")) is not None
         ]
@@ -1177,7 +1283,7 @@ def build_scores_section(baseline_meta, champions):
     return lines
 
 
-def build_candidate_comparison_section(cards, limit):
+def build_candidate_comparison_section(cards, limit, baseline_meta=None):
     lines = []
     lines.append("## 4. 逐候選比較")
     lines.append("")
@@ -1188,35 +1294,52 @@ def build_candidate_comparison_section(cards, limit):
     lines.append(f"- PENDING/其他：{len(pending)}")
     lines.append("")
 
-    display_cards = cards[:limit] if limit else cards
-    if display_cards:
+    comparisons = build_candidate_comparisons(
+        cards, baseline_meta if baseline_meta is not None else load_baseline_meta(),
+    )
+    display_comparisons = comparisons[:limit] if limit else comparisons
+    if display_comparisons:
         table_rows = []
-        for card in display_cards:
-            decision = card.get("final_decision", card.get("status", "-"))
-            direction = card.get("direction", "-")
-            target = ",".join(card.get("target_failures", [])) or "-"
+        for comparison in display_comparisons:
+            decision = comparison.get("decision", "-")
+            direction = comparison.get("direction", "-")
+            target = ",".join(comparison.get("target_failures", [])) or "-"
             smoke_score = "-"
             dev_score = "-"
             holdout_score = "-"
-            smoke_data = card.get("smoke") or {}
-            dev_data = card.get("dev") or {}
-            holdout_data = card.get("holdout") or {}
+            smoke_data = comparison.get("scores", {}).get("smoke") or {}
+            dev_data = comparison.get("scores", {}).get("dev") or {}
+            holdout_data = comparison.get("scores", {}).get("holdout") or {}
             if smoke_data.get("score") is not None:
                 smoke_score = f"{smoke_data['score']:.1f}"
             if dev_data.get("score") is not None:
                 dev_score = f"{dev_data['score']:.1f}"
             if holdout_data.get("score") is not None:
                 holdout_score = f"{holdout_data['score']:.1f}"
-            reject_reasons = card.get("reject_reasons", [])
-            reason = reject_reasons[0] if reject_reasons else "-"
+            exclusions = comparison.get("quality_exclusion_reasons", {})
+            exclusion = next(
+                (reason for reasons in exclusions.values() for reason in reasons),
+                "",
+            )
+            reject_reasons = comparison.get("reject_reasons", [])
+            reason = exclusion or (reject_reasons[0] if reject_reasons else "-")
+            reliability = comparison.get("execution_reliability", {})
+            reliability_text = (
+                f"{reliability.get('attempt_count', 0)} attempts / "
+                f"{reliability.get('failed_attempt_count', 0)} failed / "
+                f"{reliability.get('timeout_attempt_count', 0)} timeout"
+            )
+            quality_status = "可排名" if comparison.get("quality_eligible") else "不納入品質排名"
             table_rows.append([
                 decision, direction, target,
                 smoke_score, dev_score, holdout_score,
+                quality_status,
+                reliability_text,
                 reason[:60],
             ])
         lines.append(format_table(
             ["決策", "方向", "目標 F",
-             "smoke", "dev", "holdout", "淘汰理由"],
+             "smoke", "dev", "holdout", "品質排名", "執行可靠性", "淘汰理由"],
             table_rows,
         ))
     else:
@@ -1477,6 +1600,17 @@ def build_structured_report(limit=10):
             "winner": winner["scores"],
             "type_champions": type_champions if is_valid else [],
             "measurement_basis": measurement_basis,
+        },
+        "quality_ranking": {
+            "policy": "same_benchmark_completed_measurement_only",
+            "eligible_candidate_ids": [
+                row["candidate_id"] for row in candidate_comparison
+                if row.get("quality_eligible")
+            ],
+            "excluded_candidate_ids": [
+                row["candidate_id"] for row in candidate_comparison
+                if not row.get("quality_eligible")
+            ],
         },
         "candidate_comparison": candidate_comparison,
         "commands": commands,
