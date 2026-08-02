@@ -18,6 +18,7 @@ scripts/best_version_report.py — 最佳版本證據報告產生器。
 """
 import argparse
 import json
+import math
 import os
 import time
 
@@ -171,6 +172,77 @@ def classify_candidate(card):
     if decision in ("REVERT", "REJECT") or status.startswith("rejected"):
         return "rejected"
     return "pending"
+
+
+# ---------- 證據完整性閘門 ----------
+
+EVIDENCE_INTEGRITY_ERRORS = []
+
+
+def verify_evidence_integrity(baseline_meta, champions, cards, sessions, config):
+    """驗證冠軍選優所需的關鍵證據是否齊全。
+
+    回傳 (is_valid: bool, errors: list[str])：
+    - is_valid: True 表示所有關鍵證據齊全，可安全選優。
+    - errors: 缺失的證據類型描述列表。
+
+    缺少任一項關鍵證據時，報告必須輸出 inconclusive 並拒絕選優。
+    """
+    global EVIDENCE_INTEGRITY_ERRORS
+    errors = []
+
+    # 1. 可讀提示詞／流程：baseline_meta 必須存在且含有 prompt_hash
+    has_prompt = False
+    if baseline_meta:
+        prompt_hash = baseline_meta.get("prompt_hash", "")
+        if isinstance(prompt_hash, str) and prompt_hash.strip():
+            has_prompt = True
+    if not has_prompt:
+        errors.append("缺少可讀提示詞／流程（baseline.meta.json 中無有效 prompt_hash）")
+
+    # 2. 可驗證分數與量測基準：baseline_meta 必須含有 dev_avg 和 holdout_avg
+    has_scores = False
+    if baseline_meta:
+        dev_avg = baseline_meta.get("dev_avg")
+        holdout_avg = baseline_meta.get("holdout_avg")
+        try:
+            dev_valid = dev_avg is not None and math.isfinite(float(dev_avg))
+            holdout_valid = holdout_avg is not None and math.isfinite(float(holdout_avg))
+            has_scores = dev_valid and holdout_valid
+        except (TypeError, ValueError):
+            has_scores = False
+    if not has_scores:
+        errors.append("缺少可驗證分數與量測基準（baseline.meta.json 中無有效 dev_avg/holdout_avg）")
+
+    # 3. 有效比較對象／淘汰依據：至少有一個候選且有有效的決策記錄
+    has_comparison = False
+    if cards:
+        accepted, rejected, pending = classify_candidates(cards)
+        has_comparison = len(accepted) > 0 or len(rejected) > 0
+    if not has_comparison:
+        errors.append("缺少有效比較對象／淘汰依據（無候選分數卡或無有效決策記錄）")
+
+    # 4. 重現設定與執行紀錄：
+    #    4a. 至少有一個完整的演化 session（含 start + stop）
+    #    4b. config.yaml 可讀取
+    has_reproduction = False
+    if sessions:
+        complete_sessions = [
+            s for s in sessions
+            if s.get("start") and s.get("stop")
+        ]
+        has_reproduction = len(complete_sessions) > 0
+    if not has_reproduction:
+        errors.append("缺少重現設定與執行紀錄（無完整演化 session）")
+
+    has_config = False
+    if config:
+        has_config = len(config) > 0
+    if not has_config:
+        errors.append("缺少重現設定（config.yaml 無法讀取或為空）")
+
+    EVIDENCE_INTEGRITY_ERRORS = errors
+    return len(errors) == 0, errors
 
 
 def classify_candidates(cards):
@@ -496,15 +568,24 @@ def build_report(limit=10):
 
     now = time.strftime("%Y-%m-%d %H:%M:%S")
 
+    # 證據完整性閘門檢查
+    is_valid, evidence_errors = verify_evidence_integrity(
+        baseline_meta, champions, cards, sessions, config
+    )
+
     json_data = {
         "report_type": "best_version_evidence",
         "generated_at": now,
+        "evidence_integrity": {
+            "valid": is_valid,
+            "errors": evidence_errors,
+        },
         "champion": {
-            "prompt_hash": baseline_meta.get("prompt_hash", ""),
-            "dev_avg": baseline_meta.get("dev_avg"),
-            "holdout_avg": baseline_meta.get("holdout_avg"),
-            "dev_run": baseline_meta.get("dev_run", ""),
-            "holdout_run": baseline_meta.get("holdout_run", ""),
+            "prompt_hash": baseline_meta.get("prompt_hash", "") if is_valid else "",
+            "dev_avg": baseline_meta.get("dev_avg") if is_valid else None,
+            "holdout_avg": baseline_meta.get("holdout_avg") if is_valid else None,
+            "dev_run": baseline_meta.get("dev_run", "") if is_valid else "",
+            "holdout_run": baseline_meta.get("holdout_run", "") if is_valid else "",
         },
         "type_champions": [
             {
@@ -515,7 +596,7 @@ def build_report(limit=10):
                 "dev_run": ch.get("dev_run", ""),
             }
             for ch in champions
-        ],
+        ] if is_valid else [],
         "candidates_summary": {
             "total": len(cards),
             "accepted": len([c for c in cards if classify_candidate(c) == "accepted"]),
@@ -540,14 +621,42 @@ def build_report(limit=10):
     lines = []
     lines.append("# 最佳版本證據報告")
     lines.append("")
+
+    if not is_valid:
+        lines.append("## ⚠️ 證據完整性閘門：INCONCLUSIVE")
+        lines.append("")
+        lines.append("**報告判定：inconclusive** — 缺少關鍵證據，拒絕選優。")
+        lines.append("")
+        lines.append("缺失項目：")
+        for err in evidence_errors:
+            lines.append(f"- {err}")
+        lines.append("")
+        lines.append("根據證據完整性閘門規則，缺少以下任一關鍵證據時，不得宣稱任何版本為最佳：")
+        lines.append("1. 可讀提示詞／流程")
+        lines.append("2. 可驗證分數與量測基準")
+        lines.append("3. 有效比較對象／淘汰依據")
+        lines.append("4. 重現設定與執行紀錄")
+        lines.append("")
+    else:
+        lines.append("## ✅ 證據完整性閘門：PASS")
+        lines.append("")
+
     lines.append(f"- 產生時間：{now}")
     lines.append(f"- 候選總數：{len(cards)}")
     lines.append(f"- 演化 session 數：{len(sessions)}")
+    lines.append(f"- 報告判定：{'inconclusive' if not is_valid else 'valid'}")
     lines.append("")
     lines.append(build_json_block(json_data))
     lines.append("")
 
-    lines.extend(build_champion_section(baseline_meta, champions))
+    if is_valid:
+        lines.extend(build_champion_section(baseline_meta, champions))
+    else:
+        lines.append("## 1. Winner（冠軍）")
+        lines.append("")
+        lines.append("_因證據不完整，無法選出冠軍_")
+        lines.append("")
+
     lines.extend(build_process_section(sessions))
     lines.extend(build_scores_section(baseline_meta, champions))
     lines.extend(build_candidate_comparison_section(cards, limit))

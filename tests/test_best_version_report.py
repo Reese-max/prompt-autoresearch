@@ -289,7 +289,9 @@ def test_build_report_empty(sandbox):
     assert "```json" in report
     assert "## 1. Winner（冠軍）" in report
     assert "## 4. 逐候選比較" in report
-    assert "_尚無全域冠軍_" in report
+    # 空資料時證據不完整，應顯示 inconclusive 訊息
+    assert "INCONCLUSIVE" in report
+    assert "因證據不完整，無法選出冠軍" in report
     assert "_無候選記錄_" in report
 
 
@@ -383,3 +385,172 @@ def test_main_with_limit(sandbox, monkeypatch, capsys):
     bvr.main()
     out = capsys.readouterr().out
     assert "# 最佳版本證據報告" in out
+
+
+# ---------- 證據完整性閘門 ----------
+
+class TestEvidenceIntegrityGate:
+    """驗證 evidence integrity gate 在缺少關鍵證據時輸出 inconclusive。"""
+
+    def test_all_evidence_present(self):
+        """所有證據齊全時應通過。"""
+        baseline_meta = {
+            "prompt_hash": "abc123",
+            "dev_avg": 88.5,
+            "holdout_avg": 87.0,
+        }
+        champions = [{"type": "事實", "candidate_avg": 90.0}]
+        cards = [{"final_decision": "ACCEPT"}]
+        sessions = [{"start": "2026-01-01", "stop": "2026-01-02"}]
+        config = {"thresholds": {"dev_min_improvement": 2.0}}
+
+        is_valid, errors = bvr.verify_evidence_integrity(
+            baseline_meta, champions, cards, sessions, config
+        )
+        assert is_valid is True
+        assert errors == []
+
+    def test_missing_prompt_hash(self):
+        """缺少 prompt_hash 時應失敗。"""
+        baseline_meta = {
+            "dev_avg": 88.5,
+            "holdout_avg": 87.0,
+        }
+        champions = []
+        cards = [{"final_decision": "ACCEPT"}]
+        sessions = [{"start": "2026-01-01", "stop": "2026-01-02"}]
+        config = {"thresholds": {}}
+
+        is_valid, errors = bvr.verify_evidence_integrity(
+            baseline_meta, champions, cards, sessions, config
+        )
+        assert is_valid is False
+        assert any("可讀提示詞" in e for e in errors)
+
+    def test_missing_scores(self):
+        """缺少 dev_avg/holdout_avg 時應失敗。"""
+        baseline_meta = {
+            "prompt_hash": "abc123",
+        }
+        champions = []
+        cards = [{"final_decision": "ACCEPT"}]
+        sessions = [{"start": "2026-01-01", "stop": "2026-01-02"}]
+        config = {"thresholds": {}}
+
+        is_valid, errors = bvr.verify_evidence_integrity(
+            baseline_meta, champions, cards, sessions, config
+        )
+        assert is_valid is False
+        assert any("可驗證分數" in e for e in errors)
+
+    def test_missing_comparison(self):
+        """無候選分數卡時應失敗。"""
+        baseline_meta = {
+            "prompt_hash": "abc123",
+            "dev_avg": 88.5,
+            "holdout_avg": 87.0,
+        }
+        champions = []
+        cards = []
+        sessions = [{"start": "2026-01-01", "stop": "2026-01-02"}]
+        config = {"thresholds": {}}
+
+        is_valid, errors = bvr.verify_evidence_integrity(
+            baseline_meta, champions, cards, sessions, config
+        )
+        assert is_valid is False
+        assert any("比較對象" in e for e in errors)
+
+    def test_missing_evolution_session(self):
+        """無完整演化 session 時應失敗。"""
+        baseline_meta = {
+            "prompt_hash": "abc123",
+            "dev_avg": 88.5,
+            "holdout_avg": 87.0,
+        }
+        champions = []
+        cards = [{"final_decision": "ACCEPT"}]
+        sessions = []
+        config = {"thresholds": {}}
+
+        is_valid, errors = bvr.verify_evidence_integrity(
+            baseline_meta, champions, cards, sessions, config
+        )
+        assert is_valid is False
+        assert any("演化 session" in e for e in errors)
+
+    def test_incomplete_evolution_session(self):
+        """只有 start 沒有 stop 的 session 應失敗。"""
+        baseline_meta = {
+            "prompt_hash": "abc123",
+            "dev_avg": 88.5,
+            "holdout_avg": 87.0,
+        }
+        champions = []
+        cards = [{"final_decision": "ACCEPT"}]
+        sessions = [{"start": "2026-01-01"}]
+        config = {"thresholds": {}}
+
+        is_valid, errors = bvr.verify_evidence_integrity(
+            baseline_meta, champions, cards, sessions, config
+        )
+        assert is_valid is False
+        assert any("演化 session" in e for e in errors)
+
+    def test_missing_config(self):
+        """config 為空時應失敗。"""
+        baseline_meta = {
+            "prompt_hash": "abc123",
+            "dev_avg": 88.5,
+            "holdout_avg": 87.0,
+        }
+        champions = []
+        cards = [{"final_decision": "ACCEPT"}]
+        sessions = [{"start": "2026-01-01", "stop": "2026-01-02"}]
+        config = {}
+
+        is_valid, errors = bvr.verify_evidence_integrity(
+            baseline_meta, champions, cards, sessions, config
+        )
+        assert is_valid is False
+        assert any("重現設定" in e for e in errors)
+
+    def test_multiple_missing_evidence(self):
+        """多項證據缺失時應回報所有缺失。"""
+        baseline_meta = {}
+        champions = []
+        cards = []
+        sessions = []
+        config = {}
+
+        is_valid, errors = bvr.verify_evidence_integrity(
+            baseline_meta, champions, cards, sessions, config
+        )
+        assert is_valid is False
+        assert len(errors) >= 4
+
+    def test_report_inconclusive_when_evidence_missing(self, sandbox):
+        """報告在證據不完整時應輸出 inconclusive。"""
+        report = bvr.build_report(limit=5)
+        assert "INCONCLUSIVE" in report
+        assert "inconclusive" in report
+        assert "拒絕選優" in report
+
+    def test_report_valid_when_evidence_complete(self, sandbox):
+        """報告在證據完整時應正常顯示冠軍。"""
+        write_baseline_meta(sandbox)
+        write_champion_meta(sandbox, "legal_case")
+        write_scorecard(sandbox, "cand_1", final_decision="ACCEPT")
+        write_config(sandbox)
+
+        rows = [
+            {"event": "start", "timestamp": "2026-01-01 00:00:00", "args": {"max_rounds": 3}, "baseline_dev_score": 85.0},
+            {"event": "round_complete", "round": 1, "promoted": True},
+            {"event": "stop", "timestamp": "2026-01-01 01:00:00", "reason": "done", "best_score": 89.0, "estimated_api_calls_total": 100, "elapsed_seconds": 3600},
+        ]
+        write_evolution_log(sandbox, rows)
+
+        report = bvr.build_report(limit=10)
+        assert "PASS" in report
+        assert "valid" in report
+        assert "_尚無全域冠軍_" not in report
