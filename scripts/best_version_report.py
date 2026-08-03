@@ -31,6 +31,7 @@ if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
 
 from lib.notifications import send_report_to_telegram
+from scripts.git_reproducibility import collect_git_snapshot
 
 if hasattr(__import__("sys").stdout, "reconfigure"):
     __import__("sys").stdout.reconfigure(encoding="utf-8", errors="replace")
@@ -1797,6 +1798,7 @@ def build_structured_report(limit=10):
     environment = collect_environment()
     input_versions = collect_input_versions(baseline_meta, champions, cards, sessions)
     validation_state = load_validation_state()
+    git_snapshot = collect_git_snapshot(cwd=ROOT)
     measurement_basis = collect_measurement_basis(config, baseline_meta, input_versions)
     candidate_comparison = build_candidate_comparisons(cards, baseline_meta)
     incomplete_evidence = _incomplete_quality_evidence(
@@ -1931,12 +1933,14 @@ def build_structured_report(limit=10):
             "remaining_work": incomplete_evidence["remaining_work"],
             "environment": environment,
             "input_data_versions": input_versions,
+            "git_reproducibility_snapshot": git_snapshot,
         },
         "execution": {
             "log_path": repo_rel(EVOLUTION_LOG_PATH) or "",
             "records": records,
             "sessions": sessions,
             "validation": validation_state,
+            "git_reproducibility_snapshot": git_snapshot,
         },
         "evolution_sessions": len(sessions),
         "config": {
