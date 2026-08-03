@@ -704,7 +704,42 @@ def build_candidate_comparisons(cards, baseline_meta):
     return comparisons
 
 
-def _incomplete_quality_evidence(comparisons, config):
+def _validation_recovery(state):
+    """讀取逾時恢復資料；舊 checkpoint 沒有新欄位時仍可相容。"""
+    if not isinstance(state, dict):
+        state = {}
+    recovery = state.get("recovery") if isinstance(state.get("recovery"), dict) else {}
+    recoverable_failure = state.get("status") in {"timed_out", "failed"} or bool(
+        state.get("timed_out_stages")
+    )
+    return {
+        "status": recovery.get(
+            "status", "recoverable" if recoverable_failure else "complete"
+        ),
+        "timed_out_stage": state.get("timed_out_stage"),
+        "timed_out_stages": state.get("timed_out_stages", []),
+        "isolated_stages": state.get("isolated_stages", recovery.get("isolated_stages", [])),
+        "isolated_candidates": state.get(
+            "isolated_candidates", recovery.get("isolated_candidates", [])
+        ),
+        "completed_candidates": state.get(
+            "completed_candidates", recovery.get("completed_candidates", [])
+        ),
+        "rerun_commands": state.get("rerun_commands", recovery.get("rerun_commands", [])),
+        "remaining_work": state.get("remaining_work", recovery.get("remaining_work", [])),
+        "global_best_allowed": state.get("global_best_allowed", not recoverable_failure),
+    }
+
+
+def _merge_unique(items, additions):
+    merged = list(items or [])
+    for item in additions or []:
+        if item not in merged:
+            merged.append(item)
+    return merged
+
+
+def _incomplete_quality_evidence(comparisons, config, validation_state=None):
     """找出模型失敗／逾時且沒有足夠成功量測的候選。"""
     affected = []
     parallel = config.get("parallel", {}) if isinstance(config, dict) else {}
@@ -779,14 +814,23 @@ def _incomplete_quality_evidence(comparisons, config):
             "missing_quality_measurements": missing,
             "supplemental_evaluation_commands": commands,
         })
+    recovery = _validation_recovery(validation_state)
+    recovery_commands = recovery["rerun_commands"]
+    recovery_work = recovery["remaining_work"]
     return {
-        "status": "unproven" if affected else "not_triggered",
+        "status": "unproven" if affected or recovery["status"] == "recoverable" else "not_triggered",
         "affected_candidates": affected,
-        "supplemental_evaluation_commands": [
+        "supplemental_evaluation_commands": _merge_unique([
             command
             for item in affected
             for command in item["supplemental_evaluation_commands"]
-        ],
+        ], recovery_commands),
+        "rerun_commands": recovery_commands,
+        "remaining_work": recovery_work,
+        "isolated_stages": recovery["isolated_stages"],
+        "isolated_candidates": recovery["isolated_candidates"],
+        "completed_candidates": recovery["completed_candidates"],
+        "global_best_allowed": recovery["global_best_allowed"],
     }
 
 
@@ -1168,6 +1212,16 @@ def verify_evidence_integrity(
             "候選因免費模型失敗或逾時而缺少足夠成功品質量測"
             f"（{names}；不得宣稱其他候選為全域最佳）"
         )
+    if incomplete_evidence and incomplete_evidence.get("global_best_allowed") is False:
+        stages = ", ".join(
+            item.get("stage", "-")
+            for item in incomplete_evidence.get("isolated_stages", [])
+            if isinstance(item, dict)
+        ) or "未知階段"
+        errors.append(
+            f"驗證逾時或隔離（{stages}）；僅保留已完成候選證據，"
+            "不得把部分結果升格為全域最佳"
+        )
 
     # 3. 有效比較對象／淘汰依據：至少有一個候選且有有效的決策記錄
     has_comparison = False
@@ -1488,6 +1542,35 @@ def build_incomplete_evidence_section(incomplete_evidence):
         if not item.get("supplemental_evaluation_commands"):
             lines.append("- 無法建立：候選提示詞路徑不存在或不在 repo 內")
         lines.append("")
+    if incomplete_evidence.get("isolated_stages") or incomplete_evidence.get("isolated_candidates"):
+        lines.append("### 逾時隔離範圍")
+        lines.append("")
+        for item in incomplete_evidence.get("isolated_stages", []):
+            lines.append(
+                f"- stage={item.get('stage', '-')}, status={item.get('status', '-')}, "
+                f"reason={item.get('reason', '-')}"
+            )
+        for item in incomplete_evidence.get("isolated_candidates", []):
+            lines.append(
+                f"- candidate={item.get('candidate_id', '-')}, "
+                f"stage={item.get('stage', '-')}, status={item.get('status', '-')}, "
+                f"reason={item.get('reason', '-')}"
+            )
+        lines.append("")
+    if incomplete_evidence.get("rerun_commands"):
+        lines.append("### 機械可解析重跑命令")
+        lines.append("")
+        lines.append("```json")
+        lines.append(json.dumps(incomplete_evidence["rerun_commands"], ensure_ascii=False, indent=2))
+        lines.append("```")
+        lines.append("")
+    if incomplete_evidence.get("remaining_work"):
+        lines.append("### 剩餘工作清單")
+        lines.append("")
+        lines.append("```json")
+        lines.append(json.dumps(incomplete_evidence["remaining_work"], ensure_ascii=False, indent=2))
+        lines.append("```")
+        lines.append("")
     return lines
 
 
@@ -1678,6 +1761,22 @@ def build_validation_execution_section(state):
     else:
         lines.append("_checkpoint 沒有階段紀錄_")
     lines.append("")
+    recovery = _validation_recovery(state)
+    lines.append(f"- 恢復狀態：`{recovery['status']}`")
+    lines.append(f"- 全域最佳允許：`{str(recovery['global_best_allowed']).lower()}`")
+    lines.append("")
+    lines.append("### 機械可解析重跑命令")
+    lines.append("")
+    lines.append("```json")
+    lines.append(json.dumps(recovery["rerun_commands"], ensure_ascii=False, indent=2))
+    lines.append("```")
+    lines.append("")
+    lines.append("### 剩餘工作清單")
+    lines.append("")
+    lines.append("```json")
+    lines.append(json.dumps(recovery["remaining_work"], ensure_ascii=False, indent=2))
+    lines.append("```")
+    lines.append("")
     lines.append(f"- checkpoint：`{VALIDATION_STATE_REL_PATH}`")
     lines.append("")
     return lines
@@ -1700,7 +1799,9 @@ def build_structured_report(limit=10):
     validation_state = load_validation_state()
     measurement_basis = collect_measurement_basis(config, baseline_meta, input_versions)
     candidate_comparison = build_candidate_comparisons(cards, baseline_meta)
-    incomplete_evidence = _incomplete_quality_evidence(candidate_comparison, config)
+    incomplete_evidence = _incomplete_quality_evidence(
+        candidate_comparison, config, validation_state,
+    )
     evidence_checks = collect_evidence_verification(baseline_meta, champions, cards)
     is_valid, evidence_errors = verify_evidence_integrity(
         baseline_meta,
@@ -1785,13 +1886,19 @@ def build_structured_report(limit=10):
             "best_status": (
                 "unproven"
                 if incomplete_evidence["affected_candidates"]
+                or not incomplete_evidence["global_best_allowed"]
                 else ("proven" if is_valid else "inconclusive")
             ),
-            "best_scope": "global" if is_valid else "none",
+            "best_scope": "global" if is_valid and incomplete_evidence["global_best_allowed"] else "none",
             "affected_candidates": incomplete_evidence["affected_candidates"],
             "supplemental_evaluation_commands": incomplete_evidence[
                 "supplemental_evaluation_commands"
             ],
+            "rerun_commands": incomplete_evidence["rerun_commands"],
+            "remaining_work": incomplete_evidence["remaining_work"],
+            "isolated_stages": incomplete_evidence["isolated_stages"],
+            "isolated_candidates": incomplete_evidence["isolated_candidates"],
+            "completed_candidates": incomplete_evidence["completed_candidates"],
             "eligible_candidate_ids": [
                 row["candidate_id"] for row in candidate_comparison
                 if row.get("quality_eligible")
@@ -1820,6 +1927,8 @@ def build_structured_report(limit=10):
             "supplemental_evaluation_commands": incomplete_evidence[
                 "supplemental_evaluation_commands"
             ],
+            "rerun_commands": incomplete_evidence["rerun_commands"],
+            "remaining_work": incomplete_evidence["remaining_work"],
             "environment": environment,
             "input_data_versions": input_versions,
         },

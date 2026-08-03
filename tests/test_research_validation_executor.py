@@ -73,3 +73,63 @@ def test_best_version_report_surfaces_validation_checkpoint(tmp_path, monkeypatc
     assert "candidate_evaluation" in section
     assert "2026-08-03T00:00:30Z" in section
     assert "最後輸出" in section
+
+
+def test_timeout_isolates_candidate_and_keeps_recovery_contract(tmp_path):
+    state_path = tmp_path / "validation.json"
+
+    def candidate(context):
+        context.completed_candidate("done", {"score": 91})
+        context.isolate_candidate(
+            "slow", "candidate timeout", ["python", "scripts/evaluate.py", "slow.md"]
+        )
+        raise TimeoutError("candidate deadline")
+
+    state = StagedValidationExecutor(
+        state_path=str(state_path),
+        deadlines={stage: 1 for stage in (
+            "candidate_evaluation", "evidence_validation", "ranking", "report_delivery",
+        )},
+    ).run({"candidate_evaluation": candidate})
+
+    assert state["status"] == "timed_out"
+    assert state["global_best_allowed"] is False
+    assert state["completed_candidates"][0]["immutable"] is True
+    assert state["completed_candidates"][0]["candidate_id"] == "done"
+    assert state["isolated_candidates"] == [{
+        "candidate_id": "slow",
+        "stage": "candidate_evaluation",
+        "attempt": 1,
+        "status": "isolated",
+        "reason": "candidate timeout",
+    }]
+    assert state["rerun_commands"][0]["argv"] == [
+        "python", "scripts/evaluate.py", "slow.md",
+    ]
+    assert state["remaining_work"][0]["candidate_id"] == "slow"
+
+
+def test_retry_archives_original_attempt_without_overwrite(tmp_path):
+    state_path = tmp_path / "validation.json"
+    executor = StagedValidationExecutor(
+        state_path=str(state_path),
+        deadlines={stage: 1 for stage in (
+            "candidate_evaluation", "evidence_validation", "ranking", "report_delivery",
+        )},
+    )
+    first = executor.run({
+        "candidate_evaluation": lambda context: (_ for _ in ()).throw(TimeoutError("first")),
+    })
+    second = executor.run({
+        "candidate_evaluation": lambda context: {"completed_candidates": [{
+            "candidate_id": "done", "evidence": {"score": 95},
+        }]},
+    })
+
+    archive = tmp_path / f"validation.json.attempt-{first['run_id']}.json"
+    archived = json.loads(archive.read_text(encoding="utf-8"))
+    assert second["attempt_number"] == 2
+    assert second["attempt_history"][0]["run_id"] == first["run_id"]
+    assert archived["run_id"] == first["run_id"]
+    assert archived["stages"]["candidate_evaluation"]["status"] == "timeout"
+    assert second["completed_candidates"][0]["evidence"] == {"score": 95}

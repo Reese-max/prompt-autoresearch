@@ -759,6 +759,7 @@ def scan_candidate_evaluations():
             "selected": bool(card.get("selected")),
             "evidence_validation": evidence_checks,
             "stage_evaluations": stage_evaluations,
+            "execution_records": list(card.get("execution_records") or []),
         })
     return results
 
@@ -817,10 +818,22 @@ def run_controlled_closed_loop(parallel_config):
         nonlocal after, merged
         after = scan_candidate_evaluations()
         merged = {c["candidate_path"]: c for c in existing + after if c.get("candidate_path")}
+        completed_candidates = [
+            {
+                "candidate_id": candidate["candidate_path"],
+                "evidence": {
+                    "stage_evaluations": candidate.get("stage_evaluations", []),
+                    "execution_records": candidate.get("execution_records", []),
+                },
+            }
+            for candidate in after
+            if candidate.get("candidate_path") and candidate.get("stage_evaluations")
+        ]
         output = {
             "candidate_count": len(merged),
             "candidate_paths": sorted(merged),
             "validated_candidate_count": len(after),
+            "completed_candidates": completed_candidates,
         }
         context.checkpoint(output, "候選證據重驗完成")
         return output
@@ -828,6 +841,13 @@ def run_controlled_closed_loop(parallel_config):
     def ranking(context):
         nonlocal best_candidate, ranking_report
         best_candidate, ranking_report = _rank_candidate_evaluations(list(merged.values()))
+        if best_candidate and not executor.state.get("global_best_allowed", True):
+            best_candidate = dict(best_candidate)
+            best_candidate.update({
+                "best_status": "unproven",
+                "best_scope": "comparison_group",
+                "best_label": "該比較群組內最佳",
+            })
         known_paths = set(merged)
         ranking_report.extend(_scorecard_elimination_reports(known_paths))
         output = {
