@@ -42,6 +42,7 @@ EVOLUTION_LOG_PATH = os.path.join(ROOT, "evolution_log.jsonl")
 CONFIG_PATH = os.path.join(ROOT, "config.yaml")
 RUNS_DIR = os.path.join(ROOT, "runs")
 SCHEMA_REL_PATH = "schemas/best_version_evidence_report.schema.json"
+VALIDATION_STATE_REL_PATH = "output/research_validation_state.json"
 
 
 def load_json(path, default=None):
@@ -82,6 +83,11 @@ def read_jsonl(path):
     except OSError:
         return []
     return rows
+
+
+def load_validation_state():
+    """讀取分階段驗證 checkpoint；不存在時維持既有報告相容性。"""
+    return load_json(os.path.join(ROOT, VALIDATION_STATE_REL_PATH), {})
 
 
 def load_baseline_meta():
@@ -298,6 +304,8 @@ def collect_evidence_verification(baseline_meta, champions, cards):
         cand_rel = repo_rel(card.get("candidate_path"))
         if cand_rel:
             checks.append(verify_evidence_file(cand_rel, card.get("candidate_hash")))
+    if os.path.isfile(os.path.join(ROOT, VALIDATION_STATE_REL_PATH)):
+        checks.append(verify_evidence_file(VALIDATION_STATE_REL_PATH))
     return checks
 
 
@@ -1642,6 +1650,39 @@ def build_evidence_verification_section(evidence_checks):
     return lines
 
 
+def build_validation_execution_section(state):
+    lines = ["## 9. 分階段驗證執行器", ""]
+    if not state:
+        lines.append("_尚無分階段驗證 checkpoint_")
+        lines.append("")
+        return lines
+    lines.append(f"- 執行狀態：`{state.get('status', '-')}`")
+    lines.append(f"- 逾時階段：`{state.get('timed_out_stage') or '-'}`")
+    lines.append("")
+    rows = []
+    for name, stage in (state.get("stages") or {}).items():
+        rows.append([
+            name,
+            stage.get("status", "-"),
+            stage.get("started_at", "-"),
+            stage.get("ended_at", "-"),
+            stage.get("deadline", "-"),
+            len(stage.get("heartbeats") or []),
+            "有" if stage.get("last_available_output") is not None else "無",
+        ])
+    if rows:
+        lines.append(format_table(
+            ["階段", "狀態", "開始", "結束", "deadline", "心跳", "最後輸出"],
+            rows,
+        ))
+    else:
+        lines.append("_checkpoint 沒有階段紀錄_")
+    lines.append("")
+    lines.append(f"- checkpoint：`{VALIDATION_STATE_REL_PATH}`")
+    lines.append("")
+    return lines
+
+
 def build_structured_report(limit=10):
     """產生唯一的結構化最佳版本證據資料來源。"""
     baseline_meta = load_baseline_meta()
@@ -1656,6 +1697,7 @@ def build_structured_report(limit=10):
     commands = collect_reproduction_commands(baseline_meta, config)
     environment = collect_environment()
     input_versions = collect_input_versions(baseline_meta, champions, cards, sessions)
+    validation_state = load_validation_state()
     measurement_basis = collect_measurement_basis(config, baseline_meta, input_versions)
     candidate_comparison = build_candidate_comparisons(cards, baseline_meta)
     incomplete_evidence = _incomplete_quality_evidence(candidate_comparison, config)
@@ -1785,6 +1827,7 @@ def build_structured_report(limit=10):
             "log_path": repo_rel(EVOLUTION_LOG_PATH) or "",
             "records": records,
             "sessions": sessions,
+            "validation": validation_state,
         },
         "evolution_sessions": len(sessions),
         "config": {
@@ -1799,6 +1842,7 @@ def build_structured_report(limit=10):
                 "config": display_path(CONFIG_PATH),
                 "champions_dir": display_path(CHAMPIONS_DIR),
                 "candidates_dir": display_path(CANDIDATES_DIR),
+                "validation_state": VALIDATION_STATE_REL_PATH if validation_state else "",
             },
             "input_data_versions": input_versions,
             "checks": evidence_checks,
@@ -1809,6 +1853,7 @@ def build_structured_report(limit=10):
             "config": display_path(CONFIG_PATH),
             "champions_dir": display_path(CHAMPIONS_DIR),
             "candidates_dir": display_path(CANDIDATES_DIR),
+            "validation_state": VALIDATION_STATE_REL_PATH if validation_state else "",
         },
         "schema_validation": {
             "schema_path": SCHEMA_REL_PATH,
@@ -1898,6 +1943,7 @@ def build_report(limit=10, structured=None):
     lines.extend(build_evidence_section(baseline_meta, champions, cards, sessions))
     lines.extend(build_rerun_section(rerun_settings))
     lines.extend(build_evidence_verification_section(evidence_checks))
+    lines.extend(build_validation_execution_section(json_data["execution"].get("validation", {})))
 
     return "\n".join(lines) + "\n"
 

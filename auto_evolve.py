@@ -18,6 +18,7 @@ import math
 from lib.io import load_json
 from lib.metrics import record_event
 from lib.completion_gate import verify_persisted_run_evidence
+from scripts.research_validation_executor import StagedValidationExecutor
 
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8", errors="replace", line_buffering=True)
@@ -774,9 +775,6 @@ def run_controlled_closed_loop(parallel_config):
     """
     import run_opt
 
-    existing = scan_candidate_evaluations()
-    prior_best, prior_report = _rank_candidate_evaluations(existing)
-
     get_fn = getattr(run_opt, "get", None)
     multi_cfg = {}
     if get_fn is not None:
@@ -792,24 +790,55 @@ def run_controlled_closed_loop(parallel_config):
             "單一候選捷徑會跳過「比較並淘汰」階段，請修正 config 後再跑。"
         )
 
-    existing_info = (
-        f"，最高 {prior_best['candidate_path']} (score={prior_best['score']:.2f})"
-        if prior_best
-        else "（無）"
-    )
-    print(f"{C_CYAN}[受控閉環] 既有已評測候選 {len(existing)} 個{existing_info}"
-          f"，本輪多候選 count={count}，產生迭代候選...{C_RESET}")
+    existing = []
+    prior_report = []
+    after = []
+    merged = {}
+    best_candidate = None
+    ranking_report = []
+    success = False
 
-    success = run_opt.run_opt_pass(**parallel_config)
+    def candidate_evaluation(context):
+        nonlocal existing, prior_report, success
+        existing = scan_candidate_evaluations()
+        prior_best, prior_report = _rank_candidate_evaluations(existing)
+        existing_info = (
+            f"，最高 {prior_best['candidate_path']} (score={prior_best['score']:.2f})"
+            if prior_best else "（無）"
+        )
+        print(f"{C_CYAN}[受控閉環] 既有已評測候選 {len(existing)} 個{existing_info}"
+              f"，本輪多候選 count={count}，產生迭代候選...{C_RESET}")
+        context.heartbeat("開始候選評測", {"existing_candidate_count": len(existing)})
+        success = bool(run_opt.run_opt_pass(**parallel_config))
+        context.checkpoint({"success": success}, "候選評測完成")
+        return {"success": success, "existing_candidate_count": len(existing)}
 
-    after = scan_candidate_evaluations()
-    merged = {c["candidate_path"]: c for c in existing + after if c.get("candidate_path")}
-    best_candidate, ranking_report = _rank_candidate_evaluations(list(merged.values()))
-    known_paths = set(merged)
-    ranking_report.extend(_scorecard_elimination_reports(known_paths))
-    append_jsonl(
-        LOG_PATH,
-        {
+    def evidence_validation(context):
+        nonlocal after, merged
+        after = scan_candidate_evaluations()
+        merged = {c["candidate_path"]: c for c in existing + after if c.get("candidate_path")}
+        output = {
+            "candidate_count": len(merged),
+            "candidate_paths": sorted(merged),
+            "validated_candidate_count": len(after),
+        }
+        context.checkpoint(output, "候選證據重驗完成")
+        return output
+
+    def ranking(context):
+        nonlocal best_candidate, ranking_report
+        best_candidate, ranking_report = _rank_candidate_evaluations(list(merged.values()))
+        known_paths = set(merged)
+        ranking_report.extend(_scorecard_elimination_reports(known_paths))
+        output = {
+            "winner": best_candidate,
+            "candidate_report_count": len(ranking_report),
+        }
+        context.checkpoint(output, "排名完成")
+        return output
+
+    def report_delivery(context):
+        payload = {
             "event": "controlled_closed_loop_ranking",
             "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
             "winner": best_candidate,
@@ -819,8 +848,24 @@ def run_controlled_closed_loop(parallel_config):
             ),
             "candidate_reports": ranking_report,
             "prior_candidate_reports": prior_report,
-        },
+        }
+        append_jsonl(LOG_PATH, payload)
+        output = {"path": LOG_PATH, "event": payload["event"], "winner": best_candidate}
+        context.checkpoint(output, "排名報告已持久化")
+        return output
+
+    executor = StagedValidationExecutor(
+        state_path=parallel_config.get(
+            "validation_state_path", "output/research_validation_state.json",
+        ),
+        deadlines=parallel_config.get("validation_deadlines"),
     )
+    executor.run({
+        "candidate_evaluation": candidate_evaluation,
+        "evidence_validation": evidence_validation,
+        "ranking": ranking,
+        "report_delivery": report_delivery,
+    })
     if best_candidate:
         print(f"{C_CYAN}[受控閉環] {best_candidate.get('best_label', '排名候選')}: {best_candidate['candidate_path']} "
               f"(score={best_candidate['score']:.2f}, status={best_candidate['status']}){C_RESET}")
