@@ -3,10 +3,12 @@
 import json
 import os
 import sys
+import time
 
 import pytest
 
 import scripts.best_version_report as bvr
+from scripts.research_validation_executor import StagedValidationExecutor, STAGES
 
 
 # ---------- fixtures / helpers ----------
@@ -314,6 +316,95 @@ def test_report_marks_failed_candidate_unproven_and_lists_supplemental_evaluatio
     assert "unproven" in report
     assert "不得據此宣稱其他候選為全域最佳" in report
     assert "可獨立執行的補評命令" in report
+
+
+def test_controlled_research_timeout_stays_bounded_and_limits_best_claim(sandbox):
+    """受控候選逾時仍完成交付，保留各階段可靠性與可重跑證據。"""
+    deadlines = {stage: 1.0 for stage in STAGES}
+    fake_clock = [0.0]
+
+    def clock():
+        return fake_clock[0]
+
+    def candidate_evaluation(context):
+        context.checkpoint({
+            "reliability": {"status": "partial", "attempt_count": 1},
+            "candidate_id": "slow-candidate",
+        }, "候選評測部分完成")
+        context.completed_candidate("completed-candidate", {"score": 91.0})
+        context.isolate_candidate(
+            "slow-candidate",
+            "candidate evaluation deadline exceeded",
+            {
+                "argv": [
+                    sys.executable,
+                    "scripts/evaluate.py",
+                    "prompts/candidates/slow-candidate.md",
+                    "questions/dev.jsonl",
+                    "--parallel",
+                    "1",
+                ],
+                "cwd": ".",
+            },
+        )
+        fake_clock[0] += deadlines["candidate_evaluation"] + 0.01
+        context.check_deadline()
+
+    def completed_stage(name):
+        return lambda context: {
+            "stage": name,
+            "reliability": {"status": "completed", "attempt_count": 1},
+        }
+
+    state_path = sandbox / "output" / "research_validation_state.json"
+    executor = StagedValidationExecutor(
+        state_path=str(state_path), deadlines=deadlines, clock=clock,
+    )
+    total_deadline = sum(deadlines.values())
+    wall_started = time.monotonic()
+    state = executor.run({
+        "candidate_evaluation": candidate_evaluation,
+        "evidence_validation": completed_stage("evidence_validation"),
+        "ranking": completed_stage("ranking"),
+        "report_delivery": completed_stage("report_delivery"),
+    })
+    wall_elapsed = time.monotonic() - wall_started
+
+    assert fake_clock[0] <= total_deadline
+    assert wall_elapsed <= total_deadline
+    assert state["status"] == "timed_out"
+    assert state["timed_out_stages"] == ["candidate_evaluation"]
+    assert state["stages"]["candidate_evaluation"]["status"] == "timeout"
+    assert "deadline exceeded" in state["stages"]["candidate_evaluation"]["error"]
+    assert all(
+        state["stages"][stage]["last_available_output"]["reliability"]
+        for stage in STAGES
+    )
+    assert state["rerun_commands"][0]["cwd"] == "."
+    assert state["rerun_commands"][0]["argv"][1:3] == [
+        "scripts/evaluate.py",
+        "prompts/candidates/slow-candidate.md",
+    ]
+
+    write_complete_report_evidence(sandbox)
+    data = bvr.build_structured_report()
+    report = bvr.build_report(structured=data)
+    validation = data["execution"]["validation"]
+
+    assert data["decision"] == {
+        "status": "inconclusive",
+        "code": "INCOMPLETE_EVIDENCE",
+        "reason": "證據不完整，拒絕選優",
+        "best_candidate_id": None,
+    }
+    assert data["quality_ranking"]["best_status"] == "unproven"
+    assert data["quality_ranking"]["best_scope"] == "none"
+    assert data["incomplete_evidence"]["global_best_allowed"] is False
+    assert validation["timed_out_stage"] == "candidate_evaluation"
+    assert set(validation["stages"]) == set(STAGES)
+    assert "scripts/evaluate.py" in report
+    assert "不得把部分結果升格為全域最佳" in report
+    assert "全域最佳允許：`false`" in report
 
 
 # ---------- load_evolution_summary ----------
