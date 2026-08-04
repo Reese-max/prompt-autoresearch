@@ -56,3 +56,54 @@ def test_candidate_recorded_diff_mismatch_is_unproven():
 
     assert result["valid"] is False
     assert any("git_diff" in item for item in result["inconsistencies"])
+
+
+def test_git_provenance_marks_committed_files():
+    result = _check(
+        {
+            "head_commit": "abc123",
+            "status_paths": [],
+            "diff_tracked": "",
+            "untracked_files": [],
+            "diff_paths": [],
+        },
+        evidence=[{"path": "prompts/baseline.md"}],
+        comparisons=[],
+    )
+
+    provenance_map = {item["path"]: item["provenance"] for item in result["git_provenance"]}
+    assert provenance_map["prompts/baseline.md"] == "committed"
+
+
+def test_git_provenance_marks_diff_tracked_files():
+    result = _check(
+        {
+            "head_commit": "abc123",
+            "status_paths": ["prompts/baseline.md"],
+            "diff_tracked": "diff content",
+            "untracked_files": [],
+            "diff_paths": [],
+        },
+        evidence=[{"path": "prompts/baseline.md"}],
+        comparisons=[],
+    )
+
+    provenance_map = {item["path"]: item["provenance"] for item in result["git_provenance"]}
+    assert provenance_map["prompts/baseline.md"] == "diff_tracked"
+
+
+def test_git_provenance_marks_undeclared_as_untracked():
+    result = _check(
+        {
+            "head_commit": "abc123",
+            "status_paths": ["untracked_draft.md"],
+            "diff_tracked": "",
+            "untracked_files": [],
+            "diff_paths": [],
+        },
+        evidence=[],
+        comparisons=[],
+    )
+
+    provenance_map = {item["path"]: item["provenance"] for item in result["git_provenance"]}
+    assert provenance_map.get("untracked_draft.md") == "untracked_worktree"

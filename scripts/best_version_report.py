@@ -31,7 +31,7 @@ if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
 
 from lib.notifications import send_report_to_telegram
-from scripts.git_reproducibility import collect_git_snapshot
+from scripts.git_reproducibility import classify_git_provenance, collect_git_snapshot
 
 if hasattr(__import__("sys").stdout, "reconfigure"):
     __import__("sys").stdout.reconfigure(encoding="utf-8", errors="replace")
@@ -1467,6 +1467,13 @@ def verify_delivery_consistency(
         })
         inconsistencies.extend(candidate_errors)
 
+    git_provenance = []
+    for path in sorted(declared):
+        provenance = classify_git_provenance(path, snapshot)
+        git_provenance.append({"path": path, "provenance": provenance})
+    for path in sorted(undeclared):
+        git_provenance.append({"path": path, "provenance": "untracked_worktree"})
+
     rerun_commands = []
     if inconsistencies:
         rerun_commands.extend([
@@ -1497,6 +1504,7 @@ def verify_delivery_consistency(
         "changed_paths": changed,
         "declared_paths": sorted(declared),
         "undeclared_changes": undeclared,
+        "git_provenance": git_provenance,
         "candidate_checks": candidate_checks,
         "inconsistencies": inconsistencies,
         "rerun_commands": rerun_commands,
@@ -1803,6 +1811,23 @@ def build_delivery_consistency_section(consistency):
         f"- 未宣告變更：`{len(consistency.get('undeclared_changes') or [])}`",
         "",
     ]
+
+    git_provenance = consistency.get("git_provenance") or []
+    if git_provenance:
+        lines.append("### Git 歸屬追溯")
+        lines.append("")
+        lines.append(
+            "以下標示每個被採用內容的 Git 取得狀態："
+            "committed（已提交版本）、diff_tracked（已記錄 diff）、"
+            "untracked_worktree（未追蹤工作樹，不可交付）。"
+        )
+        lines.append("")
+        table_rows = []
+        for item in git_provenance:
+            table_rows.append([item.get("path", ""), item.get("provenance", "")])
+        lines.append(format_table(["檔案路徑", "Git 歸屬"], table_rows))
+        lines.append("")
+
     if not valid:
         lines.append("不一致項目：")
         lines.extend(f"- {item}" for item in consistency.get("inconsistencies", []))

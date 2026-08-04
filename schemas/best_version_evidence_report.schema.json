@@ -140,6 +140,17 @@
         "declared_paths": {"type": "array"},
         "undeclared_changes": {"type": "array"},
         "candidate_checks": {"type": "array"},
+        "git_provenance": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["path", "provenance"],
+            "properties": {
+              "path": {"type": "string"},
+              "provenance": {"type": "string", "enum": ["committed", "diff_tracked", "untracked_worktree"]}
+            }
+          }
+        },
         "inconsistencies": {"type": "array"},
         "rerun_commands": {"type": "array"}
       }

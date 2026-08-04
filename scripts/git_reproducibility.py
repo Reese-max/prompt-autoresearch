@@ -113,3 +113,35 @@ def _status_paths(status_porcelain):
         if path:
             paths.append(path)
     return sorted(set(paths))
+
+
+def classify_git_provenance(path, snapshot):
+    """判定單一檔案的 Git 歸屬狀態。
+
+    Args:
+        path: repo 相對路徑（正斜線）。
+        snapshot: collect_git_snapshot() 產出的快照字典。
+
+    Returns:
+        str: "committed"  |  "diff_tracked"  |  "untracked_worktree"
+
+    - committed: 檔案已提交且自 HEAD 以來無變更。
+    - diff_tracked: 檔案已追蹤但工作樹中有未提交變更（modified / staged）。
+    - untracked_worktree: 檔案不在 Git 追蹤範圍內（untracked）。
+    """
+    if not isinstance(snapshot, dict):
+        return "untracked_worktree"
+    norm = str(path).replace("\\", "/")
+    untracked = snapshot.get("untracked_files") or []
+    if norm in untracked:
+        return "untracked_worktree"
+    status_paths = snapshot.get("status_paths") or []
+    if norm in status_paths:
+        return "diff_tracked"
+    diff_paths = snapshot.get("diff_paths") or []
+    if norm in diff_paths:
+        return "diff_tracked"
+    head = snapshot.get("head_commit", "")
+    if head:
+        return "committed"
+    return "untracked_worktree"

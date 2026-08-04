@@ -7,7 +7,7 @@ import sys
 
 import pytest
 
-from scripts.git_reproducibility import collect_git_snapshot
+from scripts.git_reproducibility import collect_git_snapshot, classify_git_provenance
 import scripts.best_version_report as bvr
 
 
@@ -207,3 +207,63 @@ def test_build_report_includes_snapshot_hash_in_output(sandbox):
     snap_hash = data["reproduction"]["git_reproducibility_snapshot"]["snapshot_hash"]
 
     assert snap_hash in report
+
+
+# ---------- classify_git_provenance 單元測試 ----------
+
+def test_classify_committed_file():
+    snapshot = {
+        "head_commit": "abc123",
+        "status_paths": [],
+        "diff_paths": [],
+        "untracked_files": [],
+    }
+    assert classify_git_provenance("prompts/baseline.md", snapshot) == "committed"
+
+
+def test_classify_diff_tracked_via_status_paths():
+    snapshot = {
+        "head_commit": "abc123",
+        "status_paths": ["prompts/baseline.md"],
+        "diff_paths": [],
+        "untracked_files": [],
+    }
+    assert classify_git_provenance("prompts/baseline.md", snapshot) == "diff_tracked"
+
+
+def test_classify_diff_tracked_via_diff_paths():
+    snapshot = {
+        "head_commit": "abc123",
+        "status_paths": [],
+        "diff_paths": ["prompts/baseline.md"],
+        "untracked_files": [],
+    }
+    assert classify_git_provenance("prompts/baseline.md", snapshot) == "diff_tracked"
+
+
+def test_classify_untracked_file():
+    snapshot = {
+        "head_commit": "abc123",
+        "status_paths": [],
+        "diff_paths": [],
+        "untracked_files": ["draft.md"],
+    }
+    assert classify_git_provenance("draft.md", snapshot) == "untracked_worktree"
+
+
+def test_classify_untracked_when_no_head():
+    snapshot = {
+        "head_commit": "",
+        "status_paths": [],
+        "diff_paths": [],
+        "untracked_files": [],
+    }
+    assert classify_git_provenance("any.txt", snapshot) == "untracked_worktree"
+
+
+def test_classify_empty_snapshot():
+    assert classify_git_provenance("any.txt", {}) == "untracked_worktree"
+
+
+def test_classify_none_snapshot():
+    assert classify_git_provenance("any.txt", None) == "untracked_worktree"
