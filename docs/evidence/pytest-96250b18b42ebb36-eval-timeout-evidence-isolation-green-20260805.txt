@@ -1,0 +1,6 @@
+COMMAND: python -m pytest tests/96250b18b42ebb36-eval-timeout-evidence-isolation.py --no-cov -q
+STAGE: GREEN
+
+........                                                                 [100%]
+8 passed in 15.35s
+EXIT_CODE: 0

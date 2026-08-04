@@ -1,0 +1,17 @@
+COMMAND: python -m pytest tests/96250b18b42ebb36-eval-timeout-evidence-isolation.py --no-cov -q -k blocking_evaluation_times_out_and_next_candidate_is_isolated
+BASELINE: d8f834d^ run_opt.py（暫時還原至修正前的 run_evaluate 行為，未提交）
+STAGE: RED
+
+F                                                                        [100%]
+================================== FAILURES ===================================
+______ test_blocking_evaluation_times_out_and_next_candidate_is_isolated ______
+
+tests/96250b18b42ebb36-eval-timeout-evidence-isolation.py:331:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+tests/96250b18b42ebb36-eval-timeout-evidence-isolation.py:322: in block_then_complete
+    deadline = kwargs["timeout"]
+E   KeyError: 'timeout'
+=========================== short test summary info ============================
+FAILED tests/96250b18b42ebb36-eval-timeout-evidence-isolation.py::test_blocking_evaluation_times_out_and_next_candidate_is_isolated
+1 failed, 7 deselected in 0.57s
+EXIT_CODE: 1

@@ -8,9 +8,11 @@
 """
 import json
 import hashlib
+import subprocess
 import time
 
 import scripts.best_version_report as best_version_report
+import run_opt
 from scripts.research_validation_executor import (
     StagedValidationExecutor,
     StageTimeout,
@@ -298,3 +300,71 @@ def test_timeout_evidence_cannot_win_or_pollute_final_report(tmp_path, monkeypat
     assert "timed-out-candidate" not in {
         item["candidate_id"] for item in cited
     }
+
+
+def test_blocking_evaluation_times_out_and_next_candidate_is_isolated(tmp_path, monkeypatch):
+    """受控阻塞評測逾時後，保留隔離證據並繼續處理下一候選。"""
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(run_opt, "list_run_dirs", lambda: [])
+    progress = []
+    monkeypatch.setattr(
+        run_opt, "RESEARCH_HEARTBEAT",
+        lambda message, output=None: progress.append((message, output)),
+    )
+
+    candidate = tmp_path / "prompts" / "candidates" / "timed-out.md"
+    candidate.parent.mkdir(parents=True)
+    candidate.write_text("timed-out candidate", encoding="utf-8")
+    calls = []
+
+    def block_then_complete(command, **kwargs):
+        calls.append((command, kwargs))
+        deadline = kwargs["timeout"]
+        if len(calls) == 1:
+            time.sleep(deadline)
+            raise subprocess.TimeoutExpired(
+                command, deadline, output="partial", stderr="blocked evaluator",
+            )
+        return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
+
+    monkeypatch.setattr(run_opt.subprocess, "run", block_then_complete)
+    timed_out, run_dir, summary = run_opt._run_candidate_evaluation(
+        str(candidate), "smoke", "current.md", "questions/smoke.jsonl", 1, 0.05,
+    )
+
+    assert timed_out.timed_out is True
+    assert timed_out.cancelled is True
+    assert timed_out.cancellation["status"] == "cancelled"
+    assert run_dir is None
+    assert summary == {}
+
+    run_opt.mark_candidate_evaluation_failed(
+        str(candidate), "smoke", timed_out, run_dir, summary,
+    )
+    card = json.loads(
+        candidate.with_suffix(".scorecard.json").read_text(encoding="utf-8")
+    )
+    assert card["smoke"]["execution_status"] == run_opt.EXECUTION_STATUS_TIMEOUT
+    assert card["smoke"]["cancelled"] is True
+    assert card["smoke"]["run"] is None
+    assert card["execution_records"][0]["run"] == ""
+    assert "quality_measurement" not in card["execution_records"][0]
+
+    completed, _, _ = run_opt._run_candidate_evaluation(
+        "good-candidate", "smoke", "current.md", "questions/smoke.jsonl", 1, 0.05,
+    )
+    assert completed.returncode == 0
+    assert completed.candidate_id == "good-candidate"
+    assert not getattr(completed, "timed_out", False)
+    assert len(calls) == 2
+    assert all(call[1]["timeout"] == 0.05 for call in calls)
+    assert timed_out.attempt_id != completed.attempt_id
+
+    isolation = next(
+        output for _, output in progress
+        if isinstance(output, dict) and output.get("isolated_candidates")
+    )
+    isolated = isolation["isolated_candidates"][0]
+    assert isolated["candidate_id"] == str(candidate)
+    assert isolated["attempt_id"] == timed_out.attempt_id
+    assert isolated["cancellation"]["status"] == "cancelled"
