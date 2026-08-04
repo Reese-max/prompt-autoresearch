@@ -2,6 +2,8 @@
 """研究結果交付：品質排名、執行可靠性與 Git 交付一致性的受控整合案例。"""
 import hashlib
 import json
+import re
+from types import SimpleNamespace
 
 import auto_evolve
 import scripts.best_version_report as bvr
@@ -90,6 +92,47 @@ def _write_candidate(workspace, name, scores, execution_records, decision="ACCEP
         card,
     )
     return card
+
+
+def _write_research_candidate(workspace, name, scores, decision):
+    """寫入受控閉環可排名的研究候選；非研究輸出不走這條格式。"""
+    prompt = workspace / "prompts" / "candidates" / f"{name}.md"
+    prompt.write_text(f"{name} research prompt\n", encoding="utf-8")
+    records = []
+    stages = {}
+    for stage, score in scores.items():
+        stages[stage] = {
+            **_successful_stage(score),
+            **_basis(),
+            "quality_measurement": {"metric": "average_score", "score": score},
+        }
+        records.append({
+            "stage": stage,
+            "attempt": 1,
+            "execution_status": "quality_measurement_obtained",
+            "quality_measurement": {"metric": "average_score", "score": score},
+        })
+    card = {
+        "candidate_path": f"prompts/candidates/{name}.md",
+        "candidate_hash": bvr.sha256_file(str(prompt)),
+        "status": "completed",
+        "final_decision": decision,
+        "comparison_basis": _basis(),
+        **stages,
+        "execution_records": records,
+    }
+    _write_json(
+        workspace / "prompts" / "candidates" / f"{name}.scorecard.json",
+        card,
+    )
+    return card
+
+
+def _report_json(report_path):
+    text = report_path.read_text(encoding="utf-8")
+    match = re.search(r"```json\n(.*?)\n```", text, re.DOTALL)
+    assert match, "唯一交付報告必須包含可解析的結構化 JSON"
+    return json.loads(match.group(1))
 
 
 def _ranking_card(name, score, execution_records):
@@ -433,3 +476,139 @@ def test_research_result_delivery_post_report_worktree_change_blocks_best(
         "best_version_report.py" in item["command"]
         for item in consistency["rerun_commands"]
     )
+
+
+def test_auto_evolve_controlled_delivery_writes_one_report_and_ignores_nonresearch_output(
+    tmp_path, monkeypatch
+):
+    """auto_evolve 單次閉環交付兩個研究候選，混入輸出不得污染比較母體。"""
+    workspace = _sandbox(tmp_path, monkeypatch)
+    monkeypatch.chdir(workspace)
+
+    import run_opt
+    monkeypatch.chdir(workspace)
+
+    calls = []
+    candidate_specs = (
+        ("research-best", {"smoke": 93.0, "dev": 92.0, "holdout": 91.0}, "ACCEPT"),
+        ("research-compare", {"smoke": 87.0, "dev": 86.0, "holdout": 85.0}, "REVERT"),
+    )
+
+    def fake_run_opt_pass(**kwargs):
+        calls.append(kwargs)
+        for name, scores, decision in candidate_specs:
+            _write_research_candidate(workspace, name, scores, decision)
+
+        best_prompt = workspace / "prompts" / "candidates" / "research-best.md"
+        baseline_prompt = workspace / "prompts" / "baseline.md"
+        baseline_prompt.write_text(best_prompt.read_text(encoding="utf-8"), encoding="utf-8")
+        _write_json(
+            workspace / "prompts" / "baseline.meta.json",
+            {
+                "prompt_path": "prompts/baseline.md",
+                "prompt_hash": bvr.sha256_file(str(baseline_prompt)),
+                "smoke_avg": 93.0,
+                "dev_avg": 92.0,
+                "holdout_avg": 91.0,
+            },
+        )
+        (workspace / "config.changed.yaml").write_text("thresholds:\n  test_only: true\n", encoding="utf-8")
+        (workspace / "test-output.txt").write_text("non-research test output\n", encoding="utf-8")
+        return True
+
+    original_get = run_opt.get
+
+    def controlled_get(section, key=None, default=None):
+        if section == "multi_candidate" and key is None:
+            return {"enabled": True, "count": 2, "temperatures": [0.5, 0.7]}
+        return original_get(section, key, default)
+
+    monkeypatch.setattr(run_opt, "get", controlled_get)
+    monkeypatch.setattr(run_opt, "run_opt_pass", fake_run_opt_pass)
+    monkeypatch.setattr(
+        auto_evolve,
+        "verify_persisted_run_evidence",
+        lambda _run_dir: {"status": "completed", "rejection_reasons": []},
+    )
+    monkeypatch.setattr(
+        auto_evolve.subprocess,
+        "run",
+        lambda *_args, **_kwargs: SimpleNamespace(returncode=0),
+    )
+    monkeypatch.setattr(auto_evolve.time, "sleep", lambda _seconds: None)
+
+    monkeypatch.setattr(
+        bvr,
+        "collect_git_snapshot",
+        lambda cwd=None: _git_snapshot("e79fea82b93be15f32b39fc76c1fe7d6450a05b3"),
+    )
+    monkeypatch.setattr(
+        bvr,
+        "collect_git_commit",
+        lambda: "e79fea82b93be15f32b39fc76c1fe7d6450a05b3",
+    )
+    monkeypatch.setattr(
+        bvr,
+        "send_report_to_telegram",
+        lambda *_args, **_kwargs: {"status": "sent"},
+    )
+    monkeypatch.setattr(
+        bvr,
+        "collect_environment",
+        lambda: {
+            "python_version": "test",
+            "python_executable": "python",
+            "platform": "test",
+            "architecture": "test",
+            "os_name": "test",
+            "encoding": "utf-8",
+            "cwd": ".",
+        },
+    )
+
+    monkeypatch.setattr(auto_evolve.sys, "argv", [
+        "auto_evolve.py", "1", "--smoke-parallel", "1", "--dev-parallel", "1",
+        "--holdout-parallel", "1",
+    ])
+    assert auto_evolve.main() == 0
+    assert len(calls) == 1
+
+    auto_evolve.append_jsonl(
+        auto_evolve.LOG_PATH,
+        {"event": "stop", "timestamp": "2026-08-04 00:01:00", "reason": "controlled test complete"},
+    )
+
+    report_path = workspace / "reports" / "best-version.md"
+    monkeypatch.setattr(bvr.sys, "argv", [
+        "best_version_report.py", "--out", "reports/best-version.md", "--validate-schema",
+    ])
+    assert bvr.main() == 0
+    assert list((workspace / "reports").glob("best-version.md")) == [report_path]
+
+    report = _report_json(report_path)
+    comparison_paths = {row["path"] for row in report["candidate_comparison"]}
+    assert report["decision"]["status"] == "valid"
+    assert report["decision"]["best_candidate_id"] == report["winner"]["candidate_id"]
+    assert report["winner"]["decision"] == "ADOPT"
+    assert "research-best" in report["winner"]["prompt"]["content"]
+    assert {
+        dataset: report["quality"]["winner"][dataset]["score"]
+        for dataset in ("smoke", "dev", "holdout")
+    } == {"smoke": 93.0, "dev": 92.0, "holdout": 91.0}
+    assert comparison_paths == {
+        "prompts/candidates/research-best.md",
+        "prompts/candidates/research-compare.md",
+    }
+    assert len(report["candidate_comparison"]) == 2
+    assert len(report["quality_ranking"]["eligible_candidate_ids"]) == 2
+    assert report["reproduction"]["commands"]
+    assert report["reproduction"]["settings"]["winner_input"]["prompt_hash"]
+    assert report["reproduction"]["settings"]["version"]["commit"]
+    controlled = [
+        row for row in report["execution_log"]
+        if row.get("event") == "controlled_closed_loop_ranking"
+    ]
+    assert len(controlled) == 1
+    assert {row["candidate_path"] for row in controlled[0]["candidate_reports"]} == comparison_paths
+    assert "config.changed.yaml" not in comparison_paths
+    assert "test-output.txt" not in comparison_paths
