@@ -1053,6 +1053,7 @@ def run_controlled_closed_loop(parallel_config):
         run_opt_keys = {
             "smoke_parallel", "dev_parallel", "holdout_parallel",
             "force_direction", "avoid_failures", "dominant_failure",
+            "candidate_deadline_seconds",
         }
         heartbeat = getattr(run_opt, "RESEARCH_HEARTBEAT", None)
         if hasattr(run_opt, "RESEARCH_HEARTBEAT"):

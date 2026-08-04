@@ -123,10 +123,14 @@ class StageContext:
 
     mark_candidate_completed = completed_candidate
 
-    def isolate_candidate(self, candidate_id, reason, rerun_command=None):
+    def isolate_candidate(self, candidate_id, reason, rerun_command=None,
+                          cancellation=None, attempt_id="", original_attempt_id=""):
         """只隔離指定候選，並留下可重跑工作。"""
         return self._executor.record_isolated_candidate(
             self.stage, candidate_id, reason, rerun_command,
+            cancellation=cancellation,
+            attempt_id=attempt_id,
+            original_attempt_id=original_attempt_id,
         )
 
     isolate = isolate_candidate
@@ -136,9 +140,13 @@ class StageContext:
             command, self.stage, candidate_id, reason,
         )
 
-    def add_remaining_work(self, candidate_id="", reason="", rerun_command=None):
+    def add_remaining_work(self, candidate_id="", reason="", rerun_command=None,
+                           cancellation=None, attempt_id="", original_attempt_id=""):
         return self._executor.add_remaining_work(
             self.stage, candidate_id, reason, rerun_command,
+            cancellation=cancellation,
+            attempt_id=attempt_id,
+            original_attempt_id=original_attempt_id,
         )
 
     def check_deadline(self):
@@ -393,7 +401,8 @@ class StagedValidationExecutor:
             self.persist()
         return item
 
-    def record_isolated_candidate(self, stage, candidate_id, reason, rerun_command=None):
+    def record_isolated_candidate(self, stage, candidate_id, reason, rerun_command=None,
+                                  cancellation=None, attempt_id="", original_attempt_id=""):
         candidate_id = _candidate_id(candidate_id)
         item = {
             "candidate_id": candidate_id,
@@ -402,11 +411,21 @@ class StagedValidationExecutor:
             "status": "isolated",
             "reason": str(reason),
         }
+        if attempt_id:
+            item["attempt_id"] = str(attempt_id)
+        if original_attempt_id:
+            item["original_attempt_id"] = str(original_attempt_id)
+        if cancellation:
+            item["cancellation"] = _json_safe(cancellation)
         isolated = self.state.setdefault("isolated_candidates", [])
         if not any(
             row.get("candidate_id") == candidate_id
             and row.get("stage") == stage
             and row.get("attempt") == item["attempt"]
+            and (
+                not item.get("attempt_id")
+                or row.get("attempt_id") == item.get("attempt_id")
+            )
             for row in isolated
             if isinstance(row, dict)
         ):
@@ -414,7 +433,12 @@ class StagedValidationExecutor:
         self._recovery()["isolated_candidates"] = isolated
         if rerun_command:
             self.add_rerun_command(rerun_command, stage, candidate_id, str(reason))
-        self.add_remaining_work(stage, candidate_id, str(reason), rerun_command)
+        self.add_remaining_work(
+            stage, candidate_id, str(reason), rerun_command,
+            cancellation=cancellation,
+            attempt_id=attempt_id,
+            original_attempt_id=original_attempt_id,
+        )
         self.state["global_best_allowed"] = False
         self.persist()
         return item
@@ -428,13 +452,20 @@ class StagedValidationExecutor:
         self.persist()
         return record
 
-    def add_remaining_work(self, stage, candidate_id="", reason="", rerun_command=None):
+    def add_remaining_work(self, stage, candidate_id="", reason="", rerun_command=None,
+                           cancellation=None, attempt_id="", original_attempt_id=""):
         item = {
             "stage": stage,
             "candidate_id": _candidate_id(candidate_id),
             "status": "remaining",
             "reason": str(reason),
         }
+        if attempt_id:
+            item["attempt_id"] = str(attempt_id)
+        if original_attempt_id:
+            item["original_attempt_id"] = str(original_attempt_id)
+        if cancellation:
+            item["cancellation"] = _json_safe(cancellation)
         if rerun_command:
             item["rerun_command"] = _command_record(
                 rerun_command, stage, _candidate_id(candidate_id), str(reason),
@@ -467,6 +498,9 @@ class StagedValidationExecutor:
                     _candidate_id(item),
                     item.get("reason", "candidate isolated"),
                     item.get("rerun_command"),
+                    cancellation=item.get("cancellation"),
+                    attempt_id=item.get("attempt_id", ""),
+                    original_attempt_id=item.get("original_attempt_id", ""),
                 )
         for command in payload.get("rerun_commands", []) or []:
             if isinstance(command, dict):
@@ -485,6 +519,9 @@ class StagedValidationExecutor:
                     item.get("candidate_id", ""),
                     item.get("reason", "remaining work"),
                     item.get("rerun_command"),
+                    cancellation=item.get("cancellation"),
+                    attempt_id=item.get("attempt_id", ""),
+                    original_attempt_id=item.get("original_attempt_id", ""),
                 )
 
     def _new_stage(self, name, started_at, deadline):

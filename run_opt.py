@@ -19,6 +19,7 @@ import re
 import time
 import shutil
 import subprocess
+import uuid
 from datetime import datetime, timezone
 
 from lib.api import call_minimax
@@ -70,6 +71,8 @@ SMOKE_MIN_SCORE = get("thresholds", "smoke_min_score", 75.0)
 SMOKE_WORD_RATE_MIN = get("thresholds", "smoke_word_rate_min", 70.0)
 DEV_WORD_RATE_MIN = get("thresholds", "word_rate_min", 85.0)
 RISK_PERFECT_RATE_MIN = get("thresholds", "risk_perfect_rate_min", 100.0)
+DEFAULT_CANDIDATE_DEADLINE_SECONDS = 600.0
+_ACTIVE_CANDIDATE_CONTEXT = None
 
 EXECUTION_STATUS_QUALITY_MEASUREMENT = "quality_measurement_obtained"
 EXECUTION_STATUS_MODEL_ERROR = "model_or_evaluator_error"
@@ -124,10 +127,16 @@ def parse_parallel_args(argv):
         ("--validation-no-progress-seconds", "--no-progress-seconds"),
         "AUTORESEARCH_NO_PROGRESS_SECONDS",
     )
+    candidate_deadline = read_optional_float(
+        ("--candidate-deadline-seconds",),
+        "AUTORESEARCH_CANDIDATE_DEADLINE_SECONDS",
+    )
     if round_deadline is not None:
         config["validation_round_deadline_seconds"] = round_deadline
     if no_progress is not None:
         config["validation_no_progress_seconds"] = no_progress
+    if candidate_deadline is not None:
+        config["candidate_deadline_seconds"] = candidate_deadline
     return config
 
 def parse_run_opt_args(argv):
@@ -305,6 +314,13 @@ def _text_value(value):
     return str(value)
 
 
+def _json_safe(value):
+    try:
+        return json.loads(json.dumps(value, ensure_ascii=False, default=repr))
+    except (TypeError, ValueError):
+        return repr(value)
+
+
 def _api_execution_settings():
     try:
         model = get("api", "model", "")
@@ -334,6 +350,10 @@ def _execution_error_evidence(result, run_dir, summary, completion):
         "stdout": _text_value(getattr(result, "stdout", "")),
         "stderr": _text_value(getattr(result, "stderr", "")),
         "exception": _text_value(getattr(result, "error", "")),
+        "attempt_id": getattr(result, "attempt_id", ""),
+        "original_attempt_id": getattr(result, "original_attempt_id", ""),
+        "candidate_deadline_seconds": getattr(result, "deadline_seconds", None),
+        "cancellation": _json_safe(getattr(result, "cancellation", {})),
         "rejection_reason": completion.get("rejection_reason", ""),
         "rejection_reasons": completion.get("rejection_reasons", []),
         "missing_evidence_types": completion.get("missing_evidence_types", []),
@@ -409,20 +429,30 @@ def build_candidate_execution_record(
     status = _classify_execution_status(result, run_dir, summary, completion, error_evidence)
     started_at = getattr(result, "execution_started_at", "") or _execution_timestamp()
     ended_at = getattr(result, "execution_ended_at", "") or _execution_timestamp()
+    attempt_id = getattr(result, "attempt_id", "") or uuid.uuid4().hex
+    original_attempt_id = (
+        getattr(result, "original_attempt_id", "") or attempt_id
+    )
+    candidate_id = candidate_id or getattr(result, "candidate_id", "")
     settings = _api_execution_settings()
     record = {
         "candidate_id": candidate_id,
         "stage": stage,
         "attempt": attempt,
+        "attempt_id": attempt_id,
+        "original_attempt_id": original_attempt_id,
         "model": settings["model"],
         "timeout": settings["timeout"],
         "timeout_seconds": settings["timeout_seconds"],
+        "candidate_deadline_seconds": getattr(result, "deadline_seconds", None),
         "started_at": started_at,
         "ended_at": ended_at,
         "run": run_dir or "",
         "execution_status": status,
         "failure_classification": None if status == EXECUTION_STATUS_QUALITY_MEASUREMENT else status,
         "error_evidence": {} if status == EXECUTION_STATUS_QUALITY_MEASUREMENT else error_evidence,
+        "cancelled": bool(getattr(result, "cancelled", False)),
+        "cancellation": _json_safe(getattr(result, "cancellation", {})),
     }
     if status == EXECUTION_STATUS_QUALITY_MEASUREMENT:
         record["quality_measurement"] = {
@@ -442,6 +472,8 @@ def append_candidate_execution_record(cand_path, record):
     record = dict(record)
     stage = record.get("stage")
     record["attempt"] = 1 + sum(1 for item in records if isinstance(item, dict) and item.get("stage") == stage)
+    record.setdefault("attempt_id", uuid.uuid4().hex)
+    record.setdefault("original_attempt_id", record["attempt_id"])
     records.append(record)
     card["execution_records"] = records
     card["updated_at"] = time.strftime("%Y-%m-%d %H:%M:%S")
@@ -453,11 +485,16 @@ def _execution_stage_fields(record):
         "execution_status": record["execution_status"],
         "failure_classification": record["failure_classification"],
         "attempt": record["attempt"],
+        "attempt_id": record["attempt_id"],
+        "original_attempt_id": record["original_attempt_id"],
         "model": record["model"],
         "timeout": record["timeout"],
+        "candidate_deadline_seconds": record.get("candidate_deadline_seconds"),
         "started_at": record["started_at"],
         "ended_at": record["ended_at"],
         "error_evidence": record["error_evidence"],
+        "cancelled": record.get("cancelled", False),
+        "cancellation": record.get("cancellation", {}),
     }
 
 
@@ -553,6 +590,24 @@ def mark_candidate_evaluation_failed(cand_path, stage, result, run_dir, summary)
         reject_reasons=reasons,
         missing_evidence_types=disposition["missing_evidence_types"],
     )
+    if getattr(result, "timed_out", False):
+        try:
+            _report_progress(
+                f"candidate_evaluation {stage} cancelled",
+                {
+                    "isolated_candidates": [{
+                        "candidate_id": cand_path,
+                        "reason": disposition["rejection_reason"],
+                        "attempt_id": execution_record["attempt_id"],
+                        "original_attempt_id": execution_record["original_attempt_id"],
+                        "cancellation": execution_record.get("cancellation", {}),
+                        "rerun_command": getattr(result, "rerun_command", None),
+                    }],
+                },
+            )
+        except TimeoutError:
+            # 候選取消的證據已落盤，watchdog 截止時不讓心跳回呼阻塞下一候選。
+            pass
     return disposition
 
 def read_details(run_dir):
@@ -806,39 +861,138 @@ def newest_run_after(before_dirs):
     after = [d for d in list_run_dirs() if d not in before_set]
     return after[-1] if after else None
 
-def run_evaluate(prompt_path, question_file, parallel, capture=False):
+
+def _candidate_deadline_seconds(value=None):
+    if value is None:
+        value = os.environ.get("AUTORESEARCH_CANDIDATE_DEADLINE_SECONDS")
+    try:
+        value = DEFAULT_CANDIDATE_DEADLINE_SECONDS if value is None else float(value)
+    except (TypeError, ValueError):
+        value = DEFAULT_CANDIDATE_DEADLINE_SECONDS
+    if not math.isfinite(value) or value <= 0:
+        return DEFAULT_CANDIDATE_DEADLINE_SECONDS
+    return value
+
+
+def _candidate_stage_deadline(stage, overrides=None):
+    value = overrides
+    if isinstance(overrides, dict):
+        value = overrides.get(stage, overrides.get("default"))
+    return _candidate_deadline_seconds(value)
+
+
+def _process_isolation_kwargs():
+    if os.name == "nt":
+        return {"creationflags": getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)}
+    return {"start_new_session": True}
+
+
+def _timeout_cancellation(exc, attempt_id):
+    cancellation = getattr(exc, "cancellation", None)
+    if not isinstance(cancellation, dict):
+        succeeded = not bool(getattr(exc, "cancel_failed", False))
+        cancellation = {
+            "requested": True,
+            "succeeded": succeeded,
+            "residual_work": bool(getattr(exc, "residual_work", False)) or not succeeded,
+            "method": "subprocess.run timeout termination",
+        }
+    cancellation = dict(cancellation)
+    cancellation.setdefault("requested", True)
+    cancellation.setdefault("succeeded", not cancellation.get("residual_work", False))
+    cancellation.setdefault("residual_work", not cancellation["succeeded"])
+    cancellation.setdefault("method", "subprocess.run timeout termination")
+    cancellation["attempt_id"] = attempt_id
+    cancellation["status"] = "cancelled" if cancellation["succeeded"] else "cancellation_failed"
+    return cancellation
+
+
+def _run_candidate_evaluation(candidate_id, stage, prompt_path, question_file, parallel,
+                              deadline_seconds=None):
+    """以既有 run_evaluate 介面執行單一候選，隔離 deadline 設定。"""
+    global _ACTIVE_CANDIDATE_CONTEXT
+    previous = _ACTIVE_CANDIDATE_CONTEXT
+    _ACTIVE_CANDIDATE_CONTEXT = {
+        "candidate_id": candidate_id,
+        "stage": stage,
+        "deadline_seconds": _candidate_stage_deadline(stage, deadline_seconds),
+    }
+    try:
+        result, run_dir, summary = run_evaluate(
+            prompt_path, question_file, parallel, capture=True,
+        )
+    finally:
+        _ACTIVE_CANDIDATE_CONTEXT = previous
+    result.candidate_id = candidate_id
+    result.stage = stage
+    return result, run_dir, summary
+
+
+def run_evaluate(prompt_path, question_file, parallel, capture=False, deadline_seconds=None,
+                 candidate_id=""):
+    context = _ACTIVE_CANDIDATE_CONTEXT or {}
+    candidate_id = candidate_id or context.get("candidate_id", "")
+    if deadline_seconds is None:
+        deadline_seconds = context.get("deadline_seconds")
+    deadline_seconds = _candidate_deadline_seconds(deadline_seconds)
+    attempt_id = uuid.uuid4().hex
     before_dirs = list_run_dirs()
     cmd = [PYTHON_BIN, "scripts/evaluate.py", prompt_path, question_file, "--parallel", str(parallel)]
     started_at = _execution_timestamp()
+    run_kwargs = _process_isolation_kwargs()
+    run_kwargs["timeout"] = deadline_seconds
     if capture:
-        try:
-            res = subprocess.run(
-                cmd,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True,
-                encoding="utf-8",
-                errors="replace",
-            )
-        except subprocess.TimeoutExpired as exc:
-            res = subprocess.CompletedProcess(
-                cmd,
-                124,
-                stdout=_text_value(exc.stdout),
-                stderr=_text_value(exc.stderr),
-            )
-            res.timed_out = True
-            res.error = exc
-    else:
-        try:
-            res = subprocess.run(cmd)
-        except subprocess.TimeoutExpired as exc:
-            res = subprocess.CompletedProcess(cmd, 124)
-            res.timed_out = True
-            res.error = exc
+        run_kwargs.update(
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+        )
+    try:
+        res = subprocess.run(cmd, **run_kwargs)
+    except subprocess.TimeoutExpired as exc:
+        res = subprocess.CompletedProcess(
+            cmd,
+            124,
+            stdout=_text_value(exc.stdout),
+            stderr=_text_value(exc.stderr),
+        )
+        res.timed_out = True
+        res.error = exc
+        res.cancelled = bool(not getattr(exc, "cancel_failed", False))
+        res.cancellation = _timeout_cancellation(exc, attempt_id)
+    except OSError as exc:
+        res = subprocess.CompletedProcess(cmd, 127)
+        res.error = exc
+        res.cancellation = {
+            "requested": False,
+            "succeeded": False,
+            "residual_work": False,
+            "status": "not_requested",
+        }
+    if not hasattr(res, "cancellation"):
+        res.cancellation = {
+            "requested": False,
+            "succeeded": False,
+            "residual_work": False,
+            "status": "not_requested",
+        }
+    res.candidate_id = candidate_id
+    res.attempt_id = attempt_id
+    res.original_attempt_id = attempt_id
+    res.deadline_seconds = deadline_seconds
+    res.rerun_command = cmd
+    res.isolated_unit = {
+        "candidate_id": candidate_id,
+        "stage": context.get("stage", ""),
+        "attempt_id": attempt_id,
+        "deadline_seconds": deadline_seconds,
+    }
     res.execution_started_at = started_at
     res.execution_ended_at = _execution_timestamp()
-    run_dir = newest_run_after(before_dirs)
+    # 逾時輸出可能由殘留程序晚到，不能把它認作本次候選的品質證據。
+    run_dir = None if getattr(res, "timed_out", False) else newest_run_after(before_dirs)
     return res, run_dir, read_summary(run_dir) if run_dir else {}
 
 def pick_direction(latest_report, trend_counts=None, force_direction=None, avoid_failures=None):
@@ -895,7 +1049,8 @@ def _cleanup_old_archives():
         old = archives.pop(0)
         os.remove(os.path.join(ARCHIVE_DIR, old))
 
-def run_opt_pass(smoke_parallel=None, dev_parallel=None, holdout_parallel=None, force_direction=None, avoid_failures=None, dominant_failure=None):
+def run_opt_pass(smoke_parallel=None, dev_parallel=None, holdout_parallel=None, force_direction=None,
+                 avoid_failures=None, dominant_failure=None, candidate_deadline_seconds=None):
     global LAST_ROUND_COUNTERMEASURES
     LAST_ROUND_COUNTERMEASURES = []
 
@@ -1136,7 +1291,10 @@ def run_opt_pass(smoke_parallel=None, dev_parallel=None, holdout_parallel=None, 
     for ci, (mutated, temp, cand_path, _) in enumerate(gk_passed):
         _report_progress(f"candidate_evaluation smoke {ci + 1}/{len(gk_passed)}")
         write_file(PROMPT_PATH, mutated)
-        smoke_res, smoke_run, smoke_summary = run_evaluate(PROMPT_PATH, "questions/smoke.jsonl", smoke_parallel, capture=True)
+        smoke_res, smoke_run, smoke_summary = _run_candidate_evaluation(
+            cand_path, "smoke", PROMPT_PATH, "questions/smoke.jsonl", smoke_parallel,
+            candidate_deadline_seconds,
+        )
         smoke_completion = evaluation_completion(smoke_res, smoke_run, smoke_summary)
         if smoke_completion["status"] != "completed":
             print(f"  - {C_RED}❌ 候選 {ci+1} Smoke 無有效產出，標記 failed：{smoke_completion['reason_code']}{C_RESET}")
@@ -1234,8 +1392,9 @@ def run_opt_pass(smoke_parallel=None, dev_parallel=None, holdout_parallel=None, 
     # --------------------------------------------------
     print(f"\n{C_YELLOW}[步驟 5] 第三層：全量開發測試 (Dev Test，36題，併緒 {dev_parallel})...{C_RESET}")
     _report_progress("candidate_evaluation dev")
-    dev_res, dev_run_dir, dev_summary = run_evaluate(
-        PROMPT_PATH, "questions/dev.jsonl", dev_parallel, capture=True,
+    dev_res, dev_run_dir, dev_summary = _run_candidate_evaluation(
+        cand_path, "dev", PROMPT_PATH, "questions/dev.jsonl", dev_parallel,
+        candidate_deadline_seconds,
     )
     dev_completion = evaluation_completion(dev_res, dev_run_dir, dev_summary)
     if dev_completion["status"] != "completed":
@@ -1342,8 +1501,9 @@ def run_opt_pass(smoke_parallel=None, dev_parallel=None, holdout_parallel=None, 
     if accept:
         print(f"\n{C_YELLOW}[步驟 7] 啟動防過擬合 Holdout 盲測題庫驗證（併緒 {holdout_parallel}）...{C_RESET}")
         _report_progress("candidate_evaluation holdout")
-        holdout_res, holdout_run_dir, holdout_summary = run_evaluate(
-            PROMPT_PATH, "questions/holdout.jsonl", holdout_parallel, capture=True,
+        holdout_res, holdout_run_dir, holdout_summary = _run_candidate_evaluation(
+            cand_path, "holdout", PROMPT_PATH, "questions/holdout.jsonl", holdout_parallel,
+            candidate_deadline_seconds,
         )
         holdout_completion = evaluation_completion(holdout_res, holdout_run_dir, holdout_summary)
         if holdout_completion["status"] != "completed":

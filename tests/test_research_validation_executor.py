@@ -221,6 +221,44 @@ def test_retry_archives_original_attempt_without_overwrite(tmp_path):
     assert second["completed_candidates"][0]["evidence"] == {"score": 95}
 
 
+def test_recovery_output_persists_cancelled_candidate_attempt_identity(tmp_path):
+    state_path = tmp_path / "validation.json"
+    cancellation = {
+        "requested": True,
+        "succeeded": False,
+        "residual_work": True,
+        "status": "cancellation_failed",
+    }
+
+    state = StagedValidationExecutor(
+        state_path=str(state_path),
+        deadlines={stage: 1 for stage in (
+            "candidate_evaluation", "evidence_validation", "ranking", "report_delivery",
+        )},
+    ).run({
+        "candidate_evaluation": lambda context: {
+            "isolated_candidates": [{
+                "candidate_id": "slow",
+                "attempt_id": "attempt-1",
+                "original_attempt_id": "attempt-1",
+                "reason": "deadline exceeded",
+                "cancellation": cancellation,
+            }],
+        },
+    })
+
+    isolated = state["isolated_candidates"][0]
+    assert isolated["candidate_id"] == "slow"
+    assert isolated["attempt_id"] == "attempt-1"
+    assert isolated["original_attempt_id"] == "attempt-1"
+    assert isolated["cancellation"] == cancellation
+    assert state["remaining_work"][0]["attempt_id"] == "attempt-1"
+    assert state["remaining_work"][0]["original_attempt_id"] == "attempt-1"
+    assert state["remaining_work"][0]["cancellation"] == cancellation
+    persisted = json.loads(state_path.read_text(encoding="utf-8"))
+    assert persisted["isolated_candidates"] == state["isolated_candidates"]
+
+
 def test_isolated_executor_runs_all_callbacks_in_one_baseline_worktree(tmp_path):
     repository = _repository(tmp_path / "repo")
     state_path = repository / "output" / "validation.json"

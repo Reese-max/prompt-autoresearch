@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 """候選評測 attempt 的狀態分類與品質分數防偽。"""
 import json
+import subprocess
 from types import SimpleNamespace
 
 import pytest
@@ -90,3 +91,69 @@ def test_failed_scorecard_stage_has_no_stale_quality_score(tmp_path, monkeypatch
     assert "score" not in card["smoke"]
     assert len(card["execution_records"]) == 1
     assert "quality_measurement" not in card["execution_records"][0]
+
+
+def test_candidate_timeout_persists_cancellation_and_attempt_identity(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(run_opt, "list_run_dirs", lambda: [])
+
+    def timeout_run(cmd, **kwargs):
+        assert kwargs["timeout"] == 0.05
+        error = subprocess.TimeoutExpired(cmd, kwargs["timeout"], output="partial", stderr="stuck")
+        error.cancel_failed = True
+        raise error
+
+    monkeypatch.setattr(run_opt.subprocess, "run", timeout_run)
+    candidate = tmp_path / "prompts" / "candidates" / "candidate.md"
+    candidate.parent.mkdir(parents=True)
+    candidate.write_text("candidate", encoding="utf-8")
+
+    result, run_dir, summary = run_opt.run_evaluate(
+        str(candidate), "questions/smoke.jsonl", 1, capture=True,
+        deadline_seconds=0.05, candidate_id=str(candidate),
+    )
+    completion = _completion(reason_code="TIMEOUT")
+    record = run_opt.build_candidate_execution_record(
+        "smoke", 1, result, run_dir, summary, completion,
+        candidate_id=str(candidate),
+    )
+    run_opt.append_candidate_execution_record(str(candidate), record)
+
+    card = json.loads(candidate.with_suffix(".scorecard.json").read_text(encoding="utf-8"))
+    persisted = card["execution_records"][0]
+    assert result.cancelled is False
+    assert result.cancellation["status"] == "cancellation_failed"
+    assert result.cancellation["residual_work"] is True
+    assert persisted["execution_status"] == run_opt.EXECUTION_STATUS_TIMEOUT
+    assert persisted["cancelled"] is False
+    assert persisted["attempt_id"] == result.attempt_id
+    assert persisted["original_attempt_id"] == result.original_attempt_id
+    assert persisted["cancellation"]["status"] == "cancellation_failed"
+
+
+def test_cancelled_candidate_does_not_block_next_candidate(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(run_opt, "list_run_dirs", lambda: [])
+    calls = []
+
+    def run(cmd, **kwargs):
+        calls.append((cmd, kwargs))
+        if len(calls) == 1:
+            error = subprocess.TimeoutExpired(cmd, kwargs["timeout"])
+            error.cancel_failed = True
+            raise error
+        return SimpleNamespace(returncode=0, stdout="", stderr="")
+
+    monkeypatch.setattr(run_opt.subprocess, "run", run)
+    first, _, _ = run_opt._run_candidate_evaluation(
+        "candidate-a", "smoke", "current.md", "questions/smoke.jsonl", 1, 0.01,
+    )
+    second, _, _ = run_opt._run_candidate_evaluation(
+        "candidate-b", "smoke", "current.md", "questions/smoke.jsonl", 1, 0.01,
+    )
+
+    assert len(calls) == 2
+    assert first.cancellation["status"] == "cancellation_failed"
+    assert second.candidate_id == "candidate-b"
+    assert first.attempt_id != second.attempt_id
+    assert all(call[1]["timeout"] == 0.01 for call in calls)
