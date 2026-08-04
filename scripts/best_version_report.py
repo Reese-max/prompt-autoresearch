@@ -44,6 +44,7 @@ CONFIG_PATH = os.path.join(ROOT, "config.yaml")
 RUNS_DIR = os.path.join(ROOT, "runs")
 SCHEMA_REL_PATH = "schemas/best_version_evidence_report.schema.json"
 VALIDATION_STATE_REL_PATH = "output/research_validation_state.json"
+GIT_PREFLIGHT_STATE_REL_PATH = "output/research_git_preflight.json"
 
 
 def load_json(path, default=None):
@@ -89,6 +90,12 @@ def read_jsonl(path):
 def load_validation_state():
     """讀取分階段驗證 checkpoint；不存在時維持既有報告相容性。"""
     return load_json(os.path.join(ROOT, VALIDATION_STATE_REL_PATH), {})
+
+
+def load_git_preflight_state():
+    """讀取研究入口留下的 Git 阻塞狀態。"""
+    state = load_json(os.path.join(ROOT, GIT_PREFLIGHT_STATE_REL_PATH), {})
+    return state if isinstance(state, dict) else {}
 
 
 def load_baseline_meta():
@@ -2062,6 +2069,7 @@ def build_structured_report(limit=10):
     environment = collect_environment()
     input_versions = collect_input_versions(baseline_meta, champions, cards, sessions)
     validation_state = load_validation_state()
+    git_preflight_state = load_git_preflight_state()
     git_snapshot = collect_git_snapshot(cwd=ROOT)
     measurement_basis = collect_measurement_basis(config, baseline_meta, input_versions)
     candidate_comparison = build_candidate_comparisons(cards, baseline_meta)
@@ -2101,6 +2109,10 @@ def build_structured_report(limit=10):
     if not delivery_consistency["valid"]:
         evidence_errors.extend(delivery_consistency["inconsistencies"])
     is_valid = is_valid and delivery_consistency["valid"]
+    if git_preflight_state.get("blocked") or git_preflight_state.get("status") == "blocked":
+        reason = git_preflight_state.get("blocking_reason") or git_preflight_state.get("reason_code") or "Git 預檢失敗"
+        evidence_errors.append(f"Git 預檢阻塞：{reason}")
+        is_valid = False
 
     winner = _winner_data(baseline_meta, is_valid, rerun_settings, commands)
 

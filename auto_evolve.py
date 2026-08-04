@@ -921,6 +921,7 @@ def main():
     preflight_cmd = [
         sys.executable or "python",
         "scripts/preflight.py",
+        "--require-git",
         "--smoke-parallel",
         str(parallel_config["smoke_parallel"]),
         "--dev-parallel",

@@ -16,6 +16,10 @@ if hasattr(sys.stderr, "reconfigure"):
 
 os.chdir(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 
+if os.getcwd() not in sys.path:
+    sys.path.insert(0, os.getcwd())
+from scripts.git_reproducibility import collect_git_preflight, persist_git_preflight
+
 C_GREEN = "\033[92m"
 C_YELLOW = "\033[93m"
 C_RED = "\033[91m"
@@ -66,15 +70,34 @@ def check_run_path(path):
 def main(argv=None):
     parser = argparse.ArgumentParser()
     parser.add_argument("--json", action="store_true")
+    parser.add_argument(
+        "--require-git",
+        action="store_true",
+        help="研究執行入口使用：Git 工作區預檢失敗時硬阻塞。",
+    )
     parser.add_argument("--smoke-parallel", type=int, default=int(os.environ.get("AUTORESEARCH_SMOKE_PARALLEL", "6")))
     parser.add_argument("--dev-parallel", type=int, default=int(os.environ.get("AUTORESEARCH_DEV_PARALLEL", "24")))
     parser.add_argument("--holdout-parallel", type=int, default=int(os.environ.get("AUTORESEARCH_HOLDOUT_PARALLEL", "24")))
     args = parser.parse_args(argv)
 
     checks = []
+    git_preflight = collect_git_preflight(cwd=os.getcwd())
 
     def add(name, passed, detail, severity="error"):
         checks.append({"name": name, "passed": bool(passed), "detail": detail, "severity": severity})
+
+    git_state_path = ""
+    if args.require_git or git_preflight.get("blocked"):
+        try:
+            git_state_path = persist_git_preflight(git_preflight)
+        except OSError as exc:
+            add("Git preflight state", False, f"預檢阻塞狀態無法持久化：{exc}")
+    if args.require_git:
+        add(
+            "Git workspace",
+            git_preflight.get("passed", False),
+            git_preflight.get("blocking_reason") or "Git metadata、repository root 與 HEAD 可解析",
+        )
 
     add("MINIMAX_API_KEY", bool(os.environ.get("MINIMAX_API_KEY")), "環境變數已設定" if os.environ.get("MINIMAX_API_KEY") else "缺少 MINIMAX_API_KEY")
     add("Python version", sys.version_info >= (3, 10), f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}")
@@ -117,6 +140,8 @@ def main(argv=None):
         "errors": errors,
         "warnings": warnings,
         "checks": checks,
+        "git_preflight": git_preflight,
+        "git_preflight_state_path": git_state_path,
     }
 
     if args.json:
