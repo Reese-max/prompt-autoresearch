@@ -14,6 +14,7 @@ from scripts.git_reproducibility import (
     persist_git_preflight,
     ResearchWorkspaceError,
 )
+from scripts.research_validation_executor import StagedValidationExecutor
 import scripts.best_version_report as best_version_report
 
 
@@ -320,3 +321,97 @@ def test_research_workspace_failure_is_unproven_without_fallback(tmp_path):
         "reason": "無法建立隔離研究工作區：來源 Git 預檢阻塞。",
     }
     assert not (repository / "output" / "research-worktrees" / "blocked").exists()
+
+
+@pytest.mark.parametrize("case, expected_blocker", (
+    ("clean", None),
+    ("dirty", "dirty_worktree"),
+    ("unmerged", "git_unmerged_paths"),
+    ("index_lock", "git_index_lock_present"),
+))
+def test_controlled_integration_ranks_only_clean_isolated_workspace(
+    tmp_path, case, expected_blocker,
+):
+    """受控排名只接受乾淨且成功隔離的 Git 工作區。"""
+    repository = _repository(tmp_path / case)
+    if case == "dirty":
+        (repository / "dirty.txt").write_text("uncommitted\n", encoding="utf-8")
+    elif case == "index_lock":
+        (repository / ".git" / "index.lock").write_text("stale lock\n", encoding="utf-8")
+    elif case == "unmerged":
+        _git(repository, "checkout", "-b", "side")
+        (repository / "tracked.txt").write_text("side\n", encoding="utf-8")
+        _git(repository, "add", "tracked.txt")
+        _git(repository, "commit", "--quiet", "-m", "test: side change")
+        _git(repository, "checkout", "main")
+        (repository / "tracked.txt").write_text("main\n", encoding="utf-8")
+        _git(repository, "add", "tracked.txt")
+        _git(repository, "commit", "--quiet", "-m", "test: main change")
+        merge = _git(repository, "merge", "side", check=False)
+        assert merge.returncode != 0
+
+    import auto_evolve
+
+    ranking_calls = []
+
+    def candidate_evaluation(context):
+        return {"completed_candidates": [{
+            "candidate_id": "candidate-best",
+            "evidence": {"score": 91},
+        }]}
+
+    def ranking(context):
+        ranking_calls.append(context.research_workspace["status"])
+        cards = []
+        for path, score in (("candidate-best", 91.0), ("candidate-compare", 90.0)):
+            card = {
+                "candidate_path": path,
+                "status": "evaluated",
+                "dev": {
+                    "score": score,
+                    "dataset": "questions/dev.jsonl",
+                    "metric": "average_score",
+                    "evaluator_version": "evaluate-v1",
+                    "measurement_settings": {"score_scale": "0-100"},
+                },
+            }
+            card["stage_evaluations"] = auto_evolve._candidate_stage_evaluations(card)
+            cards.append(card)
+        winner, _ = auto_evolve._rank_candidate_evaluations(cards)
+        return {"winner": winner["candidate_path"]}
+
+    state = StagedValidationExecutor(
+        state_path=str(repository / "output" / "validation.json"),
+        isolate_workspace=True,
+        repository_root=str(repository),
+        workspace_root=str(repository / "output" / "research-worktrees"),
+    ).run({
+        "candidate_evaluation": candidate_evaluation,
+        "evidence_validation": lambda _context: {"evidence": "complete"},
+        "ranking": ranking,
+        "report_delivery": lambda _context: {"report": "persisted"},
+    })
+
+    workspace = state["research_workspace"]
+    assert workspace["status"] == ("ready" if case == "clean" else "blocked")
+    assert state["global_best_allowed"] is (case == "clean")
+    if case == "clean":
+        assert workspace["decision"] == {"status": "proven", "code": "READY"}
+        assert state["status"] == "completed"
+        assert ranking_calls == ["ready"]
+        assert state["stages"]["ranking"]["last_available_output"] == {
+            "winner": "candidate-best",
+        }
+        _git(repository, "worktree", "remove", "--force", workspace["workspace"])
+    else:
+        assert expected_blocker in workspace["preflight"]["blockers"]
+        assert state["status"] == "blocked"
+        assert ranking_calls == []
+        assert state["stages"] == {}
+        assert workspace["decision"] == {
+            "status": "unproven",
+            "code": "INCOMPLETE_EVIDENCE",
+            "reason": "無法建立隔離研究工作區：來源 Git 預檢阻塞。",
+        }
+        assert state["rerun_commands"]
+        assert "python scripts/preflight.py --require-git" in state["rerun_commands"]

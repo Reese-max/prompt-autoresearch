@@ -389,14 +389,16 @@ class StagedValidationExecutor:
         self.state["status"] = "blocked"
         self.state["ended_at"] = self.now()
         self.state["decision"] = metadata["decision"]
+        self.state["rerun_commands"] = list(metadata.get("rerun_commands") or [])
         self.state["remaining_work"] = [{
             "stage": "workspace",
             "status": "remaining",
             "reason": str(reason),
-            "rerun_commands": metadata.get("rerun_commands", []),
+            "rerun_commands": self.state["rerun_commands"],
         }]
         self._recovery().update({
             "status": "blocked",
+            "rerun_commands": self.state["rerun_commands"],
             "remaining_work": self.state["remaining_work"],
         })
         self.persist()
