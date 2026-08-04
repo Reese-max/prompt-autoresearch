@@ -2,7 +2,12 @@
 """Git 工作區預檢：資料夾、worktree 指標與跨平台阻塞契約。"""
 import json
 
-from scripts.git_reproducibility import parse_git_metadata, persist_git_preflight
+import scripts.git_reproducibility as git_reproducibility
+from scripts.git_reproducibility import (
+    collect_git_preflight,
+    parse_git_metadata,
+    persist_git_preflight,
+)
 import scripts.best_version_report as best_version_report
 
 
@@ -53,6 +58,90 @@ def test_parse_non_git_and_unreadable_head_are_blocked(tmp_path):
     (git_dir / "HEAD").write_text("", encoding="utf-8")
     unreadable = parse_git_metadata(tmp_path)
     assert "head_unreadable" in unreadable["blockers"]
+
+
+def test_controlled_linux_workspace_states_gate_ranking_and_best_claim(
+    tmp_path, monkeypatch
+):
+    """Linux 下的失效工作區不得比較／交付；有效 worktree 保留完整身分。"""
+    head = "a" * 40
+    windows_path = tmp_path / "windows-gitdir"
+    valid_worktree = tmp_path / "valid-worktree"
+    non_git = tmp_path / "non-git"
+    for workspace in (windows_path, valid_worktree, non_git):
+        workspace.mkdir()
+
+    (windows_path / ".git").write_text(
+        "gitdir: D:/work/.git/worktrees/example\n", encoding="utf-8"
+    )
+    metadata = valid_worktree / "metadata"
+    metadata.mkdir()
+    (valid_worktree / ".git").write_text(
+        "gitdir: metadata\n", encoding="utf-8"
+    )
+    (metadata / "HEAD").write_text(f"{head}\n", encoding="utf-8")
+
+    cases = (
+        (windows_path, True),
+        (valid_worktree, False),
+        (non_git, True),
+    )
+    for workspace, blocked in cases:
+        with monkeypatch.context() as patch:
+            patch.chdir(workspace)
+            parsed = parse_git_metadata(".", platform_name="Linux")
+
+            def fake_parse(_cwd=None, platform_name=None, parsed=parsed):
+                assert platform_name == "Linux"
+                return parsed
+
+            def fake_detail(args, cwd):
+                if args == ["rev-parse", "--show-toplevel"]:
+                    return {
+                        "ok": True,
+                        "stdout": f"/linux/research/{workspace.name}\n",
+                        "stderr": "",
+                        "returncode": 0,
+                        "timed_out": False,
+                    }
+                if args == ["rev-parse", "--verify", "HEAD"]:
+                    return {
+                        "ok": not blocked,
+                        "stdout": f"{head}\n" if not blocked else "",
+                        "stderr": "" if not blocked else "not a git repository",
+                        "returncode": 0 if not blocked else 128,
+                        "timed_out": False,
+                    }
+                raise AssertionError(f"unexpected git command: {args}")
+
+            def fake_git(args, cwd, timeout=git_reproducibility.DEFAULT_GIT_TIMEOUT):
+                return f"{head}\n" if args == ["rev-parse", "HEAD"] and not blocked else ""
+
+            patch.setattr(git_reproducibility, "parse_git_metadata", fake_parse)
+            patch.setattr(git_reproducibility, "_run_git_detail", fake_detail)
+            patch.setattr(git_reproducibility, "_run_git", fake_git)
+            preflight = collect_git_preflight(
+                cwd=workspace, platform_name="Linux", now=lambda: "2026-08-04T00:00:00Z"
+            )
+
+        assert preflight["blocked"] is blocked
+        assert preflight["comparison_allowed"] is (not blocked)
+        assert preflight["deliverable_allowed"] is (not blocked)
+        assert preflight["global_best_allowed"] is (not blocked)
+
+        if blocked:
+            assert preflight["status"] == "blocked"
+            assert preflight["head_readable"] is False
+            continue
+
+        assert preflight["status"] == "passed"
+        assert preflight["head_commit"] == head
+        assert preflight["head_file"] == head
+        assert preflight["head_readable"] is True
+        assert preflight["workspace"] == str(valid_worktree.resolve())
+        assert preflight["repository_root"] == "/linux/research/valid-worktree"
+        assert preflight["git_metadata_kind"] == "worktree_file"
+        assert preflight["git_dir"] == str(metadata.resolve())
 
 
 def test_persist_blocking_reason_and_repair_commands(tmp_path):
