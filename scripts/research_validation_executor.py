@@ -5,6 +5,7 @@ import hashlib
 import os
 import subprocess
 import tempfile
+import threading
 import time
 import uuid
 from contextlib import nullcontext
@@ -27,6 +28,7 @@ DEFAULT_STAGE_DEADLINES = {
     "ranking": 30.0,
     "report_delivery": 30.0,
 }
+DEFAULT_NO_PROGRESS_SECONDS = 300.0
 
 
 def utc_now():
@@ -77,16 +79,23 @@ class StageTimeout(TimeoutError):
     """階段 callback 明確表示已逾時。"""
 
 
+class WedgeDetected(TimeoutError):
+    """研究輪次在 deadline 前已連續無進度，禁止再交付。"""
+
+
 class StageContext:
-    def __init__(self, executor, stage, deadline_monotonic):
+    def __init__(self, executor, stage, deadline_monotonic, started_monotonic):
         self._executor = executor
         self.stage = stage
         self.deadline_monotonic = deadline_monotonic
+        self.started_monotonic = started_monotonic
+        self.last_progress_monotonic = started_monotonic
         self.last_available_output = None
 
     @property
     def remaining_seconds(self):
-        return max(0.0, self.deadline_monotonic - self._executor.clock())
+        deadline = min(self.deadline_monotonic, self._executor.round_deadline_monotonic)
+        return max(0.0, deadline - self._executor.clock())
 
     @property
     def research_workspace(self):
@@ -97,18 +106,13 @@ class StageContext:
         if output is not None:
             self.last_available_output = _json_safe(output)
             self._executor.consume_recovery_output(self.stage, output)
-        event = {"at": self._executor.now(), "progress": str(progress)}
-        workspace = self.research_workspace
-        if workspace:
-            event["workspace_id"] = workspace.get("workspace_id", "")
-            event["baseline_commit"] = workspace.get("baseline_commit", "")
-            event["baseline_snapshot_hash"] = workspace.get("baseline_snapshot_hash", "")
-        if output is not None:
-            event["output"] = self.last_available_output
-        self._executor.state["stages"][self.stage]["heartbeats"].append(event)
-        self._executor.persist()
+        self.last_progress_monotonic = self._executor.clock()
+        self._executor.record_heartbeat(
+            self.stage, progress, self.last_available_output if output is not None else None,
+        )
 
     def checkpoint(self, output, progress="checkpoint"):
+        self.check_round_deadline()
         self.heartbeat(progress, output)
 
     def completed_candidate(self, candidate_id, evidence):
@@ -138,8 +142,19 @@ class StageContext:
         )
 
     def check_deadline(self):
+        self._executor.check_stage_health(self)
         if self.remaining_seconds <= 0:
             raise StageTimeout(f"{self.stage} deadline exceeded")
+
+    def check_round_deadline(self):
+        if self._executor.clock() >= self._executor.round_deadline_monotonic:
+            raise WedgeDetected(f"{self.stage} round deadline exceeded")
+
+    def ensure_delivery_allowed(self):
+        """交付 callback 寫入任何結論前的最後一道不可交付守門。"""
+        self.check_deadline()
+        if self._executor.state.get("wedge"):
+            raise WedgeDetected(f"{self.stage} delivery is not allowed")
 
 
 class StagedValidationExecutor:
@@ -147,7 +162,9 @@ class StagedValidationExecutor:
 
     def __init__(self, state_path="output/research_validation_state.json", deadlines=None,
                  clock=None, now=None, isolate_workspace=False,
-                 repository_root=None, workspace_root=None, research_workspace=None):
+                 repository_root=None, workspace_root=None, research_workspace=None,
+                 round_deadline_seconds=None, no_progress_seconds=DEFAULT_NO_PROGRESS_SECONDS,
+                 no_progress_threshold=None, monitor_interval_seconds=0.25):
         self.state_path = os.path.abspath(os.fspath(state_path))
         self.deadlines = dict(DEFAULT_STAGE_DEADLINES)
         if deadlines:
@@ -160,6 +177,27 @@ class StagedValidationExecutor:
                 self.deadlines[stage] = seconds
         self.clock = clock or time.monotonic
         self.now = now or utc_now
+        if no_progress_threshold is not None:
+            no_progress_seconds = no_progress_threshold
+        if no_progress_seconds is not None:
+            no_progress_seconds = float(no_progress_seconds)
+            if no_progress_seconds <= 0:
+                raise ValueError("no_progress_seconds must be positive")
+        if round_deadline_seconds is None:
+            round_deadline_seconds = sum(self.deadlines.values())
+        round_deadline_seconds = float(round_deadline_seconds)
+        if round_deadline_seconds <= 0:
+            raise ValueError("round_deadline_seconds must be positive")
+        monitor_interval_seconds = float(monitor_interval_seconds)
+        if monitor_interval_seconds <= 0:
+            raise ValueError("monitor_interval_seconds must be positive")
+        self.no_progress_seconds = no_progress_seconds
+        self.round_deadline_seconds = round_deadline_seconds
+        self.monitor_interval_seconds = monitor_interval_seconds
+        self.round_deadline_monotonic = float("inf")
+        self._state_lock = threading.RLock()
+        self._watchdog_stop = None
+        self._watchdog_thread = None
         if research_workspace is not None:
             isolate_workspace = research_workspace
         self.isolate_workspace = bool(isolate_workspace)
@@ -170,17 +208,119 @@ class StagedValidationExecutor:
 
     def persist(self):
         """原子寫入 checkpoint，避免中斷時留下半個 JSON。"""
-        parent = os.path.dirname(os.path.abspath(self.state_path))
-        os.makedirs(parent, exist_ok=True)
-        fd, temp_path = tempfile.mkstemp(prefix=".research-validation-", suffix=".tmp", dir=parent)
-        try:
-            with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as handle:
-                json.dump(self.state, handle, ensure_ascii=False, indent=2)
-                handle.write("\n")
-            os.replace(temp_path, self.state_path)
-        finally:
-            if os.path.exists(temp_path):
-                os.unlink(temp_path)
+        with self._state_lock:
+            parent = os.path.dirname(os.path.abspath(self.state_path))
+            os.makedirs(parent, exist_ok=True)
+            fd, temp_path = tempfile.mkstemp(prefix=".research-validation-", suffix=".tmp", dir=parent)
+            try:
+                with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as handle:
+                    json.dump(self.state, handle, ensure_ascii=False, indent=2)
+                    handle.write("\n")
+                os.replace(temp_path, self.state_path)
+            finally:
+                if os.path.exists(temp_path):
+                    os.unlink(temp_path)
+
+    def record_heartbeat(self, stage, progress, output=None):
+        event = {"at": self.now(), "progress": str(progress)}
+        workspace = self.state.get("research_workspace", {})
+        if workspace:
+            event["workspace_id"] = workspace.get("workspace_id", "")
+            event["baseline_commit"] = workspace.get("baseline_commit", "")
+            event["baseline_snapshot_hash"] = workspace.get("baseline_snapshot_hash", "")
+        if output is not None:
+            event["output"] = _json_safe(output)
+        with self._state_lock:
+            self.state["stages"][stage]["heartbeats"].append(event)
+            self.state["stages"][stage]["last_progress_at"] = event["at"]
+            self.state["progress"] = {
+                "stage": stage,
+                "progress": str(progress),
+                "at": event["at"],
+            }
+            self.persist()
+
+    def _mark_wedge(self, stage, reason):
+        with self._state_lock:
+            if self.state.get("wedge"):
+                return
+            wedge = {
+                "status": "wedge",
+                "stage": stage,
+                "reason": str(reason),
+                "detected_at": self.now(),
+                "code": "INCOMPLETE_EVIDENCE",
+            }
+            self.state["wedge"] = wedge
+            self.state["round_status"] = "wedge"
+            self.state["status"] = "wedge"
+            self.state["decision"] = {
+                "status": "unproven",
+                "code": "INCOMPLETE_EVIDENCE",
+                "reason": str(reason),
+            }
+            self.state["global_best_allowed"] = False
+            self.state["deliverable_allowed"] = False
+            self.state["remaining_work"].append({
+                "stage": stage,
+                "status": "remaining",
+                "reason": str(reason),
+            })
+            self._recovery().update({
+                "status": "wedge",
+                "wedge": wedge,
+                "remaining_work": self.state["remaining_work"],
+            })
+            stage_data = self.state.get("stages", {}).get(stage)
+            if isinstance(stage_data, dict) and stage_data.get("status") == "running":
+                stage_data["status"] = "wedge"
+                stage_data["error"] = str(reason)
+                stage_data["ended_at"] = self.now()
+            self.persist()
+
+    def check_stage_health(self, context):
+        if self.state.get("wedge"):
+            raise WedgeDetected(self.state["wedge"].get("reason", "research round wedged"))
+        now = self.clock()
+        if now >= self.round_deadline_monotonic:
+            reason = f"{context.stage} round deadline exceeded"
+            self._mark_wedge(context.stage, reason)
+            raise WedgeDetected(reason)
+        if (
+            self.no_progress_seconds is not None
+            and now - context.last_progress_monotonic >= self.no_progress_seconds
+        ):
+            reason = (
+                f"{context.stage} no progress for "
+                f"{now - context.last_progress_monotonic:.3f}s"
+            )
+            self._mark_wedge(context.stage, reason)
+            raise WedgeDetected(reason)
+
+    def _watch_stage(self, context, stop):
+        while not stop.wait(self.monitor_interval_seconds):
+            try:
+                self.check_stage_health(context)
+            except WedgeDetected:
+                return
+
+    def _start_watchdog(self, context):
+        stop = threading.Event()
+        thread = threading.Thread(
+            target=self._watch_stage, args=(context, stop),
+            name="research-validation-watchdog", daemon=True,
+        )
+        self._watchdog_stop = stop
+        self._watchdog_thread = thread
+        thread.start()
+
+    def _stop_watchdog(self):
+        if self._watchdog_stop is not None:
+            self._watchdog_stop.set()
+        if self._watchdog_thread is not None:
+            self._watchdog_thread.join(timeout=self.monitor_interval_seconds * 2)
+        self._watchdog_stop = None
+        self._watchdog_thread = None
 
     def _archive_previous_state(self, previous):
         if not isinstance(previous, dict) or not previous:
@@ -355,8 +495,20 @@ class StagedValidationExecutor:
             "ended_at": None,
             "deadline": deadline,
             "heartbeats": [],
+            "last_progress_at": started_at,
             "last_available_output": None,
         }
+
+    def _blocked_stage(self, name):
+        started_at = self.now()
+        stage = self._new_stage(name, started_at, started_at)
+        stage.update({
+            "status": "blocked",
+            "ended_at": started_at,
+            "error": "研究輪次 wedge，停止後續選優／交付",
+            "heartbeats": [{"at": started_at, "progress": "blocked_by_wedge"}],
+        })
+        self.state["stages"][name] = stage
 
     def _blocked_workspace(self, reason, evidence=None):
         metadata = evidence if isinstance(evidence, dict) else {}
@@ -406,6 +558,10 @@ class StagedValidationExecutor:
 
     def _run_stages(self, callbacks):
         for name in STAGES:
+            if self.state.get("wedge"):
+                self._blocked_stage(name)
+                self.persist()
+                continue
             started_mono = self.clock()
             started_at = self.now()
             deadline_seconds = self.deadlines[name]
@@ -414,7 +570,9 @@ class StagedValidationExecutor:
             ).isoformat(timespec="milliseconds").replace("+00:00", "Z")
             stage = self._new_stage(name, started_at, deadline)
             self.state["stages"][name] = stage
-            context = StageContext(self, name, started_mono + deadline_seconds)
+            context = StageContext(
+                self, name, started_mono + deadline_seconds, started_mono,
+            )
             context.heartbeat("started")
             callback = callbacks.get(name) if isinstance(callbacks, dict) else None
 
@@ -426,10 +584,15 @@ class StagedValidationExecutor:
 
             result = None
             error = None
+            self._start_watchdog(context)
             try:
+                context.check_deadline()
                 result = callback(context)
                 context.check_deadline()
                 stage["status"] = "completed"
+            except WedgeDetected as exc:
+                error = f"{type(exc).__name__}: {exc}"
+                self._mark_wedge(name, error)
             except (StageTimeout, TimeoutError) as exc:
                 error = f"{type(exc).__name__}: {exc}"
                 stage["status"] = "timeout"
@@ -461,18 +624,30 @@ class StagedValidationExecutor:
                 }
             if error:
                 stage["error"] = error
-            stage["ended_at"] = self.now()
+            self._stop_watchdog()
+            if not stage.get("ended_at"):
+                stage["ended_at"] = self.now()
+            if self.state.get("wedge") and stage.get("status") == "running":
+                stage["status"] = "wedge"
+                stage["ended_at"] = self.now()
             context.heartbeat(stage["status"])
+            if self.state.get("wedge"):
+                # 後續階段仍保留 checkpoint，但絕不執行 callback。
+                continue
 
         self.state["ended_at"] = self.now()
-        if self.state["timed_out_stages"]:
+        if self.state.get("wedge"):
+            self.state["status"] = "wedge"
+        elif self.state["timed_out_stages"]:
             self.state["status"] = "timed_out"
         elif any(stage["status"] == "failed" for stage in self.state["stages"].values()):
             self.state["status"] = "failed"
         else:
             self.state["status"] = "completed"
         self.state["recovery"]["status"] = (
-            "recoverable" if self.state["status"] in {"timed_out", "failed"} else "complete"
+            "wedge" if self.state["status"] == "wedge" else (
+                "recoverable" if self.state["status"] in {"timed_out", "failed"} else "complete"
+            )
         )
         self.persist()
         return self.state
@@ -497,6 +672,7 @@ class StagedValidationExecutor:
             "attempt_history": history,
             "previous_attempt_path": archive_path,
             "status": "running",
+            "round_status": "running",
             "started_at": self.now(),
             "ended_at": None,
             "stage_deadlines_seconds": dict(self.deadlines),
@@ -508,6 +684,12 @@ class StagedValidationExecutor:
             "rerun_commands": [],
             "remaining_work": [],
             "global_best_allowed": True,
+            "deliverable_allowed": True,
+            "wedge": None,
+            "decision": {"status": "running", "code": "PENDING"},
+            "progress": {},
+            "round_deadline_seconds": self.round_deadline_seconds,
+            "no_progress_seconds": self.no_progress_seconds,
             "research_workspace": {
                 "status": "pending" if self.isolate_workspace else "not_requested",
                 "required": self.isolate_workspace,
@@ -522,6 +704,11 @@ class StagedValidationExecutor:
             "last_available_output": None,
             "stages": {},
         }
+        round_started_mono = self.clock()
+        self.round_deadline_monotonic = round_started_mono + self.round_deadline_seconds
+        self.state["round_deadline"] = datetime.fromtimestamp(
+            time.time() + self.round_deadline_seconds, timezone.utc,
+        ).isoformat(timespec="milliseconds").replace("+00:00", "Z")
         if self.isolate_workspace:
             try:
                 self.workspace = ResearchWorkspace(
@@ -545,7 +732,9 @@ class StagedValidationExecutor:
 
 
 def run_staged_validation(callbacks, state_path="output/research_validation_state.json", deadlines=None,
-                          isolate_workspace=False, repository_root=None, workspace_root=None):
+                          isolate_workspace=False, repository_root=None, workspace_root=None,
+                          round_deadline_seconds=None, no_progress_seconds=DEFAULT_NO_PROGRESS_SECONDS,
+                          no_progress_threshold=None, monitor_interval_seconds=0.25):
     """便利入口，回傳已持久化的完整狀態。"""
     return StagedValidationExecutor(
         state_path=state_path,
@@ -553,4 +742,8 @@ def run_staged_validation(callbacks, state_path="output/research_validation_stat
         isolate_workspace=isolate_workspace,
         repository_root=repository_root,
         workspace_root=workspace_root,
+        round_deadline_seconds=round_deadline_seconds,
+        no_progress_seconds=no_progress_seconds,
+        no_progress_threshold=no_progress_threshold,
+        monitor_interval_seconds=monitor_interval_seconds,
     ).run(callbacks)

@@ -18,7 +18,10 @@ import math
 from lib.io import load_json
 from lib.metrics import record_event
 from lib.completion_gate import verify_persisted_run_evidence
-from scripts.research_validation_executor import StagedValidationExecutor
+from scripts.research_validation_executor import (
+    DEFAULT_NO_PROGRESS_SECONDS,
+    StagedValidationExecutor,
+)
 from scripts.git_reproducibility import (
     isolate_research_entrypoint,
     load_persisted_git_preflight,
@@ -818,9 +821,20 @@ def run_controlled_closed_loop(parallel_config):
             "smoke_parallel", "dev_parallel", "holdout_parallel",
             "force_direction", "avoid_failures", "dominant_failure",
         }
-        success = bool(run_opt.run_opt_pass(**{
-            key: value for key, value in parallel_config.items() if key in run_opt_keys
-        }))
+        heartbeat = getattr(run_opt, "RESEARCH_HEARTBEAT", None)
+        if hasattr(run_opt, "RESEARCH_HEARTBEAT"):
+            def report_progress(progress, output=None):
+                context.check_deadline()
+                context.heartbeat(progress, output)
+
+            run_opt.RESEARCH_HEARTBEAT = report_progress
+        try:
+            success = bool(run_opt.run_opt_pass(**{
+                key: value for key, value in parallel_config.items() if key in run_opt_keys
+            }))
+        finally:
+            if hasattr(run_opt, "RESEARCH_HEARTBEAT"):
+                run_opt.RESEARCH_HEARTBEAT = heartbeat
         context.checkpoint({
             "success": success,
             "research_workspace": context.research_workspace,
@@ -858,6 +872,7 @@ def run_controlled_closed_loop(parallel_config):
 
     def ranking(context):
         nonlocal best_candidate, ranking_report
+        context.check_deadline()
         best_candidate, ranking_report = _rank_candidate_evaluations(list(merged.values()))
         if best_candidate and not executor.state.get("global_best_allowed", True):
             best_candidate = dict(best_candidate)
@@ -877,6 +892,7 @@ def run_controlled_closed_loop(parallel_config):
         return output
 
     def report_delivery(context):
+        context.ensure_delivery_allowed()
         payload = {
             "event": "controlled_closed_loop_ranking",
             "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
@@ -899,6 +915,17 @@ def run_controlled_closed_loop(parallel_config):
             "validation_state_path", "output/research_validation_state.json",
         ),
         deadlines=parallel_config.get("validation_deadlines"),
+        round_deadline_seconds=parallel_config.get(
+            "validation_round_deadline_seconds",
+            parallel_config.get("round_deadline_seconds"),
+        ),
+        no_progress_seconds=parallel_config.get(
+            "validation_no_progress_seconds",
+            parallel_config.get("no_progress_seconds", DEFAULT_NO_PROGRESS_SECONDS),
+        ),
+        monitor_interval_seconds=parallel_config.get(
+            "validation_monitor_interval_seconds", 0.25,
+        ),
         isolate_workspace=parallel_config.get("isolate_workspace", False),
         repository_root=parallel_config.get("repository_root"),
         workspace_root=parallel_config.get("workspace_root"),
@@ -909,6 +936,11 @@ def run_controlled_closed_loop(parallel_config):
         "ranking": ranking,
         "report_delivery": report_delivery,
     })
+    if executor.state.get("wedge") or not executor.state.get("global_best_allowed", True):
+        wedge = executor.state.get("wedge") or {}
+        reason = wedge.get("reason", "研究輪次不可交付")
+        print(f"{C_RED}INCOMPLETE_EVIDENCE / unproven：研究輪次 wedge，停止後續選優：{reason}{C_RESET}")
+        return False, None
     workspace_state = executor.state.get("research_workspace", {})
     if parallel_config.get("isolate_workspace") and workspace_state.get("status") != "ready":
         print(

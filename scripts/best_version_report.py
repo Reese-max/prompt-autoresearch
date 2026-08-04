@@ -730,7 +730,8 @@ def _validation_recovery(state):
     if not isinstance(state, dict):
         state = {}
     recovery = state.get("recovery") if isinstance(state.get("recovery"), dict) else {}
-    recoverable_failure = state.get("status") in {"timed_out", "failed"} or bool(
+    wedge = state.get("wedge") if isinstance(state.get("wedge"), dict) else {}
+    recoverable_failure = state.get("status") in {"timed_out", "failed", "wedge"} or bool(
         state.get("timed_out_stages")
     )
     research_workspace = state.get("research_workspace")
@@ -742,9 +743,13 @@ def _validation_recovery(state):
     return {
         "status": recovery.get(
             "status", "blocked" if workspace_blocked else (
-                "recoverable" if recoverable_failure else "complete"
+                "wedge" if wedge else (
+                    "recoverable" if recoverable_failure else "complete"
+                )
             )
         ),
+        "wedge": wedge,
+        "decision": state.get("decision", {}),
         "timed_out_stage": state.get("timed_out_stage"),
         "timed_out_stages": state.get("timed_out_stages", []),
         "isolated_stages": state.get("isolated_stages", recovery.get("isolated_stages", [])),
@@ -758,7 +763,7 @@ def _validation_recovery(state):
         "remaining_work": state.get("remaining_work", recovery.get("remaining_work", [])),
         "global_best_allowed": state.get(
             "global_best_allowed", not recoverable_failure and not workspace_blocked,
-        ) and not workspace_blocked,
+        ) and not workspace_blocked and not wedge,
         "research_workspace": research_workspace or {},
     }
 
@@ -850,7 +855,9 @@ def _incomplete_quality_evidence(comparisons, config, validation_state=None):
     recovery_commands = recovery["rerun_commands"]
     recovery_work = recovery["remaining_work"]
     return {
-        "status": "unproven" if affected or recovery["status"] in {"recoverable", "blocked"} else "not_triggered",
+        "status": "unproven" if affected or recovery["status"] in {"recoverable", "blocked", "wedge"} else "not_triggered",
+        "wedge": recovery["wedge"],
+        "decision": recovery["decision"],
         "affected_candidates": affected,
         "supplemental_evaluation_commands": _merge_unique([
             command
@@ -2090,6 +2097,13 @@ def build_validation_execution_section(state):
         return lines
     lines.append(f"- 執行狀態：`{state.get('status', '-')}`")
     lines.append(f"- 逾時階段：`{state.get('timed_out_stage') or '-'}`")
+    if state.get("round_deadline"):
+        lines.append(f"- 本輪 deadline：`{state['round_deadline']}`")
+    if state.get("no_progress_seconds") is not None:
+        lines.append(f"- 無進度門檻：`{state['no_progress_seconds']} 秒`")
+    wedge = state.get("wedge") or {}
+    if wedge:
+        lines.append(f"- Wedge：`INCOMPLETE_EVIDENCE`（{wedge.get('stage', '-')}：{wedge.get('reason', '-')})")
     lines.append("")
     rows = []
     for name, stage in (state.get("stages") or {}).items():

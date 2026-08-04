@@ -3,6 +3,7 @@
 import json
 import os
 import subprocess
+import time
 
 from scripts.research_validation_executor import StagedValidationExecutor
 import scripts.best_version_report as best_version_report
@@ -128,6 +129,70 @@ def test_timeout_isolates_candidate_and_keeps_recovery_contract(tmp_path):
         "python", "scripts/evaluate.py", "slow.md",
     ]
     assert state["remaining_work"][0]["candidate_id"] == "slow"
+
+
+def test_no_progress_marks_wedge_and_blocks_following_selection(tmp_path):
+    state_path = tmp_path / "validation.json"
+    now = [0.0]
+    called = []
+
+    def clock():
+        return now[0]
+
+    def candidate(context):
+        now[0] = 2.0
+        context.check_deadline()
+
+    def must_not_run(context):
+        called.append(context.stage)
+
+    state = StagedValidationExecutor(
+        state_path=str(state_path),
+        deadlines={stage: 10 for stage in (
+            "candidate_evaluation", "evidence_validation", "ranking", "report_delivery",
+        )},
+        clock=clock,
+        no_progress_seconds=1,
+    ).run({
+        "candidate_evaluation": candidate,
+        "evidence_validation": must_not_run,
+        "ranking": must_not_run,
+        "report_delivery": must_not_run,
+    })
+
+    persisted = json.loads(state_path.read_text(encoding="utf-8"))
+    assert state == persisted
+    assert state["status"] == "wedge"
+    assert state["round_status"] == "wedge"
+    assert state["wedge"]["stage"] == "candidate_evaluation"
+    assert state["decision"]["code"] == "INCOMPLETE_EVIDENCE"
+    assert state["global_best_allowed"] is False
+    assert state["deliverable_allowed"] is False
+    assert called == []
+    assert all(
+        state["stages"][stage]["status"] == "blocked"
+        for stage in ("evidence_validation", "ranking", "report_delivery")
+    )
+
+
+def test_watchdog_persists_wedge_while_callback_is_stalled(tmp_path):
+    state_path = tmp_path / "validation.json"
+
+    def stalled(context):
+        time.sleep(0.08)
+
+    state = StagedValidationExecutor(
+        state_path=str(state_path),
+        deadlines={stage: 1 for stage in (
+            "candidate_evaluation", "evidence_validation", "ranking", "report_delivery",
+        )},
+        no_progress_seconds=0.02,
+        monitor_interval_seconds=0.005,
+    ).run({"candidate_evaluation": stalled})
+
+    assert state["status"] == "wedge"
+    assert state["wedge"]["stage"] == "candidate_evaluation"
+    assert json.loads(state_path.read_text(encoding="utf-8"))["wedge"]["code"] == "INCOMPLETE_EVIDENCE"
 
 
 def test_retry_archives_original_attempt_without_overwrite(tmp_path):

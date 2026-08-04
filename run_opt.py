@@ -92,11 +92,43 @@ def parse_parallel_args(argv):
                 pass
         return int_env(env_name, default)
 
-    return {
+    def read_optional_float(names, env_name):
+        for name in names:
+            if name in argv:
+                try:
+                    value = float(argv[argv.index(name) + 1])
+                    if value > 0:
+                        return value
+                except (IndexError, TypeError, ValueError):
+                    pass
+        raw = os.environ.get(env_name)
+        if raw is not None:
+            try:
+                value = float(raw)
+                if value > 0:
+                    return value
+            except (TypeError, ValueError):
+                pass
+        return None
+
+    config = {
         "smoke_parallel": read_flag("--smoke-parallel", "AUTORESEARCH_SMOKE_PARALLEL", DEFAULT_SMOKE_PARALLEL),
         "dev_parallel": read_flag("--dev-parallel", "AUTORESEARCH_DEV_PARALLEL", DEFAULT_DEV_PARALLEL),
         "holdout_parallel": read_flag("--holdout-parallel", "AUTORESEARCH_HOLDOUT_PARALLEL", DEFAULT_HOLDOUT_PARALLEL),
     }
+    round_deadline = read_optional_float(
+        ("--validation-round-deadline-seconds", "--round-deadline-seconds"),
+        "AUTORESEARCH_ROUND_DEADLINE_SECONDS",
+    )
+    no_progress = read_optional_float(
+        ("--validation-no-progress-seconds", "--no-progress-seconds"),
+        "AUTORESEARCH_NO_PROGRESS_SECONDS",
+    )
+    if round_deadline is not None:
+        config["validation_round_deadline_seconds"] = round_deadline
+    if no_progress is not None:
+        config["validation_no_progress_seconds"] = no_progress
+    return config
 
 def parse_run_opt_args(argv):
     config = parse_parallel_args(argv)
@@ -117,6 +149,12 @@ def parse_run_opt_args(argv):
     return config
 
 LAST_ROUND_COUNTERMEASURES: list[str] = []
+RESEARCH_HEARTBEAT = None
+
+
+def _report_progress(progress, output=None):
+    if callable(RESEARCH_HEARTBEAT):
+        RESEARCH_HEARTBEAT(progress, output)
 
 
 def load_targeted_countermeasures(target_failures):
@@ -1007,6 +1045,7 @@ def run_opt_pass(smoke_parallel=None, dev_parallel=None, holdout_parallel=None, 
     try:
         for ci in range(candidate_count):
             temp = candidate_temps[ci % len(candidate_temps)]
+            _report_progress(f"candidate_generation {ci + 1}/{candidate_count}")
             print(f"  - {C_CYAN}[LIVE API] 生成候選 {ci+1}/{candidate_count} (temperature={temp})...{C_RESET}")
             mutated = call_minimax("你是一位提示詞優化大師。", meta_prompt, temperature=temp)
             print(f"  - {C_GREEN}  候選 {ci+1} 長度: {len(mutated)} 字{C_RESET}")
@@ -1042,6 +1081,10 @@ def run_opt_pass(smoke_parallel=None, dev_parallel=None, holdout_parallel=None, 
                 reject_reasons=[],
             )
             candidates.append((mutated, temp, cand_path))
+            _report_progress(
+                f"candidate_generated {ci + 1}/{candidate_count}",
+                {"candidate_path": cand_path},
+            )
 
     except Exception as e:
         print(f"{C_RED}[錯誤] 突變呼叫失敗: {str(e)}{C_RESET}")
@@ -1091,6 +1134,7 @@ def run_opt_pass(smoke_parallel=None, dev_parallel=None, holdout_parallel=None, 
     smoke_results = []  # (prompt, temp, cand_path, smoke_score, smoke_run, smoke_summary)
 
     for ci, (mutated, temp, cand_path, _) in enumerate(gk_passed):
+        _report_progress(f"candidate_evaluation smoke {ci + 1}/{len(gk_passed)}")
         write_file(PROMPT_PATH, mutated)
         smoke_res, smoke_run, smoke_summary = run_evaluate(PROMPT_PATH, "questions/smoke.jsonl", smoke_parallel, capture=True)
         smoke_completion = evaluation_completion(smoke_res, smoke_run, smoke_summary)
@@ -1133,6 +1177,10 @@ def run_opt_pass(smoke_parallel=None, dev_parallel=None, holdout_parallel=None, 
                 status="smoke_passed",
             )
             smoke_results.append((mutated, temp, cand_path, smoke_score, smoke_run, smoke_summary))
+            _report_progress(
+                f"candidate_evaluation smoke_complete {ci + 1}/{len(gk_passed)}",
+                {"candidate_path": cand_path, "score": smoke_score},
+            )
         else:
             reasons = []
             if smoke_res.returncode != 0:
@@ -1185,6 +1233,7 @@ def run_opt_pass(smoke_parallel=None, dev_parallel=None, holdout_parallel=None, 
     # 步驟 5：第三層 — 全量開發測試（Dev Test）
     # --------------------------------------------------
     print(f"\n{C_YELLOW}[步驟 5] 第三層：全量開發測試 (Dev Test，36題，併緒 {dev_parallel})...{C_RESET}")
+    _report_progress("candidate_evaluation dev")
     dev_res, dev_run_dir, dev_summary = run_evaluate(
         PROMPT_PATH, "questions/dev.jsonl", dev_parallel, capture=True,
     )
@@ -1222,6 +1271,10 @@ def run_opt_pass(smoke_parallel=None, dev_parallel=None, holdout_parallel=None, 
             **_execution_stage_fields(dev_execution),
         },
         status="dev_evaluated",
+    )
+    _report_progress(
+        "candidate_evaluation dev_complete",
+        {"candidate_path": cand_path, "score": dev_summary.get("score", 0.0)},
     )
 
     # --------------------------------------------------
@@ -1288,6 +1341,7 @@ def run_opt_pass(smoke_parallel=None, dev_parallel=None, holdout_parallel=None, 
 
     if accept:
         print(f"\n{C_YELLOW}[步驟 7] 啟動防過擬合 Holdout 盲測題庫驗證（併緒 {holdout_parallel}）...{C_RESET}")
+        _report_progress("candidate_evaluation holdout")
         holdout_res, holdout_run_dir, holdout_summary = run_evaluate(
             PROMPT_PATH, "questions/holdout.jsonl", holdout_parallel, capture=True,
         )
@@ -1339,6 +1393,10 @@ def run_opt_pass(smoke_parallel=None, dev_parallel=None, holdout_parallel=None, 
                 "completion": holdout_completion,
                 **_execution_stage_fields(holdout_execution),
             },
+        )
+        _report_progress(
+            "candidate_evaluation holdout_complete",
+            {"candidate_path": cand_path, "score": holdout_summary.get("score", 0.0)},
         )
 
     if accept:
