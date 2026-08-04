@@ -1287,6 +1287,222 @@ def verify_evidence_integrity(
     return len(errors) == 0, errors
 
 
+_GIT_COMMIT_KEYS = {
+    "commit", "head_commit", "git_commit", "base_commit", "candidate_commit",
+}
+_GIT_DIFF_KEYS = {
+    "git_diff", "diff_tracked", "diff_patch", "patch", "recorded_diff",
+    "git_diff_hash", "diff_hash", "diff_paths", "changed_paths",
+}
+
+
+def _recorded_git_fields(value, source, commits=None, diffs=None):
+    """從持久化證據取出明確記錄的 commit／Git diff 欄位。"""
+    commits = commits if commits is not None else []
+    diffs = diffs if diffs is not None else []
+    if isinstance(value, dict):
+        for key, item in value.items():
+            location = f"{source}.{key}" if source else str(key)
+            if key in _GIT_COMMIT_KEYS and isinstance(item, str) and item.strip():
+                commits.append({"source": location, "value": item.strip()})
+            if key in _GIT_DIFF_KEYS and item not in (None, "", [], {}):
+                diffs.append({"source": location, "key": key, "value": item})
+            _recorded_git_fields(item, location, commits, diffs)
+    elif isinstance(value, list):
+        for index, item in enumerate(value):
+            _recorded_git_fields(item, f"{source}[{index}]", commits, diffs)
+    return commits, diffs
+
+
+def _snapshot_status_paths(snapshot):
+    paths = snapshot.get("status_paths") if isinstance(snapshot, dict) else None
+    if paths:
+        return sorted(set(str(path).replace("\\", "/") for path in paths))
+    status = snapshot.get("status_porcelain", "") if isinstance(snapshot, dict) else ""
+    paths = []
+    for line in status.splitlines():
+        if len(line) < 4:
+            continue
+        path = line[3:]
+        if " -> " in path:
+            path = path.rsplit(" -> ", 1)[1]
+        path = path.strip().strip('"').replace("\\", "/")
+        if path:
+            paths.append(path)
+    return sorted(set(paths))
+
+
+def _declared_evidence_paths(evidence_checks, input_versions, candidate_comparison):
+    declared = set()
+    for item in evidence_checks or []:
+        if isinstance(item, dict) and item.get("path"):
+            declared.add(str(item["path"]).replace("\\", "/"))
+    for item in input_versions or []:
+        if isinstance(item, dict) and item.get("path"):
+            declared.add(str(item["path"]).replace("\\", "/"))
+    for item in candidate_comparison or []:
+        if not isinstance(item, dict):
+            continue
+        for key in ("path", "scorecard_path"):
+            if item.get(key):
+                declared.add(str(item[key]).replace("\\", "/"))
+    return declared
+
+
+def _path_declared(path, declared):
+    return path in declared or any(
+        item.endswith("/") and path.startswith(item)
+        for item in declared
+    )
+
+
+def _diff_matches_snapshot(recorded, snapshot, key=""):
+    actual_diff = snapshot.get("diff_tracked", "")
+    if key in {"diff_paths", "changed_paths"}:
+        actual_paths = sorted(set(
+            snapshot.get(key, [])
+            or snapshot.get("diff_paths", [])
+            or _snapshot_status_paths(snapshot)
+        ))
+    else:
+        actual_paths = sorted(set(
+            snapshot.get("changed_paths", [])
+            or snapshot.get("diff_paths", [])
+            or _snapshot_status_paths(snapshot)
+        ))
+    if key.endswith("_hash") and isinstance(recorded, str):
+        return hashlib.sha256(actual_diff.encode("utf-8")).hexdigest() == recorded
+    if isinstance(recorded, str):
+        return recorded == actual_diff
+    if isinstance(recorded, list):
+        return sorted(str(item).replace("\\", "/") for item in recorded) == actual_paths
+    if isinstance(recorded, dict):
+        expected_hash = recorded.get("sha256") or recorded.get("hash")
+        if expected_hash:
+            return hashlib.sha256(actual_diff.encode("utf-8")).hexdigest() == expected_hash
+        expected_paths = recorded.get("paths")
+        if isinstance(expected_paths, list):
+            return sorted(str(item).replace("\\", "/") for item in expected_paths) == actual_paths
+    return False
+
+
+def verify_delivery_consistency(
+    git_snapshot,
+    rerun_settings,
+    baseline_meta,
+    champions,
+    cards,
+    sessions,
+    records,
+    evidence_checks,
+    input_versions,
+    candidate_comparison,
+):
+    """確認報告版本、候選內容與目前 Git 工作樹可互相追溯。"""
+    snapshot = git_snapshot if isinstance(git_snapshot, dict) else {}
+    actual_head = str(snapshot.get("head_commit") or "").strip()
+    commits, diffs = _recorded_git_fields(
+        baseline_meta, "baseline_meta",
+    )
+    for name, value in (
+        ("champions", champions),
+        ("cards", cards),
+        ("sessions", sessions),
+        ("evolution_log", records),
+    ):
+        _recorded_git_fields(value, name, commits, diffs)
+
+    # rerun_settings.version 是本次報告對外宣稱的版本；沒有 Git HEAD 的
+    # 非 Git 單元測試環境不具備可比對對象，維持既有相容性。
+    reported_commit = ((rerun_settings or {}).get("version") or {}).get("commit")
+    if actual_head and isinstance(reported_commit, str) and reported_commit.strip():
+        commits.append({"source": "report.reproduction.settings.version.commit", "value": reported_commit.strip()})
+
+    inconsistencies = []
+    if commits:
+        if not actual_head:
+            inconsistencies.append("已宣稱 commit，但目前 HEAD 無法解析")
+        else:
+            mismatches = [
+                item for item in commits
+                if item["value"] != actual_head
+            ]
+            for item in mismatches:
+                inconsistencies.append(
+                    f"{item['source']}={item['value']} 與實際 HEAD={actual_head} 不一致"
+                )
+
+    declared = _declared_evidence_paths(evidence_checks, input_versions, candidate_comparison)
+    changed = _snapshot_status_paths(snapshot)
+    undeclared = [path for path in changed if not _path_declared(path, declared)]
+    if undeclared:
+        inconsistencies.append(
+            "工作樹變更未納入候選／證據宣告：" + ", ".join(undeclared)
+        )
+
+    candidate_checks = []
+    for index, (card, comparison) in enumerate(
+        zip(cards or [], candidate_comparison or []), 1
+    ):
+        candidate_path = comparison.get("path") or card.get("candidate_path")
+        candidate_commits, candidate_diffs = _recorded_git_fields(
+            card, f"candidate[{index}]",
+        )
+        candidate_errors = []
+        for item in candidate_commits:
+            if not actual_head:
+                candidate_errors.append(f"{item['source']} 無法以 HEAD 驗證")
+            elif item["value"] != actual_head:
+                candidate_errors.append(
+                    f"{item['source']}={item['value']} 與 HEAD={actual_head} 不一致"
+                )
+        for item in candidate_diffs:
+            if not _diff_matches_snapshot(item["value"], snapshot, item["key"]):
+                candidate_errors.append(f"{item['source']} 與目前 Git diff 無法驗證一致")
+        candidate_checks.append({
+            "candidate_id": comparison.get("candidate_id", ""),
+            "candidate_path": candidate_path or "",
+            "valid": not candidate_errors,
+            "errors": candidate_errors,
+        })
+        inconsistencies.extend(candidate_errors)
+
+    rerun_commands = []
+    if inconsistencies:
+        rerun_commands.extend([
+            _command(["git", "rev-parse", "HEAD"], "重新確認實際 HEAD"),
+            _command(["git", "status", "--short"], "重新確認工作樹變更"),
+            _command(["git", "diff", "HEAD", "--"], "重新取得候選／證據 diff"),
+            _command(
+                [sys.executable, "scripts/best_version_report.py", "--validate-schema", "--json-out", "output/best-version-report.json"],
+                "修復後重新產生交付報告",
+            ),
+        ])
+    if undeclared:
+        rerun_commands.insert(
+            2,
+            _command(["git", "add", "-A"], "將確認屬於交付範圍的變更納入提交"),
+        )
+        rerun_commands.insert(
+            3,
+            _command(["git", "commit", "-m", "chore: record delivery evidence"], "提交已確認的交付證據"),
+        )
+
+    return {
+        "status": "proven" if not inconsistencies else "unproven",
+        "code": "VALID" if not inconsistencies else INCOMPLETE_EVIDENCE,
+        "valid": not inconsistencies,
+        "actual_head": actual_head,
+        "claimed_commits": commits,
+        "changed_paths": changed,
+        "declared_paths": sorted(declared),
+        "undeclared_changes": undeclared,
+        "candidate_checks": candidate_checks,
+        "inconsistencies": inconsistencies,
+        "rerun_commands": rerun_commands,
+    }
+
+
 def classify_candidates(cards):
     accepted = []
     rejected = []
@@ -1575,6 +1791,29 @@ def build_incomplete_evidence_section(incomplete_evidence):
     return lines
 
 
+def build_delivery_consistency_section(consistency):
+    """輸出版本／工作樹／候選 Git 證據的一致性結果與重跑命令。"""
+    consistency = consistency if isinstance(consistency, dict) else {}
+    valid = consistency.get("valid") is True
+    lines = [
+        "## 交付一致性閘門：" + ("PROVEN" if valid else "INCOMPLETE_EVIDENCE / unproven"),
+        "",
+        f"- 實際 HEAD：`{consistency.get('actual_head') or '-'}`",
+        f"- 工作樹變更：`{len(consistency.get('changed_paths') or [])}`",
+        f"- 未宣告變更：`{len(consistency.get('undeclared_changes') or [])}`",
+        "",
+    ]
+    if not valid:
+        lines.append("不一致項目：")
+        lines.extend(f"- {item}" for item in consistency.get("inconsistencies", []))
+        lines.append("")
+        lines.append("可重跑／修復命令：")
+        for command in consistency.get("rerun_commands", []):
+            lines.append(f"- `{command.get('command', command) if isinstance(command, dict) else command}`")
+        lines.append("")
+    return lines
+
+
 def build_reproduction_section(sessions, config):
     lines = []
     lines.append("## 5. 重現設定")
@@ -1822,6 +2061,21 @@ def build_structured_report(limit=10):
     if not verification_valid and not any("有效執行證據" in error for error in evidence_errors):
         evidence_errors.append("關鍵證據檔案缺漏或雜湊不一致")
     is_valid = is_valid and verification_valid
+    delivery_consistency = verify_delivery_consistency(
+        git_snapshot,
+        rerun_settings,
+        baseline_meta,
+        champions,
+        cards,
+        sessions,
+        records,
+        evidence_checks,
+        input_versions,
+        candidate_comparison,
+    )
+    if not delivery_consistency["valid"]:
+        evidence_errors.extend(delivery_consistency["inconsistencies"])
+    is_valid = is_valid and delivery_consistency["valid"]
 
     winner = _winner_data(baseline_meta, is_valid, rerun_settings, commands)
 
@@ -1867,6 +2121,7 @@ def build_structured_report(limit=10):
             "total": len(evidence_checks),
             "checks": evidence_checks,
         },
+        "delivery_consistency": delivery_consistency,
         "winner": winner,
         # 保留既有欄位，避免通知與既有整合使用者破壞性變更。
         "champion": {
@@ -1889,9 +2144,10 @@ def build_structured_report(limit=10):
                 "unproven"
                 if incomplete_evidence["affected_candidates"]
                 or not incomplete_evidence["global_best_allowed"]
+                or not delivery_consistency["valid"]
                 else ("proven" if is_valid else "inconclusive")
             ),
-            "best_scope": "global" if is_valid and incomplete_evidence["global_best_allowed"] else "none",
+            "best_scope": "global" if is_valid and incomplete_evidence["global_best_allowed"] and delivery_consistency["valid"] else "none",
             "affected_candidates": incomplete_evidence["affected_candidates"],
             "supplemental_evaluation_commands": incomplete_evidence[
                 "supplemental_evaluation_commands"
@@ -1900,6 +2156,7 @@ def build_structured_report(limit=10):
             "remaining_work": incomplete_evidence["remaining_work"],
             "isolated_stages": incomplete_evidence["isolated_stages"],
             "isolated_candidates": incomplete_evidence["isolated_candidates"],
+            "delivery_consistency": delivery_consistency,
             "completed_candidates": incomplete_evidence["completed_candidates"],
             "eligible_candidate_ids": [
                 row["candidate_id"] for row in candidate_comparison
@@ -1934,6 +2191,7 @@ def build_structured_report(limit=10):
             "environment": environment,
             "input_data_versions": input_versions,
             "git_reproducibility_snapshot": git_snapshot,
+            "delivery_consistency": delivery_consistency,
         },
         "execution": {
             "log_path": repo_rel(EVOLUTION_LOG_PATH) or "",
@@ -1941,6 +2199,7 @@ def build_structured_report(limit=10):
             "sessions": sessions,
             "validation": validation_state,
             "git_reproducibility_snapshot": git_snapshot,
+            "delivery_consistency": delivery_consistency,
         },
         "evolution_sessions": len(sessions),
         "config": {
@@ -2032,6 +2291,8 @@ def build_report(limit=10, structured=None):
 
     if json_data.get("incomplete_evidence", {}).get("affected_candidates"):
         lines.extend(build_incomplete_evidence_section(json_data["incomplete_evidence"]))
+
+    lines.extend(build_delivery_consistency_section(json_data.get("delivery_consistency")))
 
     lines.append(f"- 產生時間：{now}")
     lines.append(f"- 候選總數：{len(cards)}")

@@ -32,6 +32,8 @@ def _run_git(args, cwd, timeout=DEFAULT_GIT_TIMEOUT):
             cwd=cwd,
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=timeout,
         )
         if r.returncode == 0:
@@ -57,8 +59,15 @@ def collect_git_snapshot(cwd=None, now=None):
     captured_at = now_fn()
 
     head_commit = _run_git(["rev-parse", "HEAD"], cwd).strip()
-    status_porcelain = _run_git(["status", "--porcelain"], cwd)
+    status_porcelain = _run_git(
+        ["status", "--porcelain=v1", "--untracked-files=all"], cwd,
+    )
     diff_tracked = _run_git(["diff", "HEAD"], cwd)
+    diff_paths = sorted(
+        line.strip()
+        for line in _run_git(["diff", "HEAD", "--name-only"], cwd).splitlines()
+        if line.strip()
+    )
     untracked_raw = _run_git(
         ["ls-files", "--others", "--exclude-standard"], cwd,
     )
@@ -70,6 +79,7 @@ def collect_git_snapshot(cwd=None, now=None):
         "head_commit": head_commit,
         "status_porcelain": status_porcelain,
         "diff_tracked": diff_tracked,
+        "diff_paths": diff_paths,
         "untracked_files": untracked_files,
     }
     snapshot_hash = hashlib.sha256(
@@ -80,8 +90,26 @@ def collect_git_snapshot(cwd=None, now=None):
         "head_commit": head_commit,
         "status_porcelain": status_porcelain,
         "diff_tracked": diff_tracked,
+        "diff_paths": diff_paths,
         "untracked_files": untracked_files,
+        "status_paths": _status_paths(status_porcelain),
+        "changed_paths": sorted(set(diff_paths + untracked_files)),
         "snapshot_hash": snapshot_hash,
         "captured_at": captured_at,
         "workspace": os.path.abspath(cwd),
     }
+
+
+def _status_paths(status_porcelain):
+    """從 porcelain v1 狀態擷取受影響的 repo 相對路徑。"""
+    paths = []
+    for line in (status_porcelain or "").splitlines():
+        if len(line) < 4:
+            continue
+        path = line[3:]
+        if " -> " in path:
+            path = path.rsplit(" -> ", 1)[1]
+        path = path.strip().strip('"').replace("\\", "/")
+        if path:
+            paths.append(path)
+    return sorted(set(paths))

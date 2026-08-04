@@ -14,6 +14,7 @@
     "reproduction",
     "execution",
     "evidence",
+    "delivery_consistency",
     "schema_validation"
   ],
   "properties": {
@@ -114,6 +115,33 @@
         "files": {"type": "object"},
         "input_data_versions": {"type": "array"},
         "checks": {"type": "array"}
+      }
+    },
+    "delivery_consistency": {
+      "type": "object",
+      "required": [
+        "status",
+        "code",
+        "valid",
+        "actual_head",
+        "changed_paths",
+        "declared_paths",
+        "undeclared_changes",
+        "inconsistencies",
+        "rerun_commands"
+      ],
+      "properties": {
+        "status": {"type": "string", "enum": ["proven", "unproven"]},
+        "code": {"type": "string"},
+        "valid": {"type": "boolean"},
+        "actual_head": {"type": "string"},
+        "claimed_commits": {"type": "array"},
+        "changed_paths": {"type": "array"},
+        "declared_paths": {"type": "array"},
+        "undeclared_changes": {"type": "array"},
+        "candidate_checks": {"type": "array"},
+        "inconsistencies": {"type": "array"},
+        "rerun_commands": {"type": "array"}
       }
     },
     "schema_validation": {
