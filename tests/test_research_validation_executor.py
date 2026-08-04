@@ -1,9 +1,30 @@
 # -*- coding: utf-8 -*-
 """分階段研究驗證執行器的最小可觀察行為測試。"""
 import json
+import os
+import subprocess
 
 from scripts.research_validation_executor import StagedValidationExecutor
 import scripts.best_version_report as best_version_report
+
+
+def _git(workspace, *args):
+    result = subprocess.run(
+        ["git", *args], cwd=workspace, capture_output=True, text=True, check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    return result
+
+
+def _repository(path):
+    path.mkdir(parents=True, exist_ok=True)
+    _git(path, "init", "--quiet")
+    _git(path, "config", "user.name", "Validation Test")
+    _git(path, "config", "user.email", "validation@example.test")
+    (path / "tracked.txt").write_text("base\n", encoding="utf-8")
+    _git(path, "add", "tracked.txt")
+    _git(path, "commit", "--quiet", "-m", "test: establish validation fixture")
+    return path
 
 
 def test_timeout_persists_heartbeat_and_keeps_following_stage_outputs(tmp_path):
@@ -133,3 +154,38 @@ def test_retry_archives_original_attempt_without_overwrite(tmp_path):
     assert archived["run_id"] == first["run_id"]
     assert archived["stages"]["candidate_evaluation"]["status"] == "timeout"
     assert second["completed_candidates"][0]["evidence"] == {"score": 95}
+
+
+def test_isolated_executor_runs_all_callbacks_in_one_baseline_worktree(tmp_path):
+    repository = _repository(tmp_path / "repo")
+    state_path = repository / "output" / "validation.json"
+    observed = []
+
+    def candidate(context):
+        observed.append((context.stage, os.getcwd(), context.research_workspace["workspace_id"]))
+        with open("candidate.txt", "w", encoding="utf-8") as handle:
+            handle.write("generated\n")
+        context.completed_candidate("candidate-1", {"score": 91})
+        return {"research_workspace": context.research_workspace}
+
+    state = StagedValidationExecutor(
+        state_path=str(state_path),
+        deadlines={stage: 1 for stage in (
+            "candidate_evaluation", "evidence_validation", "ranking", "report_delivery",
+        )},
+        isolate_workspace=True,
+        repository_root=str(repository),
+        workspace_root=str(repository / "output" / "research-worktrees"),
+    ).run({"candidate_evaluation": candidate})
+
+    workspace = state["research_workspace"]
+    assert workspace["status"] == "ready", workspace
+    assert state["status"] == "completed", state
+    assert len(observed) == 1
+    assert all(row[1] == workspace["workspace"] for row in observed)
+    assert state["completed_candidates"][0]["workspace_id"] == workspace["workspace_id"]
+    assert state["completed_candidates"][0]["baseline_commit"] == workspace["baseline_commit"]
+    assert os.path.exists(os.path.join(workspace["workspace"], "candidate.txt"))
+    assert not (repository / "candidate.txt").exists()
+
+    _git(repository, "worktree", "remove", "--force", workspace["workspace"])

@@ -7,7 +7,10 @@ import subprocess
 import tempfile
 import time
 import uuid
+from contextlib import nullcontext
 from datetime import datetime, timezone
+
+from scripts.git_reproducibility import ResearchWorkspace, ResearchWorkspaceError
 
 
 STAGES = (
@@ -85,12 +88,21 @@ class StageContext:
     def remaining_seconds(self):
         return max(0.0, self.deadline_monotonic - self._executor.clock())
 
+    @property
+    def research_workspace(self):
+        return self._executor.state.get("research_workspace", {})
+
     def heartbeat(self, progress, output=None):
         """持久化一筆進度；長 callback 可在自然檢查點呼叫。"""
         if output is not None:
             self.last_available_output = _json_safe(output)
             self._executor.consume_recovery_output(self.stage, output)
         event = {"at": self._executor.now(), "progress": str(progress)}
+        workspace = self.research_workspace
+        if workspace:
+            event["workspace_id"] = workspace.get("workspace_id", "")
+            event["baseline_commit"] = workspace.get("baseline_commit", "")
+            event["baseline_snapshot_hash"] = workspace.get("baseline_snapshot_hash", "")
         if output is not None:
             event["output"] = self.last_available_output
         self._executor.state["stages"][self.stage]["heartbeats"].append(event)
@@ -134,8 +146,9 @@ class StagedValidationExecutor:
     """依序執行四階段，並在每個可觀察邊界保存狀態。"""
 
     def __init__(self, state_path="output/research_validation_state.json", deadlines=None,
-                 clock=None, now=None):
-        self.state_path = state_path
+                 clock=None, now=None, isolate_workspace=False,
+                 repository_root=None, workspace_root=None, research_workspace=None):
+        self.state_path = os.path.abspath(os.fspath(state_path))
         self.deadlines = dict(DEFAULT_STAGE_DEADLINES)
         if deadlines:
             for stage, seconds in deadlines.items():
@@ -147,6 +160,12 @@ class StagedValidationExecutor:
                 self.deadlines[stage] = seconds
         self.clock = clock or time.monotonic
         self.now = now or utc_now
+        if research_workspace is not None:
+            isolate_workspace = research_workspace
+        self.isolate_workspace = bool(isolate_workspace)
+        self.repository_root = repository_root
+        self.workspace_root = workspace_root
+        self.workspace = None
         self.state = {}
 
     def persist(self):
@@ -211,6 +230,13 @@ class StagedValidationExecutor:
             "immutable": True,
             "evidence": _json_safe(evidence),
         }
+        workspace = self.state.get("research_workspace", {})
+        if workspace:
+            item.update({
+                "workspace_id": workspace.get("workspace_id", ""),
+                "baseline_commit": workspace.get("baseline_commit", ""),
+                "baseline_snapshot_hash": workspace.get("baseline_snapshot_hash", ""),
+            })
         item["evidence_sha256"] = hashlib.sha256(
             json.dumps(item["evidence"], ensure_ascii=False, sort_keys=True).encode("utf-8")
         ).hexdigest()
@@ -332,49 +358,51 @@ class StagedValidationExecutor:
             "last_available_output": None,
         }
 
-    def run(self, callbacks):
-        previous = {}
-        if os.path.isfile(self.state_path):
-            try:
-                with open(self.state_path, "r", encoding="utf-8") as handle:
-                    previous = json.load(handle)
-            except (OSError, json.JSONDecodeError):
-                previous = {}
-        archive_path = self._archive_previous_state(previous)
-        previous_history = previous.get("attempt_history", []) if isinstance(previous, dict) else []
-        history = list(previous_history) if isinstance(previous_history, list) else []
-        if previous:
-            history.append(self._attempt_snapshot(previous))
-        self.state = {
-            "schema_version": 1,
-            "run_id": uuid.uuid4().hex,
-            "attempt_number": len(history) + 1,
-            "attempt_history": history,
-            "previous_attempt_path": archive_path,
-            "status": "running",
-            "started_at": self.now(),
-            "ended_at": None,
-            "stage_deadlines_seconds": dict(self.deadlines),
-            "timed_out_stage": None,
-            "timed_out_stages": [],
-            "isolated_stages": [],
-            "isolated_candidates": [],
-            "completed_candidates": [],
-            "rerun_commands": [],
-            "remaining_work": [],
-            "global_best_allowed": True,
-            "recovery": {
-                "isolated_stages": [],
-                "isolated_candidates": [],
-                "completed_candidates": [],
-                "rerun_commands": [],
-                "remaining_work": [],
-            },
-            "last_available_output": None,
-            "stages": {},
-        }
+    def _blocked_workspace(self, reason, evidence=None):
+        metadata = evidence if isinstance(evidence, dict) else {}
+        if not metadata:
+            metadata = {
+                "schema_version": 1,
+                "status": "blocked",
+                "blocked": True,
+                "workspace_id": self.state.get("run_id", ""),
+                "repository": os.path.abspath(os.fspath(self.repository_root or os.getcwd())),
+                "workspace": "",
+                "baseline_commit": "",
+                "baseline_snapshot_hash": "",
+                "decision": {
+                    "status": "unproven",
+                    "code": "INCOMPLETE_EVIDENCE",
+                    "reason": str(reason),
+                },
+                "rerun_commands": ["python scripts/preflight.py --require-git"],
+            }
+        metadata.setdefault("status", "blocked")
+        metadata.setdefault("blocked", True)
+        metadata.setdefault("decision", {
+            "status": "unproven",
+            "code": "INCOMPLETE_EVIDENCE",
+            "reason": str(reason),
+        })
+        self.state["research_workspace"] = metadata
+        self.state["global_best_allowed"] = False
+        self.state["status"] = "blocked"
+        self.state["ended_at"] = self.now()
+        self.state["decision"] = metadata["decision"]
+        self.state["remaining_work"] = [{
+            "stage": "workspace",
+            "status": "remaining",
+            "reason": str(reason),
+            "rerun_commands": metadata.get("rerun_commands", []),
+        }]
+        self._recovery().update({
+            "status": "blocked",
+            "remaining_work": self.state["remaining_work"],
+        })
         self.persist()
+        return self.state
 
+    def _run_stages(self, callbacks):
         for name in STAGES:
             started_mono = self.clock()
             started_at = self.now()
@@ -447,7 +475,80 @@ class StagedValidationExecutor:
         self.persist()
         return self.state
 
+    def run(self, callbacks):
+        previous = {}
+        if os.path.isfile(self.state_path):
+            try:
+                with open(self.state_path, "r", encoding="utf-8") as handle:
+                    previous = json.load(handle)
+            except (OSError, json.JSONDecodeError):
+                previous = {}
+        archive_path = self._archive_previous_state(previous)
+        previous_history = previous.get("attempt_history", []) if isinstance(previous, dict) else []
+        history = list(previous_history) if isinstance(previous_history, list) else []
+        if previous:
+            history.append(self._attempt_snapshot(previous))
+        self.state = {
+            "schema_version": 1,
+            "run_id": uuid.uuid4().hex,
+            "attempt_number": len(history) + 1,
+            "attempt_history": history,
+            "previous_attempt_path": archive_path,
+            "status": "running",
+            "started_at": self.now(),
+            "ended_at": None,
+            "stage_deadlines_seconds": dict(self.deadlines),
+            "timed_out_stage": None,
+            "timed_out_stages": [],
+            "isolated_stages": [],
+            "isolated_candidates": [],
+            "completed_candidates": [],
+            "rerun_commands": [],
+            "remaining_work": [],
+            "global_best_allowed": True,
+            "research_workspace": {
+                "status": "pending" if self.isolate_workspace else "not_requested",
+                "required": self.isolate_workspace,
+            },
+            "recovery": {
+                "isolated_stages": [],
+                "isolated_candidates": [],
+                "completed_candidates": [],
+                "rerun_commands": [],
+                "remaining_work": [],
+            },
+            "last_available_output": None,
+            "stages": {},
+        }
+        if self.isolate_workspace:
+            try:
+                self.workspace = ResearchWorkspace(
+                    repository=self.repository_root,
+                    workspace_root=self.workspace_root,
+                    run_id=self.state["run_id"],
+                ).create()
+            except ResearchWorkspaceError as exc:
+                return self._blocked_workspace(str(exc), exc.evidence)
+            except Exception as exc:
+                return self._blocked_workspace(
+                    f"無法建立隔離研究工作區：{type(exc).__name__}: {exc}"
+                )
+            self.state["research_workspace"] = self.workspace.metadata
 
-def run_staged_validation(callbacks, state_path="output/research_validation_state.json", deadlines=None):
+        self.persist()
+
+        workspace_context = self.workspace.activate() if self.workspace else nullcontext()
+        with workspace_context:
+            return self._run_stages(callbacks)
+
+
+def run_staged_validation(callbacks, state_path="output/research_validation_state.json", deadlines=None,
+                          isolate_workspace=False, repository_root=None, workspace_root=None):
     """便利入口，回傳已持久化的完整狀態。"""
-    return StagedValidationExecutor(state_path=state_path, deadlines=deadlines).run(callbacks)
+    return StagedValidationExecutor(
+        state_path=state_path,
+        deadlines=deadlines,
+        isolate_workspace=isolate_workspace,
+        repository_root=repository_root,
+        workspace_root=workspace_root,
+    ).run(callbacks)

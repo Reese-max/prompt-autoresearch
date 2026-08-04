@@ -36,6 +36,7 @@ from run_opt import (  # noqa: E402
     write_json,
 )
 from scripts.gatekeeper import run_gatekeeper  # noqa: E402
+from scripts.git_reproducibility import isolate_research_entrypoint  # noqa: E402
 
 C_GREEN = "\033[92m"
 C_CYAN = "\033[96m"
@@ -445,6 +446,7 @@ def parse_args():
     return parser.parse_args()
 
 
+@isolate_research_entrypoint
 def main():
     args = parse_args()
     if not args.all and not args.type_name:
@@ -472,4 +474,5 @@ def main():
 
 
 if __name__ == "__main__":
+    os.environ["AUTORESEARCH_ISOLATE_WORKSPACE"] = "1"
     sys.exit(main())

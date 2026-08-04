@@ -4,6 +4,10 @@ __pycache__/
 .coverage
 .venv-*/
 /output/research_git_preflight.json
+/output/research_validation_state.json
+/output/research_validation_state.json.attempt-*
+/output/research_workspace.json
+/output/research-worktrees/
 
 BACKLOG-adng.md
 BACKLOG-adng.md.bak-*

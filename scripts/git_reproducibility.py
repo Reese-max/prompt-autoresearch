@@ -19,10 +19,13 @@ import re
 import subprocess
 import tempfile
 import time
+from contextlib import contextmanager
 from datetime import datetime, timezone
+from functools import wraps
 
 DEFAULT_GIT_TIMEOUT = 5  # seconds
 GIT_PREFLIGHT_STATE_PATH = "output/research_git_preflight.json"
+RESEARCH_WORKTREE_ROOT = "output/research-worktrees"
 
 
 def _utc_now():
@@ -83,6 +86,224 @@ def _run_git_detail(args, cwd, timeout=DEFAULT_GIT_TIMEOUT):
             "returncode": None,
             "timed_out": False,
         }
+
+
+class ResearchWorkspaceError(RuntimeError):
+    """研究隔離工作區無法建立時，攜帶可持久化的阻塞證據。"""
+
+    def __init__(self, message, evidence=None):
+        super().__init__(message)
+        self.evidence = evidence if isinstance(evidence, dict) else {}
+
+
+class ResearchWorkspace:
+    """以目前 HEAD 建立一個不可混入既有工作樹的研究工作區。"""
+
+    def __init__(self, repository=None, workspace_root=None, run_id=None,
+                 timeout=DEFAULT_GIT_TIMEOUT):
+        self.repository = os.path.abspath(os.fspath(repository or os.getcwd()))
+        self.workspace_root = os.path.abspath(
+            os.fspath(workspace_root or os.path.join(self.repository, RESEARCH_WORKTREE_ROOT))
+        )
+        self.run_id = re.sub(r"[^A-Za-z0-9_.-]", "-", str(run_id or uuid_hex()))
+        self.path = os.path.join(self.workspace_root, self.run_id)
+        self.timeout = timeout
+        self.metadata = {}
+
+    def _blocked(self, reason, *, preflight=None, command=None, result=None):
+        preflight = preflight if isinstance(preflight, dict) else {}
+        commands = ["python scripts/preflight.py --require-git"]
+        if command:
+            commands.append(command)
+        if isinstance(preflight.get("repair_commands"), list):
+            commands.extend(preflight["repair_commands"])
+        self.metadata = {
+            "schema_version": 1,
+            "status": "blocked",
+            "blocked": True,
+            "required": True,
+            "workspace_id": self.run_id,
+            "repository": self.repository,
+            "workspace": self.path,
+            "baseline_commit": preflight.get("head_commit", ""),
+            "baseline_snapshot_hash": "",
+            "preflight": preflight,
+            "command": result or {},
+            "decision": {
+                "status": "unproven",
+                "code": "INCOMPLETE_EVIDENCE",
+                "reason": str(reason),
+            },
+            "rerun_commands": list(dict.fromkeys(str(item) for item in commands if item)),
+        }
+        raise ResearchWorkspaceError(str(reason), self.metadata)
+
+    def create(self):
+        source_preflight = collect_git_preflight(self.repository)
+        if source_preflight.get("blocked"):
+            return self._blocked(
+                "無法建立隔離研究工作區：來源 Git 預檢阻塞。",
+                preflight=source_preflight,
+            )
+        baseline_commit = str(source_preflight.get("head_commit") or "").strip()
+        if not baseline_commit:
+            return self._blocked(
+                "無法建立隔離研究工作區：來源 HEAD 不可解析。",
+                preflight=source_preflight,
+            )
+        if os.path.exists(self.path):
+            return self._blocked(
+                f"無法建立隔離研究工作區：目標已存在：{self.path}",
+                preflight=source_preflight,
+            )
+        try:
+            os.makedirs(self.workspace_root, exist_ok=True)
+        except OSError as exc:
+            return self._blocked(
+                f"無法建立隔離研究工作區父目錄：{exc}",
+                preflight=source_preflight,
+            )
+
+        result = _run_git_detail(
+            ["worktree", "add", "--detach", "--quiet", self.path, baseline_commit],
+            self.repository,
+            timeout=self.timeout,
+        )
+        if not result["ok"]:
+            return self._blocked(
+                "無法建立隔離研究工作區：git worktree add 失敗。",
+                preflight=source_preflight,
+                command="git worktree add --detach <workspace-path> <baseline-commit>",
+                result=result,
+            )
+
+        workspace_preflight = collect_git_preflight(self.path)
+        snapshot = collect_git_snapshot(cwd=self.path)
+        if (
+            workspace_preflight.get("blocked")
+            or snapshot.get("head_commit") != baseline_commit
+            or snapshot.get("changed_paths")
+        ):
+            _run_git_detail(
+                ["worktree", "remove", "--force", self.path],
+                self.repository,
+                timeout=self.timeout,
+            )
+            return self._blocked(
+                "無法建立可辨識的隔離基線：新 worktree 預檢或快照不一致。",
+                preflight=workspace_preflight,
+                command="git worktree remove --force <workspace-path>",
+            )
+
+        self.metadata = {
+            "schema_version": 1,
+            "status": "ready",
+            "blocked": False,
+            "workspace_id": self.run_id,
+            "repository": self.repository,
+            "workspace": self.path,
+            "baseline_commit": baseline_commit,
+            "baseline_snapshot_hash": snapshot["snapshot_hash"],
+            "baseline_snapshot": snapshot,
+            "source_preflight": source_preflight,
+            "workspace_preflight": workspace_preflight,
+            "decision": {"status": "proven", "code": "READY"},
+            "rerun_commands": [],
+        }
+        return self
+
+    @contextmanager
+    def activate(self):
+        if self.metadata.get("status") != "ready":
+            raise ResearchWorkspaceError(
+                "研究工作區尚未通過隔離預檢。", self.metadata,
+            )
+        previous = os.getcwd()
+        os.chdir(self.path)
+        try:
+            yield self
+        finally:
+            os.chdir(previous)
+
+
+def uuid_hex():
+    """延遲匯入 uuid，避免快照工具增加不必要的全域狀態。"""
+    import uuid
+    return uuid.uuid4().hex[:12]
+
+
+def create_research_workspace(repository=None, workspace_root=None, run_id=None,
+                              timeout=DEFAULT_GIT_TIMEOUT):
+    """建立並驗證一個以目前 HEAD 為基線的研究 worktree。"""
+    return ResearchWorkspace(
+        repository=repository,
+        workspace_root=workspace_root,
+        run_id=run_id,
+        timeout=timeout,
+    ).create()
+
+
+def persist_research_workspace(metadata, state_path="output/research_workspace.json"):
+    """保存研究工作區身分，供同一 worktree 的報告與重跑使用。"""
+    state_path = os.fspath(state_path)
+    parent = os.path.dirname(os.path.abspath(state_path)) or "."
+    os.makedirs(parent, exist_ok=True)
+    fd, temp_path = tempfile.mkstemp(
+        prefix=".research-workspace-", suffix=".tmp", dir=parent,
+    )
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as handle:
+            json.dump(metadata or {}, handle, ensure_ascii=False, indent=2)
+            handle.write("\n")
+        os.replace(temp_path, state_path)
+    finally:
+        if os.path.exists(temp_path):
+            os.unlink(temp_path)
+    return state_path
+
+
+def isolate_research_entrypoint(function):
+    """在 CLI 明確啟用時，讓整個研究入口只在新 worktree 執行。"""
+    @wraps(function)
+    def wrapped(*args, **kwargs):
+        if (
+            os.environ.get("AUTORESEARCH_ISOLATE_WORKSPACE") != "1"
+            or os.environ.get("AUTORESEARCH_WORKSPACE_ACTIVE") == "1"
+        ):
+            return function(*args, **kwargs)
+        try:
+            workspace = create_research_workspace()
+        except ResearchWorkspaceError as exc:
+            persist_research_workspace(exc.evidence)
+            print("INCOMPLETE_EVIDENCE / unproven：研究隔離工作區建立失敗。")
+            return 1
+        except Exception as exc:
+            evidence = {
+                "status": "blocked",
+                "blocked": True,
+                "required": True,
+                "decision": {
+                    "status": "unproven",
+                    "code": "INCOMPLETE_EVIDENCE",
+                    "reason": f"{type(exc).__name__}: {exc}",
+                },
+                "rerun_commands": ["python scripts/preflight.py --require-git"],
+            }
+            persist_research_workspace(evidence)
+            print("INCOMPLETE_EVIDENCE / unproven：研究隔離工作區建立失敗。")
+            return 1
+        previous = os.environ.get("AUTORESEARCH_WORKSPACE_ACTIVE")
+        os.environ["AUTORESEARCH_WORKSPACE_ACTIVE"] = "1"
+        try:
+            with workspace.activate():
+                persist_research_workspace(workspace.metadata)
+                return function(*args, **kwargs)
+        finally:
+            if previous is None:
+                os.environ.pop("AUTORESEARCH_WORKSPACE_ACTIVE", None)
+            else:
+                os.environ["AUTORESEARCH_WORKSPACE_ACTIVE"] = previous
+    return wrapped
 
 
 def _is_windows_path(value):

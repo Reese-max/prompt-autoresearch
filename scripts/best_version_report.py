@@ -49,6 +49,7 @@ RUNS_DIR = os.path.join(ROOT, "runs")
 SCHEMA_REL_PATH = "schemas/best_version_evidence_report.schema.json"
 VALIDATION_STATE_REL_PATH = "output/research_validation_state.json"
 GIT_PREFLIGHT_STATE_REL_PATH = "output/research_git_preflight.json"
+RESEARCH_WORKSPACE_REL_PATH = "output/research_workspace.json"
 
 
 def load_json(path, default=None):
@@ -94,6 +95,11 @@ def read_jsonl(path):
 def load_validation_state():
     """讀取分階段驗證 checkpoint；不存在時維持既有報告相容性。"""
     return load_json(os.path.join(ROOT, VALIDATION_STATE_REL_PATH), {})
+
+
+def load_research_workspace():
+    """讀取 CLI 入口保存的研究 worktree 身分。"""
+    return load_json(os.path.join(ROOT, RESEARCH_WORKSPACE_REL_PATH), {})
 
 
 def load_git_preflight_state():
@@ -727,9 +733,17 @@ def _validation_recovery(state):
     recoverable_failure = state.get("status") in {"timed_out", "failed"} or bool(
         state.get("timed_out_stages")
     )
+    research_workspace = state.get("research_workspace")
+    workspace_blocked = isinstance(research_workspace, dict) and (
+        research_workspace.get("required") is True
+        and research_workspace.get("status") != "ready"
+        or research_workspace.get("status") == "blocked"
+    )
     return {
         "status": recovery.get(
-            "status", "recoverable" if recoverable_failure else "complete"
+            "status", "blocked" if workspace_blocked else (
+                "recoverable" if recoverable_failure else "complete"
+            )
         ),
         "timed_out_stage": state.get("timed_out_stage"),
         "timed_out_stages": state.get("timed_out_stages", []),
@@ -742,7 +756,10 @@ def _validation_recovery(state):
         ),
         "rerun_commands": state.get("rerun_commands", recovery.get("rerun_commands", [])),
         "remaining_work": state.get("remaining_work", recovery.get("remaining_work", [])),
-        "global_best_allowed": state.get("global_best_allowed", not recoverable_failure),
+        "global_best_allowed": state.get(
+            "global_best_allowed", not recoverable_failure and not workspace_blocked,
+        ) and not workspace_blocked,
+        "research_workspace": research_workspace or {},
     }
 
 
@@ -833,7 +850,7 @@ def _incomplete_quality_evidence(comparisons, config, validation_state=None):
     recovery_commands = recovery["rerun_commands"]
     recovery_work = recovery["remaining_work"]
     return {
-        "status": "unproven" if affected or recovery["status"] == "recoverable" else "not_triggered",
+        "status": "unproven" if affected or recovery["status"] in {"recoverable", "blocked"} else "not_triggered",
         "affected_candidates": affected,
         "supplemental_evaluation_commands": _merge_unique([
             command
@@ -846,6 +863,7 @@ def _incomplete_quality_evidence(comparisons, config, validation_state=None):
         "isolated_candidates": recovery["isolated_candidates"],
         "completed_candidates": recovery["completed_candidates"],
         "global_best_allowed": recovery["global_best_allowed"],
+        "research_workspace": recovery["research_workspace"],
     }
 
 
@@ -1228,6 +1246,12 @@ def verify_evidence_integrity(
             f"（{names}；不得宣稱其他候選為全域最佳）"
         )
     if incomplete_evidence and incomplete_evidence.get("global_best_allowed") is False:
+        workspace = incomplete_evidence.get("research_workspace") or {}
+        if workspace.get("required") is True and workspace.get("status") != "ready":
+            errors.append(
+                "研究隔離工作區未建立（INCOMPLETE_EVIDENCE / unproven），"
+                "不得納入既有工作樹候選或輸出最佳版本"
+            )
         stages = ", ".join(
             item.get("stage", "-")
             for item in incomplete_evidence.get("isolated_stages", [])
@@ -1864,7 +1888,7 @@ def build_delivery_consistency_section(consistency):
     return lines
 
 
-def build_reproduction_section(sessions, config, git_preflight=None):
+def build_reproduction_section(sessions, config, git_preflight=None, research_workspace=None):
     lines = []
     lines.append("## 5. 重現設定")
     lines.append("")
@@ -1919,6 +1943,17 @@ def build_reproduction_section(sessions, config, git_preflight=None):
         lines.extend(f"  - `{command}`" for command in repair_commands)
     else:
         lines.append("  - `-`")
+
+    research_workspace = research_workspace if isinstance(research_workspace, dict) else {}
+    lines.append("")
+    lines.append("### 研究隔離基線")
+    lines.append("")
+    lines.append(f"- `status`：`{research_workspace.get('status') or '-'}`")
+    lines.append(f"- `workspace_id`：`{research_workspace.get('workspace_id') or '-'}`")
+    lines.append(f"- `baseline_commit`：`{research_workspace.get('baseline_commit') or '-'}`")
+    lines.append(
+        f"- `baseline_snapshot_hash`：`{research_workspace.get('baseline_snapshot_hash') or '-'}`"
+    )
 
     lines.append("")
     lines.append("### config.yaml 關鍵設定")
@@ -2111,6 +2146,14 @@ def build_structured_report(limit=10):
     environment = collect_environment()
     input_versions = collect_input_versions(baseline_meta, champions, cards, sessions)
     validation_state = load_validation_state()
+    workspace_state = load_research_workspace()
+    if (
+        isinstance(workspace_state, dict)
+        and workspace_state
+        and not validation_state.get("research_workspace")
+    ):
+        validation_state = dict(validation_state)
+        validation_state["research_workspace"] = workspace_state
     git_preflight_state = load_git_preflight_state()
     git_snapshot = collect_git_snapshot(cwd=ROOT)
     measurement_basis = collect_measurement_basis(config, baseline_meta, input_versions)
@@ -2270,6 +2313,7 @@ def build_structured_report(limit=10):
             "input_data_versions": input_versions,
             "git_reproducibility_snapshot": git_snapshot,
             "git_preflight": git_preflight_state,
+            "research_workspace": validation_state.get("research_workspace", {}),
             "delivery_consistency": delivery_consistency,
         },
         "execution": {
@@ -2279,6 +2323,7 @@ def build_structured_report(limit=10):
             "validation": validation_state,
             "git_reproducibility_snapshot": git_snapshot,
             "git_preflight": git_preflight_state,
+            "research_workspace": validation_state.get("research_workspace", {}),
             "delivery_consistency": delivery_consistency,
         },
         "evolution_sessions": len(sessions),
@@ -2295,6 +2340,7 @@ def build_structured_report(limit=10):
                 "champions_dir": display_path(CHAMPIONS_DIR),
                 "candidates_dir": display_path(CANDIDATES_DIR),
                 "validation_state": VALIDATION_STATE_REL_PATH if validation_state else "",
+                "research_workspace": RESEARCH_WORKSPACE_REL_PATH if workspace_state else "",
             },
             "input_data_versions": input_versions,
             "checks": evidence_checks,
@@ -2306,6 +2352,7 @@ def build_structured_report(limit=10):
             "champions_dir": display_path(CHAMPIONS_DIR),
             "candidates_dir": display_path(CANDIDATES_DIR),
             "validation_state": VALIDATION_STATE_REL_PATH if validation_state else "",
+            "research_workspace": RESEARCH_WORKSPACE_REL_PATH if workspace_state else "",
         },
         "schema_validation": {
             "schema_path": SCHEMA_REL_PATH,
@@ -2397,6 +2444,7 @@ def build_report(limit=10, structured=None):
         sessions,
         config,
         json_data["reproduction"].get("git_preflight"),
+        json_data["reproduction"].get("research_workspace"),
     ))
     lines.extend(build_evidence_section(baseline_meta, champions, cards, sessions))
     lines.extend(build_rerun_section(rerun_settings))

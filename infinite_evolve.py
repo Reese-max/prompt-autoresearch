@@ -23,7 +23,10 @@ if hasattr(sys.stderr, "reconfigure"):
 
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
 
-from scripts.git_reproducibility import load_persisted_git_preflight
+from scripts.git_reproducibility import (
+    isolate_research_entrypoint,
+    load_persisted_git_preflight,
+)
 
 C_GREEN = "\033[92m"
 C_CYAN = "\033[96m"
@@ -204,6 +207,7 @@ def parse_args(argv=None):
     return args
 
 
+@isolate_research_entrypoint
 def main(argv=None):
     args = parse_args(argv)
 
@@ -499,4 +503,5 @@ def main(argv=None):
 
 
 if __name__ == "__main__":
+    os.environ["AUTORESEARCH_ISOLATE_WORKSPACE"] = "1"
     sys.exit(main())

@@ -19,7 +19,10 @@ from lib.io import load_json
 from lib.metrics import record_event
 from lib.completion_gate import verify_persisted_run_evidence
 from scripts.research_validation_executor import StagedValidationExecutor
-from scripts.git_reproducibility import load_persisted_git_preflight
+from scripts.git_reproducibility import (
+    isolate_research_entrypoint,
+    load_persisted_git_preflight,
+)
 
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8", errors="replace", line_buffering=True)
@@ -811,9 +814,22 @@ def run_controlled_closed_loop(parallel_config):
         print(f"{C_CYAN}[受控閉環] 既有已評測候選 {len(existing)} 個{existing_info}"
               f"，本輪多候選 count={count}，產生迭代候選...{C_RESET}")
         context.heartbeat("開始候選評測", {"existing_candidate_count": len(existing)})
-        success = bool(run_opt.run_opt_pass(**parallel_config))
-        context.checkpoint({"success": success}, "候選評測完成")
-        return {"success": success, "existing_candidate_count": len(existing)}
+        run_opt_keys = {
+            "smoke_parallel", "dev_parallel", "holdout_parallel",
+            "force_direction", "avoid_failures", "dominant_failure",
+        }
+        success = bool(run_opt.run_opt_pass(**{
+            key: value for key, value in parallel_config.items() if key in run_opt_keys
+        }))
+        context.checkpoint({
+            "success": success,
+            "research_workspace": context.research_workspace,
+        }, "候選評測完成")
+        return {
+            "success": success,
+            "existing_candidate_count": len(existing),
+            "research_workspace": context.research_workspace,
+        }
 
     def evidence_validation(context):
         nonlocal after, merged
@@ -835,6 +851,7 @@ def run_controlled_closed_loop(parallel_config):
             "candidate_paths": sorted(merged),
             "validated_candidate_count": len(after),
             "completed_candidates": completed_candidates,
+            "research_workspace": context.research_workspace,
         }
         context.checkpoint(output, "候選證據重驗完成")
         return output
@@ -854,6 +871,7 @@ def run_controlled_closed_loop(parallel_config):
         output = {
             "winner": best_candidate,
             "candidate_report_count": len(ranking_report),
+            "research_workspace": context.research_workspace,
         }
         context.checkpoint(output, "排名完成")
         return output
@@ -863,6 +881,7 @@ def run_controlled_closed_loop(parallel_config):
             "event": "controlled_closed_loop_ranking",
             "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
             "winner": best_candidate,
+            "research_workspace": context.research_workspace,
             "benchmark_groups": (
                 ranking_report[0].get("benchmark_groups", [])
                 if ranking_report else []
@@ -880,6 +899,9 @@ def run_controlled_closed_loop(parallel_config):
             "validation_state_path", "output/research_validation_state.json",
         ),
         deadlines=parallel_config.get("validation_deadlines"),
+        isolate_workspace=parallel_config.get("isolate_workspace", False),
+        repository_root=parallel_config.get("repository_root"),
+        workspace_root=parallel_config.get("workspace_root"),
     )
     executor.run({
         "candidate_evaluation": candidate_evaluation,
@@ -887,6 +909,13 @@ def run_controlled_closed_loop(parallel_config):
         "ranking": ranking,
         "report_delivery": report_delivery,
     })
+    workspace_state = executor.state.get("research_workspace", {})
+    if parallel_config.get("isolate_workspace") and workspace_state.get("status") != "ready":
+        print(
+            f"{C_RED}INCOMPLETE_EVIDENCE / unproven："
+            f"研究隔離工作區未建立（{workspace_state.get('decision', {}).get('reason', 'unknown')}）。{C_RESET}"
+        )
+        return False, None
     if best_candidate:
         print(f"{C_CYAN}[受控閉環] {best_candidate.get('best_label', '排名候選')}: {best_candidate['candidate_path']} "
               f"(score={best_candidate['score']:.2f}, status={best_candidate['status']}){C_RESET}")
@@ -903,6 +932,7 @@ def parse_args(argv):
             pass
     return generations, rest
 
+@isolate_research_entrypoint
 def main():
     generations, parallel_args = parse_args(sys.argv[1:])
 
@@ -936,6 +966,15 @@ def main():
         return preflight.returncode
 
     git_preflight = load_persisted_git_preflight()
+    if (
+        os.environ.get("AUTORESEARCH_WORKSPACE_ACTIVE") != "1"
+        and git_preflight.get("status") == "passed"
+        and git_preflight.get("head_commit")
+    ):
+        parallel_config.update({
+            "isolate_workspace": True,
+            "repository_root": os.getcwd(),
+        })
 
     consecutive_errors = 0
     MAX_CONSECUTIVE_ERRORS = 5
@@ -1154,4 +1193,5 @@ def main():
     return 0
 
 if __name__ == "__main__":
+    os.environ["AUTORESEARCH_ISOLATE_WORKSPACE"] = "1"
     main()

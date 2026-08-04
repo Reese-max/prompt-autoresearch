@@ -35,6 +35,7 @@ from lib.completion_gate import (
     validate_evidence_manifest,
     verify_persisted_run_evidence,
 )
+from scripts.git_reproducibility import isolate_research_entrypoint
 
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8", errors="replace", line_buffering=True)
@@ -1466,11 +1467,17 @@ def run_opt_pass(smoke_parallel=None, dev_parallel=None, holdout_parallel=None, 
         )
         return False
 
-if __name__ == "__main__":
+@isolate_research_entrypoint
+def main():
     preflight = subprocess.run([
         sys.executable or "python", "scripts/preflight.py", "--require-git",
     ])
     if preflight.returncode != 0:
         print(f"{C_RED}❌ Git／研究預檢未通過，未開始候選比較。{C_RESET}")
-        raise SystemExit(preflight.returncode)
-    run_opt_pass(**parse_run_opt_args(sys.argv[1:]))
+        return preflight.returncode
+    return 0 if run_opt_pass(**parse_run_opt_args(sys.argv[1:])) else 1
+
+
+if __name__ == "__main__":
+    os.environ["AUTORESEARCH_ISOLATE_WORKSPACE"] = "1"
+    raise SystemExit(main())

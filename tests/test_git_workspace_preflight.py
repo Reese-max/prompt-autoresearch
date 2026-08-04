@@ -1,13 +1,18 @@
 # -*- coding: utf-8 -*-
 """Git 工作區預檢：資料夾、worktree 指標與跨平台阻塞契約。"""
 import json
+import os
 import subprocess
+
+import pytest
 
 import scripts.git_reproducibility as git_reproducibility
 from scripts.git_reproducibility import (
     collect_git_preflight,
+    create_research_workspace,
     parse_git_metadata,
     persist_git_preflight,
+    ResearchWorkspaceError,
 )
 import scripts.best_version_report as best_version_report
 
@@ -279,3 +284,39 @@ def test_worktree_preflight_blocks_unmerged_paths_and_locked_linked_worktree(tmp
     assert any(path.endswith("locked") for path in locked["affected_paths"])
     _git(workspace, "worktree", "unlock", str(linked))
     _git(workspace, "worktree", "remove", "--force", str(linked))
+
+
+def test_research_workspace_uses_clean_identifiable_baseline(tmp_path):
+    repository = _repository(tmp_path / "research-repo")
+    workspace = create_research_workspace(
+        repository=repository,
+        workspace_root=repository / "output" / "research-worktrees",
+        run_id="test-run",
+    )
+
+    assert workspace.metadata["status"] == "ready"
+    assert workspace.metadata["baseline_commit"] == _git(repository, "rev-parse", "HEAD").stdout.strip()
+    assert workspace.metadata["baseline_snapshot_hash"]
+    assert collect_git_preflight(workspace.path)["passed"] is True
+    with workspace.activate():
+        assert os.getcwd() == str(workspace.path)
+        with open(os.path.join(workspace.path, "candidate.txt"), "w", encoding="utf-8") as handle:
+            handle.write("candidate\n")
+    assert not (repository / "candidate.txt").exists()
+
+    _git(repository, "worktree", "remove", "--force", str(workspace.path))
+
+
+def test_research_workspace_failure_is_unproven_without_fallback(tmp_path):
+    repository = _repository(tmp_path / "dirty-repo")
+    (repository / "dirty.txt").write_text("uncommitted\n", encoding="utf-8")
+
+    with pytest.raises(ResearchWorkspaceError) as failure:
+        create_research_workspace(repository=repository, run_id="blocked")
+
+    assert failure.value.evidence["decision"] == {
+        "status": "unproven",
+        "code": "INCOMPLETE_EVIDENCE",
+        "reason": "無法建立隔離研究工作區：來源 Git 預檢阻塞。",
+    }
+    assert not (repository / "output" / "research-worktrees" / "blocked").exists()
