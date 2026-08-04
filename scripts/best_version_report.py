@@ -731,6 +731,7 @@ def _validation_recovery(state):
         state = {}
     recovery = state.get("recovery") if isinstance(state.get("recovery"), dict) else {}
     wedge = state.get("wedge") if isinstance(state.get("wedge"), dict) else {}
+    run_status = state.get("status")
     recoverable_failure = state.get("status") in {"timed_out", "failed", "wedge"} or bool(
         state.get("timed_out_stages")
     )
@@ -740,14 +741,25 @@ def _validation_recovery(state):
         and research_workspace.get("status") != "ready"
         or research_workspace.get("status") == "blocked"
     )
+    recovery_status = recovery.get("status")
+    if run_status == "running":
+        recovery_status = "incomplete"
+    elif wedge or run_status == "wedge":
+        recovery_status = "wedge"
+    elif run_status in {"timed_out", "failed"}:
+        recovery_status = "recoverable"
+    if not recovery_status:
+        recovery_status = "blocked" if workspace_blocked else (
+            "recoverable" if recoverable_failure else "complete"
+        )
+    checkpoint_present = bool(
+        state.get("status") or state.get("run_id") or state.get("stages")
+    )
+    safe_recovery = recovery_status == "complete" and (
+        not checkpoint_present or run_status == "completed"
+    )
     return {
-        "status": recovery.get(
-            "status", "blocked" if workspace_blocked else (
-                "wedge" if wedge else (
-                    "recoverable" if recoverable_failure else "complete"
-                )
-            )
-        ),
+        "status": recovery_status,
         "wedge": wedge,
         "decision": state.get("decision", {}),
         "timed_out_stage": state.get("timed_out_stage"),
@@ -763,7 +775,7 @@ def _validation_recovery(state):
         "remaining_work": state.get("remaining_work", recovery.get("remaining_work", [])),
         "global_best_allowed": state.get(
             "global_best_allowed", not recoverable_failure and not workspace_blocked,
-        ) and not workspace_blocked and not wedge,
+        ) and not workspace_blocked and not wedge and safe_recovery,
         "research_workspace": research_workspace or {},
     }
 
@@ -965,6 +977,21 @@ def _command(argv, purpose):
     }
 
 
+def _report_rerun_command():
+    return _command(
+        [
+            sys.executable,
+            "scripts/best_version_report.py",
+            "--out",
+            "output/best_version_report.md",
+            "--json-out",
+            "output/best-version-report.json",
+            "--validate-schema",
+        ],
+        "重新產生研究結論報告",
+    )
+
+
 def collect_reproduction_commands(baseline_meta, config):
     prompt = repo_rel(baseline_meta.get("prompt_path")) if baseline_meta else None
     prompt = prompt or "prompts/baseline.md"
@@ -982,6 +1009,123 @@ def collect_reproduction_commands(baseline_meta, config):
         "驗證 winner 硬性規則",
     ))
     return commands
+
+
+def _last_validation_heartbeat(state):
+    """從 checkpoint 取最後一筆可追溯心跳，不以程序 exit 0 代替。"""
+    if not isinstance(state, dict):
+        return {}
+    events = []
+    progress = state.get("progress")
+    if isinstance(progress, dict) and progress.get("at"):
+        events.append({
+            "at": progress.get("at"),
+            "stage": progress.get("stage", ""),
+            "progress": progress.get("progress", ""),
+        })
+    for stage_name, stage in (state.get("stages") or {}).items():
+        if not isinstance(stage, dict):
+            continue
+        if stage.get("last_progress_at"):
+            events.append({
+                "at": stage.get("last_progress_at"),
+                "stage": stage_name,
+                "progress": "",
+            })
+        for event in stage.get("heartbeats") or []:
+            if isinstance(event, dict) and event.get("at"):
+                events.append({
+                    "at": event.get("at"),
+                    "stage": stage_name,
+                    "progress": event.get("progress", ""),
+                })
+    if not events:
+        return {}
+    return max(events, key=lambda event: str(event.get("at", "")))
+
+
+def _validation_execution_identity(state):
+    """建立執行識別，讓卡死／未完成復原不會被誤讀成 winner。"""
+    state = state if isinstance(state, dict) else {}
+    recovery = _validation_recovery(state)
+    daemon = state.get("daemon")
+    if not isinstance(daemon, dict):
+        daemon = state.get("daemon_health") if isinstance(state.get("daemon_health"), dict) else {}
+    run_status = state.get("status")
+    explicit_health = (
+        daemon.get("health_status")
+        or daemon.get("status")
+        or state.get("daemon_health_status")
+    )
+    if explicit_health:
+        health_status = str(explicit_health)
+    elif run_status == "completed" and recovery["status"] == "complete":
+        health_status = "healthy"
+    elif run_status in {"running", "timed_out", "failed", "wedge"} or recovery["status"] != "complete":
+        health_status = "unhealthy"
+    else:
+        health_status = "not_recorded"
+
+    last_heartbeat = (
+        daemon.get("last_heartbeat")
+        or state.get("last_heartbeat")
+        or state.get("last_heartbeat_at")
+    )
+    if isinstance(last_heartbeat, dict):
+        last_heartbeat = last_heartbeat.get("at")
+    heartbeat = _last_validation_heartbeat(state)
+    last_heartbeat = last_heartbeat or heartbeat.get("at")
+    wedge = recovery.get("wedge") or {}
+    stuck_stage = (
+        wedge.get("stage")
+        or state.get("stuck_stage")
+        or recovery.get("timed_out_stage")
+        or state.get("timed_out_stage")
+    )
+    deadline = (
+        state.get("round_deadline")
+        or state.get("deadline")
+        or ((state.get("stages") or {}).get(stuck_stage, {}) or {}).get("deadline")
+    )
+    detected_at = (
+        wedge.get("detected_at")
+        or state.get("detected_at")
+        or daemon.get("detected_at")
+    )
+    checkpoint_present = bool(
+        state.get("status") or state.get("run_id") or state.get("stages")
+    )
+    deliverable_allowed = bool(recovery["global_best_allowed"])
+    if checkpoint_present:
+        deliverable_allowed = deliverable_allowed and run_status == "completed"
+    rerun_entry = _merge_unique(
+        recovery.get("rerun_commands"),
+        [_report_rerun_command()],
+    )
+    recovery_reason = (
+        wedge.get("reason")
+        or (recovery.get("decision") or {}).get("reason")
+        or ("復原未完成" if not deliverable_allowed else "")
+    )
+    progress = state.get("progress") if isinstance(state.get("progress"), dict) else {}
+    return {
+        "run_id": state.get("run_id", ""),
+        "attempt_number": state.get("attempt_number"),
+        "daemon_health_status": health_status,
+        "last_heartbeat": last_heartbeat or None,
+        "last_heartbeat_stage": heartbeat.get("stage") or progress.get("stage"),
+        "detected_at": detected_at,
+        "stuck_stage": stuck_stage,
+        "deadline": deadline,
+        "round_deadline": state.get("round_deadline"),
+        "recovery_result": recovery["status"],
+        "recovery": recovery,
+        "rerun_entry": rerun_entry,
+        "rerun_commands": rerun_entry,
+        "deliverable_allowed": deliverable_allowed,
+        "delivery_status": "deliverable" if deliverable_allowed else "not_deliverable",
+        "delivery_reason": recovery_reason,
+    }
 
 
 def collect_measurement_basis(config, baseline_meta, input_versions):
@@ -1895,7 +2039,9 @@ def build_delivery_consistency_section(consistency):
     return lines
 
 
-def build_reproduction_section(sessions, config, git_preflight=None, research_workspace=None):
+def build_reproduction_section(
+    sessions, config, git_preflight=None, research_workspace=None, execution_identity=None,
+):
     lines = []
     lines.append("## 5. 重現設定")
     lines.append("")
@@ -1926,6 +2072,33 @@ def build_reproduction_section(sessions, config, git_preflight=None, research_wo
         lines.append(format_table(["參數", "值"], table_rows))
     else:
         lines.append("_尚無演化記錄_")
+
+    identity = execution_identity if isinstance(execution_identity, dict) else {}
+    lines.append("")
+    lines.append("### 執行識別與交付狀態")
+    lines.append("")
+    for key, label in (
+        ("run_id", "run_id"),
+        ("attempt_number", "attempt_number"),
+        ("daemon_health_status", "daemon_health_status"),
+        ("last_heartbeat", "last_heartbeat"),
+        ("detected_at", "detected_at"),
+        ("stuck_stage", "stuck_stage"),
+        ("deadline", "deadline"),
+        ("recovery_result", "recovery_result"),
+        ("delivery_status", "delivery_status"),
+    ):
+        lines.append(f"- `{label}`：`{identity.get(key) or '-'}`")
+    if identity.get("deliverable_allowed") is False:
+        lines.append(
+            "- **交付結論：不可交付（INCOMPLETE_EVIDENCE）；卡死或復原未完成時不得顯示 winner。**"
+        )
+        if identity.get("delivery_reason"):
+            lines.append(f"- `delivery_reason`：`{identity['delivery_reason']}`")
+    lines.append("- `rerun_entry`：")
+    lines.append("```json")
+    lines.append(json.dumps(identity.get("rerun_entry", []), ensure_ascii=False, indent=2))
+    lines.append("```")
 
     lines.append("")
     lines.append("### Git 工作區預檢證據")
@@ -2095,10 +2268,15 @@ def build_validation_execution_section(state):
         lines.append("_尚無分階段驗證 checkpoint_")
         lines.append("")
         return lines
+    identity = _validation_execution_identity(state)
     lines.append(f"- 執行狀態：`{state.get('status', '-')}`")
+    lines.append(f"- daemon 健康狀態：`{identity['daemon_health_status']}`")
+    lines.append(f"- 最後心跳：`{identity.get('last_heartbeat') or '-'}`")
+    lines.append(f"- 偵測時間：`{identity.get('detected_at') or '-'}`")
+    lines.append(f"- 卡住階段：`{identity.get('stuck_stage') or '-'}`")
     lines.append(f"- 逾時階段：`{state.get('timed_out_stage') or '-'}`")
-    if state.get("round_deadline"):
-        lines.append(f"- 本輪 deadline：`{state['round_deadline']}`")
+    if identity.get("deadline"):
+        lines.append(f"- 本輪 deadline：`{identity['deadline']}`")
     if state.get("no_progress_seconds") is not None:
         lines.append(f"- 無進度門檻：`{state['no_progress_seconds']} 秒`")
     wedge = state.get("wedge") or {}
@@ -2127,6 +2305,10 @@ def build_validation_execution_section(state):
     recovery = _validation_recovery(state)
     lines.append(f"- 恢復狀態：`{recovery['status']}`")
     lines.append(f"- 全域最佳允許：`{str(recovery['global_best_allowed']).lower()}`")
+    lines.append(f"- 復原結果：`{identity['recovery_result']}`")
+    lines.append(f"- 交付狀態：`{identity['delivery_status']}`")
+    if identity["deliverable_allowed"] is False:
+        lines.append("- **不可交付（INCOMPLETE_EVIDENCE）；不得顯示 winner。**")
     lines.append("")
     lines.append("### 機械可解析重跑命令")
     lines.append("")
@@ -2169,6 +2351,7 @@ def build_structured_report(limit=10):
         validation_state = dict(validation_state)
         validation_state["research_workspace"] = workspace_state
     git_preflight_state = load_git_preflight_state()
+    execution_identity = _validation_execution_identity(validation_state)
     git_snapshot = collect_git_snapshot(cwd=ROOT)
     measurement_basis = collect_measurement_basis(config, baseline_meta, input_versions)
     candidate_comparison = build_candidate_comparisons(cards, baseline_meta)
@@ -2211,6 +2394,14 @@ def build_structured_report(limit=10):
     is_valid = is_valid and delivery_consistency["valid"]
     if git_preflight_state.get("blocked") or git_preflight_state.get("status") == "blocked":
         is_valid = False
+    if not execution_identity["deliverable_allowed"]:
+        is_valid = False
+        execution_error = (
+            "研究執行不可交付（INCOMPLETE_EVIDENCE）："
+            f"{execution_identity.get('delivery_reason') or execution_identity['recovery_result']}"
+        )
+        if execution_error not in evidence_errors:
+            evidence_errors.append(execution_error)
 
     winner = _winner_data(baseline_meta, is_valid, rerun_settings, commands)
 
@@ -2258,6 +2449,7 @@ def build_structured_report(limit=10):
         },
         "delivery_consistency": delivery_consistency,
         "winner": winner,
+        "execution_identity": execution_identity,
         # 保留既有欄位，避免通知與既有整合使用者破壞性變更。
         "champion": {
             "prompt_hash": baseline_meta.get("prompt_hash", "") if is_valid else "",
@@ -2321,19 +2513,21 @@ def build_structured_report(limit=10):
             "supplemental_evaluation_commands": incomplete_evidence[
                 "supplemental_evaluation_commands"
             ],
-            "rerun_commands": incomplete_evidence["rerun_commands"],
+            "rerun_commands": execution_identity["rerun_entry"],
             "remaining_work": incomplete_evidence["remaining_work"],
             "environment": environment,
             "input_data_versions": input_versions,
             "git_reproducibility_snapshot": git_snapshot,
             "git_preflight": git_preflight_state,
             "research_workspace": validation_state.get("research_workspace", {}),
+            "execution_identity": execution_identity,
             "delivery_consistency": delivery_consistency,
         },
         "execution": {
             "log_path": repo_rel(EVOLUTION_LOG_PATH) or "",
             "records": records,
             "sessions": sessions,
+            "identity": execution_identity,
             "validation": validation_state,
             "git_reproducibility_snapshot": git_snapshot,
             "git_preflight": git_preflight_state,
@@ -2407,6 +2601,8 @@ def build_report(limit=10, structured=None):
         lines.append("")
         lines.append(f"**選優狀態碼：{INCOMPLETE_EVIDENCE}**")
         lines.append("**報告判定：inconclusive** — 缺少關鍵證據，拒絕選優。")
+        if json_data.get("execution_identity", {}).get("deliverable_allowed") is False:
+            lines.append("**交付結論：不可交付（INCOMPLETE_EVIDENCE）** — 卡死或復原未完成，禁止顯示 winner。")
         lines.append("")
         lines.append("缺失項目：")
         for err in evidence_errors:
@@ -2449,6 +2645,8 @@ def build_report(limit=10, structured=None):
         lines.append("## 1. Winner（冠軍）")
         lines.append("")
         lines.append("_因證據不完整，無法選出冠軍_")
+        if json_data.get("execution_identity", {}).get("deliverable_allowed") is False:
+            lines.append("_卡死或復原未完成，報告不可交付；不得顯示 winner。_")
         lines.append("")
 
     lines.extend(build_process_section(sessions))
@@ -2459,6 +2657,7 @@ def build_report(limit=10, structured=None):
         config,
         json_data["reproduction"].get("git_preflight"),
         json_data["reproduction"].get("research_workspace"),
+        json_data.get("execution_identity"),
     ))
     lines.extend(build_evidence_section(baseline_meta, champions, cards, sessions))
     lines.extend(build_rerun_section(rerun_settings))

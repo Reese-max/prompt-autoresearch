@@ -1022,6 +1022,55 @@ def test_incomplete_evidence_has_explicit_code_and_no_best_claim(sandbox):
     assert "INCOMPLETE_EVIDENCE" in bvr.build_report(structured=data)
 
 
+@pytest.mark.parametrize("run_status", ["running", "wedge"])
+def test_incomplete_validation_identity_blocks_delivery_and_records_rerun(sandbox, run_status):
+    write_complete_report_evidence(sandbox)
+    output = sandbox / "output"
+    output.mkdir()
+    state = {
+        "status": run_status,
+        "run_id": "validation-run-001",
+        "attempt_number": 2,
+        "round_deadline": "2026-08-04T12:00:00Z",
+        "progress": {
+            "stage": "candidate_evaluation",
+            "progress": "candidate_generation 1/1",
+            "at": "2026-08-04T11:59:00Z",
+        },
+        "stages": {
+            "candidate_evaluation": {
+                "deadline": "2026-08-04T12:00:00Z",
+                "heartbeats": [{"at": "2026-08-04T11:59:00Z"}],
+            },
+        },
+        "recovery": {"status": "complete"},
+        "global_best_allowed": True,
+    }
+    if run_status == "wedge":
+        state["wedge"] = {
+            "stage": "candidate_evaluation",
+            "detected_at": "2026-08-04T11:59:30Z",
+            "reason": "no progress",
+        }
+    (output / "research_validation_state.json").write_text(
+        json.dumps(state, ensure_ascii=False), encoding="utf-8",
+    )
+
+    data = bvr.build_structured_report()
+    report = bvr.build_report(structured=data)
+    identity = data["execution"]["identity"]
+
+    assert data["winner"]["decision"] == "INCOMPLETE_EVIDENCE"
+    assert identity["daemon_health_status"] == "unhealthy"
+    assert identity["last_heartbeat"] == "2026-08-04T11:59:00Z"
+    assert identity["deadline"] == "2026-08-04T12:00:00Z"
+    assert identity["recovery_result"] in {"incomplete", "wedge"}
+    assert identity["delivery_status"] == "not_deliverable"
+    assert any("scripts/best_version_report.py" in item["command"] for item in identity["rerun_entry"])
+    assert "不可交付" in report
+    assert "不得顯示 winner" in report
+
+
 def test_validate_report_schema_rejects_missing_required_field(sandbox):
     data = bvr.build_structured_report()
     del data["winner"]

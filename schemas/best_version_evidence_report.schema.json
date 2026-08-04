@@ -91,22 +91,24 @@
     },
     "reproduction": {
       "type": "object",
-      "required": ["settings", "commands", "environment", "input_data_versions"],
+      "required": ["settings", "commands", "environment", "input_data_versions", "execution_identity"],
       "properties": {
         "settings": {"type": "object"},
         "commands": {"type": "array"},
         "environment": {"type": "object"},
         "input_data_versions": {"type": "array"},
-        "git_preflight": {"type": "object"}
+        "git_preflight": {"type": "object"},
+        "execution_identity": {"type": "object"}
       }
     },
     "execution": {
       "type": "object",
-      "required": ["log_path", "records", "sessions"],
+      "required": ["log_path", "records", "sessions", "identity"],
       "properties": {
         "log_path": {"type": "string"},
         "records": {"type": "array"},
         "sessions": {"type": "array"},
+        "identity": {"type": "object"},
         "git_preflight": {"type": "object"}
       }
     },
