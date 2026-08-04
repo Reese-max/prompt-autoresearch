@@ -96,7 +96,8 @@
         "settings": {"type": "object"},
         "commands": {"type": "array"},
         "environment": {"type": "object"},
-        "input_data_versions": {"type": "array"}
+        "input_data_versions": {"type": "array"},
+        "git_preflight": {"type": "object"}
       }
     },
     "execution": {
@@ -105,7 +106,8 @@
       "properties": {
         "log_path": {"type": "string"},
         "records": {"type": "array"},
-        "sessions": {"type": "array"}
+        "sessions": {"type": "array"},
+        "git_preflight": {"type": "object"}
       }
     },
     "evidence": {

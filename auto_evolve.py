@@ -19,6 +19,7 @@ from lib.io import load_json
 from lib.metrics import record_event
 from lib.completion_gate import verify_persisted_run_evidence
 from scripts.research_validation_executor import StagedValidationExecutor
+from scripts.git_reproducibility import load_persisted_git_preflight
 
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8", errors="replace", line_buffering=True)
@@ -934,6 +935,8 @@ def main():
         print(f"{C_RED}❌ Preflight 未通過，已停止演化。{C_RESET}")
         return preflight.returncode
 
+    git_preflight = load_persisted_git_preflight()
+
     consecutive_errors = 0
     MAX_CONSECUTIVE_ERRORS = 5
 
@@ -951,6 +954,7 @@ def main():
             "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
             "generations": generations,
             "baseline_dev_score": best_score,
+            "git_preflight": git_preflight,
         },
     )
 

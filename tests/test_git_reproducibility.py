@@ -209,6 +209,59 @@ def test_build_report_includes_snapshot_hash_in_output(sandbox):
     assert snap_hash in report
 
 
+def test_report_reuses_persisted_git_preflight_in_reproduction_and_gateway(sandbox):
+    """重現設定、執行 session 與一致性閘門共用同一份預檢證據。"""
+    write_baseline_meta(sandbox)
+    write_config(sandbox)
+    write_evolution_log(sandbox, [
+        {
+            "event": "start",
+            "timestamp": "2026-01-01 00:00:00",
+            "args": {},
+            "git_preflight": {"head_commit": "a" * 40},
+        },
+        {"event": "stop", "timestamp": "2026-01-01 00:01:00"},
+    ])
+    preflight = {
+        "status": "passed",
+        "repository_root": str(sandbox),
+        "git_metadata_status": "resolved",
+        "git_metadata_resolved": True,
+        "head_commit": "a" * 40,
+        "head_file": "ref: refs/heads/main",
+        "blocked": False,
+        "blockers": [],
+        "blocking_reason": "",
+        "repair_commands": [],
+    }
+    output = sandbox / "output"
+    output.mkdir()
+    (output / "research_git_preflight.json").write_text(
+        json.dumps({"preflight": preflight}), encoding="utf-8"
+    )
+
+    data = bvr.build_structured_report()
+    report = bvr.build_report(structured=data)
+
+    assert data["reproduction"]["git_preflight"] == preflight
+    assert data["execution"]["git_preflight"] == preflight
+    assert data["delivery_consistency"]["git_preflight"] == preflight
+    assert data["execution"]["sessions"][0]["git_preflight"] == {"head_commit": "a" * 40}
+    for field in (
+        "repository_root",
+        "git_metadata_status",
+        "head_commit",
+        "head_file",
+        "blockers",
+        "repair_commands",
+    ):
+        assert field in data["reproduction"]["git_preflight"]
+    assert "`repository_root`" in report
+    assert "`git_metadata_status`" in report
+    assert "`head_commit`" in report
+    assert "`repair_commands`" in report
+
+
 # ---------- classify_git_provenance 單元測試 ----------
 
 def test_classify_committed_file():

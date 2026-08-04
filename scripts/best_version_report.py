@@ -31,7 +31,11 @@ if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
 
 from lib.notifications import send_report_to_telegram
-from scripts.git_reproducibility import classify_git_provenance, collect_git_snapshot
+from scripts.git_reproducibility import (
+    classify_git_provenance,
+    collect_git_snapshot,
+    load_persisted_git_preflight,
+)
 
 if hasattr(__import__("sys").stdout, "reconfigure"):
     __import__("sys").stdout.reconfigure(encoding="utf-8", errors="replace")
@@ -94,7 +98,9 @@ def load_validation_state():
 
 def load_git_preflight_state():
     """讀取研究入口留下的 Git 阻塞狀態。"""
-    state = load_json(os.path.join(ROOT, GIT_PREFLIGHT_STATE_REL_PATH), {})
+    state = load_persisted_git_preflight(
+        os.path.join(ROOT, GIT_PREFLIGHT_STATE_REL_PATH),
+    )
     return state if isinstance(state, dict) else {}
 
 
@@ -145,6 +151,7 @@ def load_evolution_summary():
                 "start": row.get("timestamp", ""),
                 "args": row.get("args", {}),
                 "baseline_dev_score": row.get("baseline_dev_score", 0.0),
+                "git_preflight": row.get("git_preflight", {}),
                 "rounds": [],
                 "promotions": 0,
             }
@@ -1404,9 +1411,11 @@ def verify_delivery_consistency(
     evidence_checks,
     input_versions,
     candidate_comparison,
+    git_preflight=None,
 ):
     """確認報告版本、候選內容與目前 Git 工作樹可互相追溯。"""
     snapshot = git_snapshot if isinstance(git_snapshot, dict) else {}
+    preflight = git_preflight if isinstance(git_preflight, dict) else {}
     actual_head = str(snapshot.get("head_commit") or "").strip()
     commits, diffs = _recorded_git_fields(
         baseline_meta, "baseline_meta",
@@ -1426,6 +1435,14 @@ def verify_delivery_consistency(
         commits.append({"source": "report.reproduction.settings.version.commit", "value": reported_commit.strip()})
 
     inconsistencies = []
+    preflight_head = str(preflight.get("head_commit") or "").strip()
+    if actual_head and preflight_head and actual_head != preflight_head:
+        inconsistencies.append(
+            f"Git 預檢 HEAD={preflight_head} 與交付時 HEAD={actual_head} 不一致"
+        )
+    if preflight.get("blocked") or preflight.get("status") == "blocked":
+        reason = preflight.get("blocking_reason") or preflight.get("reason_code") or "Git 預檢失敗"
+        inconsistencies.append(f"Git 預檢阻塞：{reason}")
     if commits:
         if not actual_head:
             inconsistencies.append("已宣稱 commit，但目前 HEAD 無法解析")
@@ -1513,6 +1530,7 @@ def verify_delivery_consistency(
         "undeclared_changes": undeclared,
         "git_provenance": git_provenance,
         "candidate_checks": candidate_checks,
+        "git_preflight": preflight,
         "inconsistencies": inconsistencies,
         "rerun_commands": rerun_commands,
     }
@@ -1846,7 +1864,7 @@ def build_delivery_consistency_section(consistency):
     return lines
 
 
-def build_reproduction_section(sessions, config):
+def build_reproduction_section(sessions, config, git_preflight=None):
     lines = []
     lines.append("## 5. 重現設定")
     lines.append("")
@@ -1877,6 +1895,30 @@ def build_reproduction_section(sessions, config):
         lines.append(format_table(["參數", "值"], table_rows))
     else:
         lines.append("_尚無演化記錄_")
+
+    lines.append("")
+    lines.append("### Git 工作區預檢證據")
+    lines.append("")
+    git_preflight = git_preflight if isinstance(git_preflight, dict) else {}
+    lines.append(f"- `repository_root`：`{git_preflight.get('repository_root') or '-'}`")
+    lines.append(
+        f"- `git_metadata_status`：`{git_preflight.get('git_metadata_status') or ('resolved' if git_preflight.get('git_metadata_resolved') else '-')}`"
+    )
+    lines.append(f"- `git_metadata_resolved`：`{git_preflight.get('git_metadata_resolved', '-')}`")
+    lines.append(f"- `head_commit`：`{git_preflight.get('head_commit') or '-'}`")
+    lines.append(f"- `head_file`：`{git_preflight.get('head_file') or '-'}`")
+    lines.append(
+        f"- `status`：`{git_preflight.get('status') or ('blocked' if git_preflight.get('blocked') else '-')}`"
+    )
+    blockers = git_preflight.get("blockers") or []
+    lines.append(f"- `blockers`：`{', '.join(str(item) for item in blockers) or '-'}`")
+    lines.append(f"- `blocking_reason`：`{git_preflight.get('blocking_reason') or '-'}`")
+    lines.append("- `repair_commands`：")
+    repair_commands = git_preflight.get("repair_commands") or []
+    if repair_commands:
+        lines.extend(f"  - `{command}`" for command in repair_commands)
+    else:
+        lines.append("  - `-`")
 
     lines.append("")
     lines.append("### config.yaml 關鍵設定")
@@ -2105,13 +2147,12 @@ def build_structured_report(limit=10):
         evidence_checks,
         input_versions,
         candidate_comparison,
+        git_preflight_state,
     )
     if not delivery_consistency["valid"]:
         evidence_errors.extend(delivery_consistency["inconsistencies"])
     is_valid = is_valid and delivery_consistency["valid"]
     if git_preflight_state.get("blocked") or git_preflight_state.get("status") == "blocked":
-        reason = git_preflight_state.get("blocking_reason") or git_preflight_state.get("reason_code") or "Git 預檢失敗"
-        evidence_errors.append(f"Git 預檢阻塞：{reason}")
         is_valid = False
 
     winner = _winner_data(baseline_meta, is_valid, rerun_settings, commands)
@@ -2228,6 +2269,7 @@ def build_structured_report(limit=10):
             "environment": environment,
             "input_data_versions": input_versions,
             "git_reproducibility_snapshot": git_snapshot,
+            "git_preflight": git_preflight_state,
             "delivery_consistency": delivery_consistency,
         },
         "execution": {
@@ -2236,6 +2278,7 @@ def build_structured_report(limit=10):
             "sessions": sessions,
             "validation": validation_state,
             "git_reproducibility_snapshot": git_snapshot,
+            "git_preflight": git_preflight_state,
             "delivery_consistency": delivery_consistency,
         },
         "evolution_sessions": len(sessions),
@@ -2350,7 +2393,11 @@ def build_report(limit=10, structured=None):
     lines.extend(build_process_section(sessions))
     lines.extend(build_scores_section(baseline_meta, champions))
     lines.extend(build_candidate_comparison_section(cards, limit))
-    lines.extend(build_reproduction_section(sessions, config))
+    lines.extend(build_reproduction_section(
+        sessions,
+        config,
+        json_data["reproduction"].get("git_preflight"),
+    ))
     lines.extend(build_evidence_section(baseline_meta, champions, cards, sessions))
     lines.extend(build_rerun_section(rerun_settings))
     lines.extend(build_evidence_verification_section(evidence_checks))

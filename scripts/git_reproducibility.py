@@ -422,6 +422,19 @@ def persist_git_preflight(preflight, state_path=GIT_PREFLIGHT_STATE_PATH):
     return state_path
 
 
+def load_persisted_git_preflight(state_path=GIT_PREFLIGHT_STATE_PATH):
+    """讀取預檢持久化資料，回傳研究入口採用的同一份預檢結果。"""
+    try:
+        with open(os.fspath(state_path), "r", encoding="utf-8") as handle:
+            state = json.load(handle)
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+        return {}
+    if not isinstance(state, dict):
+        return {}
+    preflight = state.get("preflight")
+    return preflight if isinstance(preflight, dict) else state
+
+
 def _status_paths(status_porcelain):
     """從 porcelain v1 狀態擷取受影響的 repo 相對路徑。"""
     paths = []

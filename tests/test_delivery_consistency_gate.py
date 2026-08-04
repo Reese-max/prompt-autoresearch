@@ -31,6 +31,25 @@ def test_head_mismatch_is_unproven_and_has_rerun_commands():
     assert any("best_version_report.py" in item["command"] for item in result["rerun_commands"])
 
 
+def test_preflight_head_mismatch_is_unproven():
+    result = bvr.verify_delivery_consistency(
+        {"head_commit": "actual", "status_paths": [], "diff_tracked": ""},
+        {"version": {"commit": "actual"}},
+        {},
+        [],
+        [],
+        [],
+        [],
+        [],
+        [],
+        [],
+        {"head_commit": "recorded", "status": "passed", "blocked": False},
+    )
+
+    assert result["status"] == "unproven"
+    assert any("預檢 HEAD" in item for item in result["inconsistencies"])
+
+
 def test_undeclared_worktree_change_blocks_best_claim():
     result = _check(
         {

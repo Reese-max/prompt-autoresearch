@@ -23,6 +23,8 @@ if hasattr(sys.stderr, "reconfigure"):
 
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
 
+from scripts.git_reproducibility import load_persisted_git_preflight
+
 C_GREEN = "\033[92m"
 C_CYAN = "\033[96m"
 C_YELLOW = "\033[93m"
@@ -232,6 +234,8 @@ def main(argv=None):
         print(f"{C_RED}❌ Preflight 未通過，停止。{C_RESET}")
         return preflight.returncode
 
+    git_preflight = load_persisted_git_preflight()
+
     if args.dry_run:
         print(f"{C_GREEN}✅ dry-run 完成：只檢查設定，不執行演化。{C_RESET}")
         return 0
@@ -255,6 +259,7 @@ def main(argv=None):
             "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
             "args": vars(args),
             "baseline_dev_score": best_score,
+            "git_preflight": git_preflight,
         },
     )
 
