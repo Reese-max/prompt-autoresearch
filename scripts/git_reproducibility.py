@@ -99,6 +99,11 @@ def _normalise_commands(commands):
     return list(dict.fromkeys(str(command) for command in commands if command))
 
 
+def _rerun_commands():
+    """回傳不改變 Git 狀態的研究重跑前檢查命令。"""
+    return ["python scripts/preflight.py --require-git"]
+
+
 def _finish_git_metadata(result, repairs):
     result["repair_commands"] = _normalise_commands(repairs)
     result["git_metadata_resolved"] = not result["blockers"]
@@ -122,19 +127,23 @@ def parse_git_metadata(cwd=None, platform_name=None):
         "blockers": [],
         "blocking_reasons": [],
         "repair_commands": [],
+        "affected_paths": [],
     }
     blockers = result["blockers"]
     reasons = result["blocking_reasons"]
     repairs = result["repair_commands"]
 
-    def block(code, detail, commands):
+    def block(code, detail, commands, affected_paths=()):
+        affected_paths = sorted({os.fspath(path) for path in affected_paths if path})
         if code not in blockers:
             blockers.append(code)
             reasons.append({
                 "code": code,
                 "detail": detail,
+                "affected_paths": affected_paths,
                 "repair_commands": _normalise_commands(commands),
             })
+        result["affected_paths"].extend(affected_paths)
         repairs.extend(commands)
 
     if _is_windows_path(raw_cwd) and not windows:
@@ -215,11 +224,37 @@ def parse_git_metadata(cwd=None, platform_name=None):
             return _finish_git_metadata(result, repairs)
         lock_path = os.path.join(git_dir, "index.lock")
         if os.path.exists(lock_path):
-            block(
-                "git_index_lock_present",
-                f"Git index.lock 存在：{lock_path}",
-                ["git status --short", "git worktree repair"],
-            )
+            block("git_index_lock_present", f"Git index.lock 存在：{lock_path}", [
+                "git status --short",
+                "git worktree list --porcelain",
+                "git worktree repair",
+            ], [lock_path])
+        worktree_lock_path = os.path.join(git_dir, "locked")
+        if os.path.exists(worktree_lock_path):
+            block("git_worktree_lock_present", f"Git worktree lock 存在：{worktree_lock_path}", [
+                "git worktree list --porcelain",
+                "git worktree unlock <worktree-path>",
+            ], [worktree_lock_path])
+        merge_head_path = os.path.join(git_dir, "MERGE_HEAD")
+        if os.path.exists(merge_head_path):
+            block("git_merge_in_progress", f"偵測到未完成的 merge：{merge_head_path}", [
+                "git status --short",
+                "git merge --continue",
+                "git merge --abort",
+            ], [merge_head_path])
+        rebase_paths = [
+            path for path in (
+                os.path.join(git_dir, "rebase-merge"),
+                os.path.join(git_dir, "rebase-apply"),
+                os.path.join(git_dir, "REBASE_HEAD"),
+            ) if os.path.exists(path)
+        ]
+        if rebase_paths:
+            block("git_rebase_in_progress", "偵測到未完成的 rebase。", [
+                "git status --short",
+                "git rebase --continue",
+                "git rebase --abort",
+            ], rebase_paths)
         head_path = os.path.join(git_dir, "HEAD")
         result["head_path"] = head_path
         with open(head_path, "r", encoding="utf-8") as handle:
@@ -239,6 +274,7 @@ def parse_git_metadata(cwd=None, platform_name=None):
             f"無法讀取 HEAD：{exc}",
             ["git status --short", "git rev-parse --verify HEAD"],
         )
+    result["affected_paths"] = sorted(set(result["affected_paths"]))
     return _finish_git_metadata(result, repairs)
 
 
@@ -309,18 +345,26 @@ def collect_git_preflight(cwd=None, now=None, platform_name=None):
     blockers = list(metadata["blockers"])
     reasons = list(metadata["blocking_reasons"])
     repairs = list(metadata["repair_commands"])
+    affected_paths = list(metadata.get("affected_paths") or [])
 
     root_result = _run_git_detail(["rev-parse", "--show-toplevel"], cwd)
     head_result = _run_git_detail(["rev-parse", "--verify", "HEAD"], cwd)
+    status_result = _run_git_detail(
+        ["status", "--porcelain=v1", "--untracked-files=all"], cwd,
+    )
+    unmerged_result = _run_git_detail(["ls-files", "-u"], cwd)
 
-    def block(code, detail, commands):
+    def block(code, detail, commands, paths=()):
+        paths = sorted({str(path).replace("\\", "/") for path in paths if path})
         if code not in blockers:
             blockers.append(code)
             reasons.append({
                 "code": code,
                 "detail": detail,
+                "affected_paths": paths,
                 "repair_commands": _normalise_commands(commands),
             })
+        affected_paths.extend(paths)
         repairs.extend(commands)
 
     repository_root = root_result["stdout"].strip() if root_result["ok"] else ""
@@ -341,10 +385,39 @@ def collect_git_preflight(cwd=None, now=None, platform_name=None):
         block("head_unreadable", error, ["git status --short", "git rev-parse --verify HEAD"])
 
     snapshot = collect_git_snapshot(cwd=cwd, now=now)
+    status_porcelain = status_result["stdout"] if status_result["ok"] else snapshot["status_porcelain"]
+    status_paths = _status_paths(status_porcelain)
+    unmerged_paths = sorted({
+        line.rsplit("\t", 1)[-1].strip().replace("\\", "/")
+        for line in unmerged_result["stdout"].splitlines()
+        if "\t" in line and line.rsplit("\t", 1)[-1].strip()
+    })
+    if status_porcelain.strip():
+        block("dirty_worktree", "工作區含有未提交的 index 或 worktree 變更。", [
+            "git status --short",
+            "git diff --check",
+            "git diff --cached --check",
+        ], status_paths)
+    if unmerged_paths:
+        block("git_unmerged_paths", "index 含有未合併的衝突路徑。", [
+            "git status --short",
+            "git add -- <resolved-path>",
+            "git merge --continue",
+        ], unmerged_paths)
+    if not status_result["ok"] and not any(code in blockers for code in (
+        "git_index_lock_present", "git_worktree_lock_present",
+    )):
+        error = status_result["stderr"].strip() or "git status --porcelain 失敗"
+        block("git_status_unavailable", error, ["git status --short"])
+    if not unmerged_result["ok"] and not any(code in blockers for code in (
+        "git_index_lock_present", "git_worktree_lock_present",
+    )):
+        error = unmerged_result["stderr"].strip() or "git ls-files -u 失敗"
+        block("git_unmerged_check_failed", error, ["git status --short"])
     payload = dict(snapshot)
     git_errors = [
         result["stderr"].strip()
-        for result in (root_result, head_result)
+        for result in (root_result, head_result, status_result, unmerged_result)
         if result["stderr"].strip()
     ]
     payload.update({
@@ -369,18 +442,25 @@ def collect_git_preflight(cwd=None, now=None, platform_name=None):
         "global_best_allowed": not blockers,
         "blockers": blockers,
         "blocking_reasons": reasons,
+        "affected_paths": sorted(set(affected_paths + status_paths + unmerged_paths)),
+        "status_paths": status_paths,
+        "unmerged_paths": unmerged_paths,
         "blocking_reason": "; ".join(blockers),
         "blocked_reason": "; ".join(blockers),
         "reason_code": blockers[0] if blockers else "",
         "repair_commands": _normalise_commands(repairs),
+        "rerun_commands": _rerun_commands() if blockers else [],
         "repair": {
             "required": bool(blockers),
             "status": "required" if blockers else "not_required",
             "commands": _normalise_commands(repairs),
+            "rerun_commands": _rerun_commands() if blockers else [],
         },
         "git_command_details": {
             "show_toplevel": root_result,
             "verify_head": head_result,
+            "status_porcelain": status_result,
+            "unmerged_paths": unmerged_result,
         },
         "preflight_captured_at": snapshot["captured_at"],
     })
@@ -404,7 +484,11 @@ def persist_git_preflight(preflight, state_path=GIT_PREFLIGHT_STATE_PATH):
         "reason_code": ((preflight or {}).get("blockers") or [""])[0],
         "blocking_reason": (preflight or {}).get("blocking_reason", ""),
         "blocking_reasons": (preflight or {}).get("blocking_reasons", []),
+        "affected_paths": (preflight or {}).get("affected_paths", []),
+        "status_paths": (preflight or {}).get("status_paths", []),
+        "unmerged_paths": (preflight or {}).get("unmerged_paths", []),
         "repair_commands": (preflight or {}).get("repair_commands", []),
+        "rerun_commands": (preflight or {}).get("rerun_commands", []),
         "preflight": preflight or {},
         "persisted_at": _utc_now(),
     }

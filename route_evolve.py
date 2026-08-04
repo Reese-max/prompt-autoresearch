@@ -451,6 +451,13 @@ def main():
         print("請指定 --type 題型 或 --all")
         return 1
 
+    preflight = subprocess.run([
+        sys.executable or "python", "scripts/preflight.py", "--require-git",
+    ])
+    if preflight.returncode != 0:
+        print(f"{C_RED}❌ Git／研究預檢未通過，未開始候選比較。{C_RESET}")
+        return preflight.returncode
+
     types = list(TYPE_SLUGS.keys()) if args.all else [normalize_type(args.type_name)]
     accepted = False
     for type_name in types:

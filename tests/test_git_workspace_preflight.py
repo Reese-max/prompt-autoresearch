@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 """Git 工作區預檢：資料夾、worktree 指標與跨平台阻塞契約。"""
 import json
+import subprocess
 
 import scripts.git_reproducibility as git_reproducibility
 from scripts.git_reproducibility import (
@@ -9,6 +10,27 @@ from scripts.git_reproducibility import (
     persist_git_preflight,
 )
 import scripts.best_version_report as best_version_report
+
+
+def _git(workspace, *args, check=True):
+    result = subprocess.run(
+        ["git", *args], cwd=workspace, capture_output=True, text=True, check=False,
+    )
+    if check:
+        assert result.returncode == 0, result.stderr
+    return result
+
+
+def _repository(tmp_path):
+    tmp_path.mkdir(parents=True, exist_ok=True)
+    _git(tmp_path, "init", "--quiet")
+    _git(tmp_path, "branch", "-M", "main")
+    _git(tmp_path, "config", "user.name", "Preflight Test")
+    _git(tmp_path, "config", "user.email", "preflight@example.test")
+    (tmp_path / "tracked.txt").write_text("base\n", encoding="utf-8")
+    _git(tmp_path, "add", "tracked.txt")
+    _git(tmp_path, "commit", "--quiet", "-m", "test: establish git preflight fixture")
+    return tmp_path
 
 
 def test_parse_git_directory_and_head(tmp_path):
@@ -112,6 +134,17 @@ def test_controlled_linux_workspace_states_gate_ranking_and_best_claim(
                         "returncode": 0 if not blocked else 128,
                         "timed_out": False,
                     }
+                if args in (
+                    ["status", "--porcelain=v1", "--untracked-files=all"],
+                    ["ls-files", "-u"],
+                ):
+                    return {
+                        "ok": not blocked,
+                        "stdout": "",
+                        "stderr": "" if not blocked else "not a git repository",
+                        "returncode": 0 if not blocked else 128,
+                        "timed_out": False,
+                    }
                 raise AssertionError(f"unexpected git command: {args}")
 
             def fake_git(args, cwd, timeout=git_reproducibility.DEFAULT_GIT_TIMEOUT):
@@ -180,3 +213,69 @@ def test_blocked_preflight_prevents_best_version_delivery(tmp_path, monkeypatch)
 
     assert report["decision"]["status"] == "inconclusive"
     assert any("Git 預檢阻塞" in error for error in report["evidence_integrity"]["errors"])
+
+
+def test_worktree_preflight_blocks_dirty_lock_and_operation_residue(tmp_path):
+    """每種 Git 阻塞都要留下可定位路徑與安全重跑命令。"""
+    cases = (
+        ("dirty", "dirty_worktree", "dirty.txt"),
+        ("index_lock", "git_index_lock_present", "index.lock"),
+        ("merge", "git_merge_in_progress", "MERGE_HEAD"),
+        ("rebase", "git_rebase_in_progress", "rebase-merge"),
+    )
+    for name, expected_blocker, expected_path in cases:
+        workspace = _repository(tmp_path / name)
+        git_dir = workspace / ".git"
+        if name == "dirty":
+            (workspace / "dirty.txt").write_text("uncommitted\n", encoding="utf-8")
+        elif name == "index_lock":
+            (git_dir / "index.lock").write_text("stale lock\n", encoding="utf-8")
+        elif name == "merge":
+            (git_dir / "MERGE_HEAD").write_text("a" * 40 + "\n", encoding="utf-8")
+        else:
+            (git_dir / "rebase-merge").mkdir()
+
+        preflight = collect_git_preflight(workspace)
+
+        assert preflight["blocked"] is True
+        assert expected_blocker in preflight["blockers"]
+        assert preflight["comparison_allowed"] is False
+        assert preflight["deliverable_allowed"] is False
+        assert preflight["global_best_allowed"] is False
+        assert any(path.endswith(expected_path) for path in preflight["affected_paths"])
+        assert preflight["rerun_commands"] == ["python scripts/preflight.py --require-git"]
+
+        state_path = workspace / "output" / "research_git_preflight.json"
+        persist_git_preflight(preflight, state_path)
+        state = json.loads(state_path.read_text(encoding="utf-8"))
+        assert expected_blocker in state["preflight"]["blockers"]
+        assert state["affected_paths"] == preflight["affected_paths"]
+        assert state["rerun_commands"] == preflight["rerun_commands"]
+
+
+def test_worktree_preflight_blocks_unmerged_paths_and_locked_linked_worktree(tmp_path):
+    workspace = _repository(tmp_path / "main")
+    _git(workspace, "branch", "side")
+    (workspace / "tracked.txt").write_text("main\n", encoding="utf-8")
+    _git(workspace, "commit", "--all", "--quiet", "-m", "test: main change")
+    _git(workspace, "checkout", "--quiet", "side")
+    (workspace / "tracked.txt").write_text("side\n", encoding="utf-8")
+    _git(workspace, "commit", "--all", "--quiet", "-m", "test: side change")
+    _git(workspace, "checkout", "--quiet", "main")
+
+    merge = _git(workspace, "merge", "side", check=False)
+    assert merge.returncode != 0
+    conflicted = collect_git_preflight(workspace)
+    assert {"dirty_worktree", "git_unmerged_paths", "git_merge_in_progress"} <= set(conflicted["blockers"])
+    assert conflicted["unmerged_paths"] == ["tracked.txt"]
+    assert "tracked.txt" in conflicted["affected_paths"]
+    _git(workspace, "merge", "--abort")
+
+    linked = tmp_path / "linked-worktree"
+    _git(workspace, "worktree", "add", "--detach", str(linked))
+    _git(workspace, "worktree", "lock", str(linked))
+    locked = collect_git_preflight(linked)
+    assert "git_worktree_lock_present" in locked["blockers"]
+    assert any(path.endswith("locked") for path in locked["affected_paths"])
+    _git(workspace, "worktree", "unlock", str(linked))
+    _git(workspace, "worktree", "remove", "--force", str(linked))

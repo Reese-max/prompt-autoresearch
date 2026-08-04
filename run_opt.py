@@ -1467,4 +1467,10 @@ def run_opt_pass(smoke_parallel=None, dev_parallel=None, holdout_parallel=None, 
         return False
 
 if __name__ == "__main__":
+    preflight = subprocess.run([
+        sys.executable or "python", "scripts/preflight.py", "--require-git",
+    ])
+    if preflight.returncode != 0:
+        print(f"{C_RED}❌ Git／研究預檢未通過，未開始候選比較。{C_RESET}")
+        raise SystemExit(preflight.returncode)
     run_opt_pass(**parse_run_opt_args(sys.argv[1:]))

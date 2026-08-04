@@ -253,6 +253,13 @@ def parse_args():
 
 def main():
     args = parse_args()
+    preflight = subprocess.run([
+        sys.executable or "python", "scripts/preflight.py", "--require-git",
+    ])
+    if preflight.returncode != 0:
+        print(f"{C_RED}❌ Git／研究預檢未通過，未開始候選比較。{C_RESET}")
+        return preflight.returncode
+
     final_decision = {}
     for loop_no in range(1, args.loops + 1):
         print(f"\n{C_PURPLE}######## ROUTE LOOP {loop_no}/{args.loops} ########{C_RESET}")
