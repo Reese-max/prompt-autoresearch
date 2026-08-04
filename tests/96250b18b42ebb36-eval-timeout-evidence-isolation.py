@@ -7,8 +7,10 @@
 3. 逾時候選明確標記為 timeout／incomplete
 """
 import json
+import hashlib
 import time
 
+import scripts.best_version_report as best_version_report
 from scripts.research_validation_executor import (
     StagedValidationExecutor,
     StageTimeout,
@@ -26,10 +28,34 @@ def _block_until_deadline(context):
 
 def _successful_candidate(context):
     """模擬一個正常完成的候選評測。"""
+    evidence = {
+        "score": 85,
+        "status": "completed",
+        "reproducible": True,
+        "evaluation_id": "good-candidate-evaluation-001",
+        "input_sha256": hashlib.sha256(b"good-candidate-input").hexdigest(),
+        "output_sha256": hashlib.sha256(b"good-candidate-output").hexdigest(),
+    }
     context.heartbeat("候選評測開始")
-    context.completed_candidate("good-candidate", {"score": 85, "status": "completed"})
+    context.completed_candidate("good-candidate", evidence)
     context.heartbeat("候選評測完成", {"candidate": "good-candidate"})
-    return {"candidate": "good-candidate", "score": 85}
+    return {"candidate": "good-candidate", "score": 85, "evidence": evidence}
+
+
+def _timeout_with_forged_high_score(context):
+    """留下看似高分但不完整的輸出後逾時。"""
+    context.heartbeat(
+        "逾時候選只留下部分證據",
+        {
+            "candidate": "timed-out-candidate",
+            "score": 1000,
+            "status": "partial",
+            "evidence": {"complete": False, "reproducible": False},
+        },
+    )
+    while True:
+        context.check_deadline()
+        time.sleep(0.05)
 
 
 def _successful_evidence_validation(context):
@@ -207,3 +233,68 @@ def test_overall_deadline_respects_total_budget(tmp_path):
     elapsed = time.monotonic() - start
     assert elapsed < round_deadline + 2.0
     assert state["status"] in {"timed_out", "wedge"}
+
+
+def test_timeout_evidence_cannot_win_or_pollute_final_report(tmp_path, monkeypatch):
+    """逾時偽高分不得勝出，報告只引用後續成功且可重複的證據。"""
+    state_path = tmp_path / "validation.json"
+    executor = StagedValidationExecutor(
+        state_path=str(state_path),
+        deadlines={
+            "candidate_evaluation": 0.2,
+            "evidence_validation": 0.5,
+            "ranking": 0.5,
+            "report_delivery": 0.5,
+        },
+    )
+
+    state = executor.run({
+        "candidate_evaluation": _timeout_with_forged_high_score,
+        "evidence_validation": _successful_candidate,
+        "ranking": _successful_ranking,
+        "report_delivery": _successful_report_delivery,
+    })
+
+    persisted = json.loads(state_path.read_text(encoding="utf-8"))
+    assert state == persisted
+    assert state["stages"]["candidate_evaluation"]["last_available_output"] == {
+        "candidate": "timed-out-candidate",
+        "score": 1000,
+        "status": "partial",
+        "evidence": {"complete": False, "reproducible": False},
+    }
+    assert state["stages"]["evidence_validation"]["status"] == "completed"
+
+    completed = state["completed_candidates"]
+    assert [item["candidate_id"] for item in completed] == ["good-candidate"]
+    record = completed[0]
+    assert record["status"] == "completed"
+    assert record["immutable"] is True
+    assert record["evidence"]["reproducible"] is True
+    assert record["evidence"]["input_sha256"]
+    assert record["evidence"]["output_sha256"]
+    assert record["evidence_sha256"] == hashlib.sha256(
+        json.dumps(
+            record["evidence"], ensure_ascii=False, sort_keys=True,
+        ).encode("utf-8")
+    ).hexdigest()
+
+    monkeypatch.setattr(
+        best_version_report,
+        "load_validation_state",
+        lambda: json.loads(state_path.read_text(encoding="utf-8")),
+    )
+    report = best_version_report.build_structured_report()
+
+    assert report["decision"]["code"] == "INCOMPLETE_EVIDENCE"
+    assert report["decision"]["status"] == "inconclusive"
+    assert report["decision"]["best_candidate_id"] is None
+    assert report["winner"]["decision"] == "INCOMPLETE_EVIDENCE"
+    assert report["quality_ranking"]["best_status"] == "unproven"
+    assert report["quality_ranking"]["best_scope"] == "none"
+    cited = report["quality_ranking"]["completed_candidates"]
+    assert [item["candidate_id"] for item in cited] == ["good-candidate"]
+    assert all(item["status"] == "completed" for item in cited)
+    assert "timed-out-candidate" not in {
+        item["candidate_id"] for item in cited
+    }
