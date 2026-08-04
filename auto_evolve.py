@@ -14,6 +14,7 @@ import subprocess
 import json
 import platform
 import math
+import re
 
 from lib.io import load_json
 from lib.metrics import record_event
@@ -54,6 +55,13 @@ _RANKING_STAGE_PRIORITY = {"dev": 0, "smoke": 1, "holdout": 2}
 _RANKING_FIELDS = ("dataset", "metric", "evaluator_version", "measurement_settings")
 _BENCHMARK_ID_FIELDS = ("benchmark_id", "benchmark", "benchmark_key")
 _EXECUTION_COMPLETED_STATUSES = {"completed", "quality_measurement_obtained"}
+_NON_RESEARCH_TASK_MARKERS = {
+    "config", "configuration", "config_only", "configuration_only",
+    "config_change", "configuration_change",
+    "test_setup", "test_preparation", "test_prep", "test_fixture",
+    "test_data_setup", "test_data_preparation", "fixture_setup", "setup",
+    "test_only", "non_research", "nonresearch", "documentation",
+}
 
 
 def load_json(path, default=None):
@@ -269,10 +277,119 @@ def _first_value(sources, *keys):
     return None
 
 
-def _stage_comparison(card, stage, stage_data, require_execution=False):
+def _research_type_evidence(card, stage_data=None, summary=None):
+    """判斷一次執行是否真的是可完成的研究產出。"""
+    card = card if isinstance(card, dict) else {}
+    stage_data = stage_data if isinstance(stage_data, dict) else {}
+    summary = summary if isinstance(summary, dict) else {}
+    comparison_basis = card.get("comparison_basis")
+    if not isinstance(comparison_basis, dict):
+        comparison_basis = {}
+    sources = [stage_data, card, comparison_basis, summary]
+    reasons = []
+
+    task_values = [
+        source.get(key)
+        for source in sources
+        if isinstance(source, dict)
+        for key in (
+            "research_type", "task_type", "task_kind", "work_type", "output_type",
+            "operation", "artifact_type",
+        )
+        if source.get(key) not in (None, "", {})
+    ]
+    normalized_tasks = {
+        re.sub(r"[-\s]+", "_", str(value).strip().lower())
+        for value in task_values
+    }
+    if any(
+        task in _NON_RESEARCH_TASK_MARKERS
+        or any(task.startswith(marker + "_") for marker in _NON_RESEARCH_TASK_MARKERS)
+        for task in normalized_tasks
+    ):
+        reasons.append("task_type_non_research")
+    if any(
+        source.get(key) is False
+        for source in sources
+        if isinstance(source, dict)
+        for key in ("research_output", "is_research", "is_config", "is_test_setup")
+        if key in source
+    ):
+        reasons.append("task_type_non_research")
+    if any(
+        source.get(key) is False
+        for source in sources
+        if isinstance(source, dict)
+        for key in ("quality_comparison", "has_quality_comparison")
+        if key in source
+    ):
+        reasons.append("quality_comparison_missing")
+    if card.get("research_complete") is False:
+        reasons.append("research_incomplete")
+
+    candidate_path = _first_value(
+        (card, summary), "candidate_path", "candidate_prompt_path", "prompt_path", "prompt_file",
+    )
+    candidate_prompt = _first_value(
+        (stage_data, card, summary), "candidate_prompt", "prompt_content", "prompt",
+    )
+    prompt_ok = isinstance(candidate_prompt, str) and bool(candidate_prompt.strip())
+    if candidate_path:
+        try:
+            if os.path.isfile(os.fspath(candidate_path)):
+                with open(os.fspath(candidate_path), encoding="utf-8") as handle:
+                    prompt_ok = prompt_ok or bool(handle.read().strip())
+        except (OSError, TypeError, ValueError):
+            pass
+    agent_flow = _first_value(
+        (stage_data, card), "agent_flow", "agent_workflow", "candidate_generation",
+    )
+    if not prompt_ok and not agent_flow:
+        reasons.append("candidate_prompt_or_agent_flow_missing")
+
+    evaluation_input = _first_value(
+        sources,
+        "evaluation_input", "evaluation_command", "question_file", "dataset",
+        "data_set", "dataset_id", "input",
+    )
+    input_executable = _first_value(
+        sources, "evaluation_input_executable", "input_executable",
+    )
+    if input_executable is False:
+        reasons.append("evaluation_input_not_executable")
+    elif evaluation_input in (None, "", {}, [], ()):
+        reasons.append("evaluation_input_missing")
+    elif isinstance(evaluation_input, dict):
+        if evaluation_input.get("executable") is False:
+            reasons.append("evaluation_input_not_executable")
+        elif not any(
+            evaluation_input.get(key) not in (None, "", {}, [], ())
+            for key in ("path", "dataset", "question_file", "command", "rows", "questions")
+        ):
+            reasons.append("evaluation_input_missing")
+
+    measurement_settings = _first_value(
+        sources, "measurement_settings", "measurement_config", "measurement",
+    )
+    if measurement_settings in (None, "", {}, [], ()):
+        reasons.append("measurement_settings_missing")
+
+    reasons = list(dict.fromkeys(reasons))
+    return {
+        "research_type": "research" if not reasons else "non_research",
+        "research_complete": not reasons,
+        "research_exclusion_reasons": reasons,
+    }
+
+
+def _stage_comparison(card, stage, stage_data, require_execution=False, require_research=False):
     run_dir = stage_data.get("run")
     summary = load_json(os.path.join(run_dir, "summary.json"), {}) if run_dir else {}
     sources = [stage_data, card, summary]
+    research_evidence = (
+        _research_type_evidence(card, stage_data, summary)
+        if require_research else {}
+    )
     benchmark_id = _first_value(sources, *_BENCHMARK_ID_FIELDS)
     evaluator = _first_value(sources, "evaluator")
     evaluator_version = _first_value(
@@ -299,6 +416,17 @@ def _stage_comparison(card, stage, stage_data, require_execution=False):
     quality_evidence = _stage_quality_evidence(
         card, stage, stage_data, require_execution=require_execution,
     )
+    if require_research and not research_evidence["research_complete"]:
+        return {
+            "stage": stage,
+            "score": None,
+            "comparable": False,
+            "basis": basis,
+            "missing_fields": research_evidence["research_exclusion_reasons"],
+            "reason": "不可比較：非研究產出，缺少可完成研究所需證據",
+            **research_evidence,
+            "quality_exclusion_reasons": research_evidence["research_exclusion_reasons"],
+        }
     score = quality_evidence["score"]
     if score is None:
         return {
@@ -310,6 +438,7 @@ def _stage_comparison(card, stage, stage_data, require_execution=False):
             "reason": "不可比較：score 必須是有限數值",
             "execution_status": quality_evidence["execution_status"],
             "quality_exclusion_reasons": quality_evidence["quality_exclusion_reasons"],
+            **research_evidence,
         }
     if not quality_evidence["eligible"]:
         return {
@@ -322,6 +451,7 @@ def _stage_comparison(card, stage, stage_data, require_execution=False):
             "execution_status": quality_evidence["execution_status"],
             "measurement_evidence_complete": False,
             "quality_exclusion_reasons": quality_evidence["quality_exclusion_reasons"],
+            **research_evidence,
         }
     missing = [field for field in _RANKING_FIELDS if basis[field] in (None, "", {})]
     if missing:
@@ -343,12 +473,18 @@ def _stage_comparison(card, stage, stage_data, require_execution=False):
         "execution_status": quality_evidence["execution_status"],
         "measurement_evidence_complete": quality_evidence["measurement_evidence_complete"],
         "quality_exclusion_reasons": [],
+        **research_evidence,
     }
 
 
 def _normalise_ranking_evaluation(evaluation, candidate=None):
     """以 basis 重建 key，拒絕與 benchmark 身分不一致的外部 key。"""
     if not isinstance(evaluation, dict) or evaluation.get("comparable") is False:
+        return None
+    if (
+        evaluation.get("research_complete") is False
+        or evaluation.get("research_type") == "non_research"
+    ):
         return None
     execution_status = evaluation.get("execution_status")
     if execution_status is not None and execution_status not in _EXECUTION_COMPLETED_STATUSES:
@@ -393,7 +529,7 @@ def _normalise_ranking_evaluation(evaluation, candidate=None):
     )
 
 
-def _candidate_stage_evaluations(card, require_execution=False):
+def _candidate_stage_evaluations(card, require_execution=False, require_research=False):
     evaluations = []
     for stage in ("smoke", "dev", "holdout"):
         stage_data = card.get(stage) or {}
@@ -408,6 +544,7 @@ def _candidate_stage_evaluations(card, require_execution=False):
         evaluations.append(
             _stage_comparison(
                 card, stage, stage_data, require_execution=require_execution,
+                require_research=require_research,
             )
         )
     return evaluations
@@ -432,7 +569,15 @@ def _rank_candidate_evaluations(candidates):
         if not path:
             continue
         status = str(candidate.get("status", "")).lower()
-        qualified = status not in {"failed", "incomplete"} and not status.startswith("rejected_")
+        non_research = (
+            candidate.get("research_complete") is False
+            or candidate.get("research_type") == "non_research"
+        )
+        qualified = (
+            status not in {"failed", "incomplete"}
+            and not status.startswith("rejected_")
+            and not non_research
+        )
         if qualified:
             qualified_candidates.append(candidate)
         evaluations = candidate.get("stage_evaluations") or []
@@ -445,6 +590,13 @@ def _rank_candidate_evaluations(candidates):
             "reason": "沒有可排名的同基準評測資料",
             "elimination_basis": ["no_comparable_evaluation"],
         }
+        if non_research:
+            reports[path].update({
+                "research_type": "non_research",
+                "research_complete": False,
+                "reason": "非研究產出：不納入品質排名",
+                "elimination_basis": ["non_research_output"],
+            })
         for evaluation in evaluations:
             if not isinstance(evaluation, dict):
                 evaluation = {}
@@ -474,6 +626,7 @@ def _rank_candidate_evaluations(candidates):
     }
     winner = None
     selected_key = None
+    selected_group_size = 0
     tied_paths = []
     tied_score = None
     if groups:
@@ -493,6 +646,7 @@ def _rank_candidate_evaluations(candidates):
         ]
         if len(largest_groups) == 1:
             selected_key, group = largest_groups[0]
+            selected_group_size = len(group)
             top_score = max(item["evaluation"]["score"] for item in group)
             top_items = [
                 item for item in group
@@ -583,6 +737,12 @@ def _rank_candidate_evaluations(candidates):
             for item in pending_evaluations
         },
         "pending_evaluations": pending_evaluations,
+        "quality_comparison_complete": selected_group_size >= 2,
+        "research_type": "research" if selected_group_size >= 2 else "non_research",
+        "research_complete": selected_group_size >= 2,
+        "research_exclusion_reasons": (
+            [] if selected_group_size >= 2 else ["quality_comparison_missing"]
+        ),
         "benchmark_groups": benchmark_groups,
         "group_winners": [
             group["winner"] for group in benchmark_groups if group["winner"] is not None
@@ -668,21 +828,69 @@ def _scorecard_elimination_reports(known_paths):
         card = load_json(os.path.join(cand_dir, name), {})
         path = card.get("candidate_path") or ""
         status = card.get("status") or ""
+        non_research = (
+            card.get("research_complete") is False
+            or card.get("research_type") == "non_research"
+            or status == "non_research_output"
+        )
         if not path or path in known_paths or not (
-            status in {"failed", "incomplete"} or status.startswith("rejected_")
+            non_research
+            or status in {"failed", "incomplete"}
+            or status.startswith("rejected_")
         ):
             continue
-        reasons = card.get("reject_reasons") or card.get("rejection_reasons") or []
+        reasons = (
+            card.get("research_exclusion_reasons")
+            if non_research
+            else card.get("reject_reasons") or card.get("rejection_reasons") or []
+        )
         reports.append({
             "candidate_path": path,
             "status": status,
             "evaluations": [],
             "execution_reliability": _execution_reliability(card),
+            "research_type": "non_research" if non_research else card.get("research_type"),
+            "research_complete": False if non_research else card.get("research_complete"),
             "outcome": "淘汰",
-            "reason": "；".join(str(reason) for reason in reasons) or status,
-            "elimination_basis": reasons or [status],
+            "reason": (
+                "非研究產出：" + "；".join(str(reason) for reason in reasons)
+                if non_research
+                else "；".join(str(reason) for reason in reasons) or status
+            ),
+            "elimination_basis": (
+                ["non_research_output"] + list(reasons)
+                if non_research else reasons or [status]
+            ),
         })
     return reports
+
+
+def _persist_research_type(card_path, card, evidence):
+    """把研究守門結果寫回 scorecard，讓淘汰理由可追溯。"""
+    complete = bool(evidence.get("research_complete"))
+    updates = {
+        "research_type": evidence.get("research_type") or "non_research",
+        "research_output": complete,
+        "research_complete": complete,
+        "research_exclusion_reasons": list(evidence.get("research_exclusion_reasons") or []),
+    }
+    if not complete:
+        updates.update({
+            "research_decision": "NON_RESEARCH_OUTPUT",
+            "status": "non_research_output",
+        })
+        if card.get("final_decision") in {"ACCEPT", "ADOPT", "SPECIALTY_RETAINED"}:
+            updates["upstream_final_decision"] = card["final_decision"]
+            updates["final_decision"] = "NON_RESEARCH_OUTPUT"
+    changed = any(card.get(key) != value for key, value in updates.items())
+    if changed:
+        card["updated_at"] = time.strftime("%Y-%m-%d %H:%M:%S")
+        payload = dict(card)
+        payload.update(updates)
+        with open(card_path, "w", encoding="utf-8") as handle:
+            json.dump(payload, handle, ensure_ascii=False, indent=2)
+            handle.write("\n")
+        card.update(updates)
 
 
 def scan_candidate_evaluations():
@@ -715,8 +923,28 @@ def scan_candidate_evaluations():
             for stage in ("smoke", "dev", "holdout")
         ):
             continue
-        stage_evaluations = _candidate_stage_evaluations(card, require_execution=True)
+        stage_evaluations = _candidate_stage_evaluations(
+            card, require_execution=True, require_research=True,
+        )
         preferred = _preferred_stage_evaluation(stage_evaluations)
+        if preferred is not None:
+            research_evidence = {
+                "research_type": preferred.get("research_type", "research"),
+                "research_complete": preferred.get("research_complete") is True,
+                "research_exclusion_reasons": preferred.get("research_exclusion_reasons", []),
+            }
+        else:
+            research_evidence = _research_type_evidence(card)
+            if not stage_evaluations:
+                research_evidence["research_exclusion_reasons"].append("quality_measurement_missing")
+                research_evidence["research_type"] = "non_research"
+                research_evidence["research_complete"] = False
+        research_evidence["research_exclusion_reasons"] = list(dict.fromkeys(
+            research_evidence["research_exclusion_reasons"]
+        ))
+        _persist_research_type(
+            card_path=os.path.join(cand_dir, name), card=card, evidence=research_evidence,
+        )
 
         evidence_checks = {}
         evidence_errors = []
@@ -767,6 +995,10 @@ def scan_candidate_evaluations():
             "evidence_validation": evidence_checks,
             "stage_evaluations": stage_evaluations,
             "execution_records": list(card.get("execution_records") or []),
+            "research_type": research_evidence["research_type"],
+            "research_output": research_evidence["research_complete"],
+            "research_complete": research_evidence["research_complete"],
+            "research_exclusion_reasons": research_evidence["research_exclusion_reasons"],
         })
     return results
 
@@ -804,6 +1036,7 @@ def run_controlled_closed_loop(parallel_config):
     merged = {}
     best_candidate = None
     ranking_report = []
+    research_gate_enforced = False
     success = False
 
     def candidate_evaluation(context):
@@ -846,9 +1079,21 @@ def run_controlled_closed_loop(parallel_config):
         }
 
     def evidence_validation(context):
-        nonlocal after, merged
+        nonlocal after, merged, research_gate_enforced
         after = scan_candidate_evaluations()
         merged = {c["candidate_path"]: c for c in existing + after if c.get("candidate_path")}
+        research_gate_enforced = any(
+            "research_complete" in candidate or "research_type" in candidate
+            for candidate in merged.values()
+        )
+        if os.path.isdir("prompts/candidates"):
+            for name in os.listdir("prompts/candidates"):
+                if not name.endswith(".scorecard.json"):
+                    continue
+                card = load_json(os.path.join("prompts/candidates", name), {})
+                if "research_complete" in card or "research_type" in card:
+                    research_gate_enforced = True
+                    break
         completed_candidates = [
             {
                 "candidate_id": candidate["candidate_path"],
@@ -865,15 +1110,27 @@ def run_controlled_closed_loop(parallel_config):
             "candidate_paths": sorted(merged),
             "validated_candidate_count": len(after),
             "completed_candidates": completed_candidates,
+            "research_gate_enforced": research_gate_enforced,
             "research_workspace": context.research_workspace,
         }
         context.checkpoint(output, "候選證據重驗完成")
         return output
 
     def ranking(context):
-        nonlocal best_candidate, ranking_report
+        nonlocal best_candidate, ranking_report, success
         context.check_deadline()
         best_candidate, ranking_report = _rank_candidate_evaluations(list(merged.values()))
+        comparison_complete = any(
+            report.get("quality_comparison_complete") is True
+            for report in ranking_report
+        )
+        research_reasons = []
+        if research_gate_enforced and not comparison_complete:
+            research_reasons.append("quality_comparison_missing")
+            best_candidate = None
+            success = False
+        elif research_gate_enforced and best_candidate is None:
+            success = False
         if best_candidate and not executor.state.get("global_best_allowed", True):
             best_candidate = dict(best_candidate)
             best_candidate.update({
@@ -886,6 +1143,10 @@ def run_controlled_closed_loop(parallel_config):
         output = {
             "winner": best_candidate,
             "candidate_report_count": len(ranking_report),
+            "research_type": "research" if research_gate_enforced and comparison_complete else "non_research",
+            "research_complete": research_gate_enforced and comparison_complete,
+            "research_exclusion_reasons": research_reasons,
+            "quality_comparison_complete": comparison_complete,
             "research_workspace": context.research_workspace,
         }
         context.checkpoint(output, "排名完成")
@@ -897,6 +1158,20 @@ def run_controlled_closed_loop(parallel_config):
             "event": "controlled_closed_loop_ranking",
             "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
             "winner": best_candidate,
+            "research_type": "research" if research_gate_enforced and any(
+                report.get("quality_comparison_complete") is True
+                for report in ranking_report
+            ) else "non_research",
+            "research_complete": research_gate_enforced and any(
+                report.get("quality_comparison_complete") is True
+                for report in ranking_report
+            ),
+            "research_exclusion_reasons": (
+                [] if not research_gate_enforced or any(
+                    report.get("quality_comparison_complete") is True
+                    for report in ranking_report
+                ) else ["quality_comparison_missing"]
+            ),
             "research_workspace": context.research_workspace,
             "benchmark_groups": (
                 ranking_report[0].get("benchmark_groups", [])
@@ -1044,7 +1319,7 @@ def main():
             success, best_candidate = run_controlled_closed_loop(parallel_config)
             consecutive_errors = 0
             after_baseline = baseline_dev_score()
-            promoted = after_baseline > before_baseline
+            promoted = bool(success and best_candidate and after_baseline > before_baseline)
 
             if promoted:
                 successful_evolutions += 1

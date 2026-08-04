@@ -1,0 +1,46 @@
+研究類型守門驗證紀錄
+日期：2026-08-04
+工作目錄：D:\adng-worktrees\prompt-autoresearch\20404afe
+
+程式檢查
+--------
+命令：python -m py_compile auto_evolve.py
+結果：exit 0（語法檢查通過）
+
+命令：git diff --check
+結果：exit 0（無 whitespace 錯誤）
+
+直接相關測試（含 coverage）
+--------------------------
+命令：python -m pytest -q tests/test_controlled_closed_loop_ranking.py tests/test_invalid_candidate_output.py tests/test_candidate_execution_records.py --maxfail=1
+結果：28 passed in 18.10s
+
+最終程式微調後重跑同一組（不含 coverage）：28 passed in 5.57s。
+
+命令：python -m pytest --no-cov -q tests/2346f104137adcd1-research-result-delivery.py --maxfail=1
+結果：7 passed in 8.69s
+
+完整測試分段結果（--no-cov）
+--------------------------
+標準 test_*.py 共 1202 個案例：1200 passed、2 skipped。
+
+分段命令與實際摘要：
+- test_analyze_runs、test_api_feedback、test_api_server_gaps、test_api_server、test_architecture_surface、test_assertion_guard、test_auto_evolve_no_improve：89 passed in 61.03s。
+- test_backfill_candidate_scorecards、test_benchmark_scale_ranking_regression、test_best_version_report_e2e、test_best_version_report、test_best_version_telegram_integration、test_branch_coverage_gaps、test_candidate_execution_records、test_cleanup_regressions：123 passed in 93.91s。
+- test_compare_runs、test_compare_test_runs、test_completion_evidence_manifest、test_config_accessor_isolation、test_config_boolean_validation、test_config_integration、test_config_mixed_parameterized、test_config_semantic、test_config_special_branch、test_continuous_optimizer：184 passed in 13.45s。
+- test_controlled_closed_loop_ranking、test_core_e2e_failure_paths、test_core_flow_e2e、test_crash_regression、test_cross_platform_error_handling、test_cross_platform、test_delivery_consistency_gate、test_evaluate_routed、test_evaluate、test_evidence_trail：238 passed、1 skipped in 84.49s。
+- test_experiment_report、test_gatekeeper、test_generate_questions、test_git_reproducibility、test_git_workspace_preflight、test_infinite_evolve_behavior、test_integration_server_feedback、test_invalid_candidate_output、test_leaderboard、test_lib_api_error_contract、test_lib_api_external_failures、test_lib_api_http_status_codes：166 passed in 60.30s。
+- test_lib_api_line37_branch、test_lib_api_positive_verify、test_lib_api_rate_wait_branch、test_lib_api、test_lib_config_cache_stability、test_lib_config_regression、test_lib_config、test_lib_io、test_lib_metrics、test_not_reproducible_acceptance、test_notifications、test_preflight、test_product_diff_audit、test_research_validation_executor、test_script_entrypoints、test_targeted_mutation、test_untested_entrypoints：400 passed、1 skipped in 50.95s。
+
+額外明確指定但不符合 pytest 預設 test_*.py 樣式的測試：
+- 101e43a17c523c52、8c2c08c1、90c016b7d611c17e、9f8cde20e07c18b7 兩個案例：56 passed in 10.51s。
+- manual-goal-error-free-evolution、manual-goal-evolve-reignite、manual-goal-scoring-deadzone：50 passed in 11.40s。
+
+逾時診斷
+--------
+命令：python -m pytest -q
+結果：主進程在約 480 秒無進度且 CPU 近零，未取得退出碼；已停止本次 PID 19328 及子進程 40004，未將其視為通過。之後以分段 --no-cov 執行並取得上述完整案例結果。
+
+工作樹副作用檢查
+----------------
+測試後既有 scorecard 差異數：0。

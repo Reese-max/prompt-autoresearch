@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 """受控閉環排名必須只比較同一評測基準。"""
+import json
 import auto_evolve
 
 
@@ -257,6 +258,92 @@ def test_ranking_keeps_timeout_attempt_out_of_quality_score():
     timeout_report = next(row for row in report if row["candidate_path"] == "timeout")
     assert timeout_report["outcome"] == "淘汰"
     assert timeout_report["execution_reliability"]["timeout_attempt_count"] == 1
+
+
+def test_scan_marks_config_scorecard_as_non_research_output(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    candidate_dir = tmp_path / "prompts" / "candidates"
+    candidate_dir.mkdir(parents=True)
+    prompt = candidate_dir / "config.md"
+    prompt.write_text("candidate prompt", encoding="utf-8")
+    (candidate_dir / "config.scorecard.json").write_text(
+        json.dumps({
+            "candidate_path": "prompts/candidates/config.md",
+            "task_type": "config",
+            "status": "completed",
+            "dev": {
+                "score": 99.0,
+                "dataset": "questions/dev.jsonl",
+                "metric": "average_score",
+                "evaluator_version": "evaluate-v1",
+                "measurement_settings": {"score_scale": "0-100"},
+                "execution_status": "quality_measurement_obtained",
+                "measurement_evidence": {"complete": True},
+            },
+        }, ensure_ascii=False),
+        encoding="utf-8",
+    )
+
+    assert auto_evolve.scan_candidate_evaluations() == []
+    card = json.loads(
+        (candidate_dir / "config.scorecard.json").read_text(encoding="utf-8")
+    )
+    assert card["research_type"] == "non_research"
+    assert card["research_complete"] is False
+    assert card["research_decision"] == "NON_RESEARCH_OUTPUT"
+
+
+def test_controlled_loop_blocks_adoption_without_quality_comparison(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    candidate_dir = tmp_path / "prompts" / "candidates"
+    candidate_dir.mkdir(parents=True)
+    prompt = candidate_dir / "only.md"
+    prompt.write_text("candidate prompt", encoding="utf-8")
+    (candidate_dir / "only.scorecard.json").write_text(
+        json.dumps({
+            "candidate_path": "prompts/candidates/only.md",
+            "status": "completed",
+            "dev": {
+                "score": 99.0,
+                "dataset": "questions/dev.jsonl",
+                "metric": "average_score",
+                "evaluator_version": "evaluate-v1",
+                "measurement_settings": {"score_scale": "0-100"},
+                "execution_status": "quality_measurement_obtained",
+                "measurement_evidence": {"complete": True},
+            },
+        }, ensure_ascii=False),
+        encoding="utf-8",
+    )
+
+    import run_opt
+    original_get = run_opt.get
+    reports = []
+    monkeypatch.setattr(
+        run_opt, "get",
+        lambda section, key=None, default=None: (
+            {"enabled": True, "count": 2}
+            if section == "multi_candidate" and key is None
+            else original_get(section, key, default)
+        ),
+    )
+    monkeypatch.setattr(run_opt, "run_opt_pass", lambda **_kwargs: True)
+    monkeypatch.setattr(
+        auto_evolve,
+        "verify_persisted_run_evidence",
+        lambda _run_dir: {"status": "completed", "rejection_reasons": []},
+    )
+    monkeypatch.setattr(
+        auto_evolve, "append_jsonl", lambda _path, payload: reports.append(payload),
+    )
+
+    success, winner = auto_evolve.run_controlled_closed_loop({})
+
+    assert success is False
+    assert winner is None
+    assert reports[0]["research_type"] == "non_research"
+    assert reports[0]["research_complete"] is False
+    assert reports[0]["winner"] is None
 
 
 def test_controlled_loop_persists_candidate_reasons(tmp_path, monkeypatch):
