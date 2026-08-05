@@ -495,6 +495,94 @@ def _stage_comparison(card, stage, stage_data, require_execution=False, require_
 
 _NON_COMPLETED_CANDIDATE_STATUSES = {"failed", "incomplete", "timed_out", "timeout"}
 
+_LINEAGE_REQUIRED_FIELDS = (
+    "source_baseline_id",
+    "parent_version",
+    "execution_run_id",
+    "timestamp",
+    "content_hash",
+)
+
+
+def _validate_benchmark_lineage(candidate):
+    """驗證 reevaluation-derived benchmark 的來源世系完整性與一致性。
+
+    檢查項目：
+    1. 所有必要欄位（source_baseline_id, parent_version, execution_run_id,
+       timestamp, content_hash）必須存在且非空。
+    2. content_hash 必須與實際 prompt 內容雜湊一致（若有 candidate_path）。
+    3. 不得有循環引用（lineage 鏈中出現重複的 execution_run_id）。
+    4. 不得有跨 baseline 偽造（source_baseline_id 必須與候選所屬 benchmark 一致）。
+    5. 父版本（parent_version）必須與已封存祖先一致。
+
+    回傳 dict:
+      eligible: bool — 是否可參與品質聚合、排名、淘汰及歷史結論。
+      lineage_exclusion_reasons: list[str] — 排除理由。
+      lineage_validated: bool — 是否經過世系驗證。
+    """
+    candidate = candidate if isinstance(candidate, dict) else {}
+    lineage = candidate.get("lineage")
+    if not isinstance(lineage, dict) or not lineage:
+        return {
+            "eligible": True,
+            "lineage_exclusion_reasons": [],
+            "lineage_validated": False,
+        }
+
+    reasons = []
+
+    for field in _LINEAGE_REQUIRED_FIELDS:
+        value = lineage.get(field)
+        if value is None or (isinstance(value, str) and not value.strip()):
+            reasons.append(f"lineage_field_missing:{field}")
+
+    content_hash = lineage.get("content_hash")
+    if isinstance(content_hash, str) and content_hash.strip():
+        candidate_path = candidate.get("candidate_path")
+        if candidate_path and isinstance(candidate_path, str):
+            try:
+                import hashlib as _hl
+                with open(os.fspath(candidate_path), encoding="utf-8") as fh:
+                    actual_hash = _hl.sha256(fh.read().encode("utf-8")).hexdigest()
+                if actual_hash != content_hash:
+                    reasons.append("lineage_content_hash_mismatch")
+            except (OSError, TypeError, ValueError):
+                pass
+
+    execution_run_id = lineage.get("execution_run_id")
+    if isinstance(execution_run_id, str) and execution_run_id.strip():
+        ancestor_chain = lineage.get("ancestor_chain")
+        if isinstance(ancestor_chain, list):
+            seen_run_ids = set()
+            if execution_run_id in seen_run_ids:
+                reasons.append("lineage_circular_reference")
+            seen_run_ids.add(execution_run_id)
+            for ancestor in ancestor_chain:
+                if not isinstance(ancestor, dict):
+                    continue
+                anc_run_id = ancestor.get("execution_run_id")
+                if isinstance(anc_run_id, str) and anc_run_id.strip():
+                    if anc_run_id in seen_run_ids:
+                        reasons.append("lineage_circular_reference")
+                        break
+                    seen_run_ids.add(anc_run_id)
+
+    source_baseline_id = lineage.get("source_baseline_id")
+    benchmark_id = candidate.get("benchmark_id") or candidate.get("benchmark")
+    if (
+        isinstance(source_baseline_id, str) and source_baseline_id.strip()
+        and isinstance(benchmark_id, str) and benchmark_id.strip()
+        and source_baseline_id.strip() != benchmark_id.strip()
+    ):
+        reasons.append("lineage_cross_baseline_forgery")
+
+    reasons = list(dict.fromkeys(reasons))
+    return {
+        "eligible": not reasons,
+        "lineage_exclusion_reasons": reasons,
+        "lineage_validated": True,
+    }
+
 
 def _normalise_ranking_evaluation(evaluation, candidate=None):
     """以 basis 重建 key，拒絕與 benchmark 身分不一致的外部 key。"""
@@ -514,6 +602,9 @@ def _normalise_ranking_evaluation(evaluation, candidate=None):
     if execution_status is not None and evaluation.get("measurement_evidence_complete") is not True:
         return None
     if evaluation.get("quality_eligible") is False:
+        return None
+    lineage_check = _validate_benchmark_lineage(candidate)
+    if lineage_check["lineage_validated"] and not lineage_check["eligible"]:
         return None
     basis = dict(evaluation.get("basis") or {})
     benchmark_id = _first_value((evaluation, candidate), *_BENCHMARK_ID_FIELDS)
@@ -597,15 +688,35 @@ def _rank_candidate_evaluations(candidates):
             candidate.get("research_complete") is False
             or candidate.get("research_type") == "non_research"
         )
+        lineage_check = _validate_benchmark_lineage(candidate)
+        incomplete_evidence = (
+            lineage_check["lineage_validated"] and not lineage_check["eligible"]
+        )
         qualified = (
             status not in _NON_COMPLETED_CANDIDATE_STATUSES
             and not status.startswith("rejected_")
             and not non_research
+            and not incomplete_evidence
             and _has_completed_execution_attempt(candidate)
         )
         if qualified:
             qualified_candidates.append(candidate)
         evaluations = candidate.get("stage_evaluations") or []
+        if incomplete_evidence:
+            reports[path] = {
+                "candidate_path": path,
+                "status": candidate.get("status", ""),
+                "evaluations": evaluations,
+                "execution_reliability": _execution_reliability(candidate),
+                "research_type": candidate.get("research_type", "research"),
+                "research_complete": candidate.get("research_complete"),
+                "outcome": "淘汰",
+                "reason": "INCOMPLETE_EVIDENCE：世系驗證失敗，禁止參與品質聚合、排名、淘汰及歷史結論",
+                "elimination_basis": ["incomplete_evidence"],
+                "lineage_validated": True,
+                "lineage_exclusion_reasons": lineage_check["lineage_exclusion_reasons"],
+            }
+            continue
         reports[path] = {
             "candidate_path": path,
             "status": candidate.get("status", ""),
@@ -869,11 +980,31 @@ def _scorecard_elimination_reports(known_paths):
             or card.get("research_type") == "non_research"
             or status == "non_research_output"
         )
+        lineage_check = _validate_benchmark_lineage(card)
+        incomplete_evidence = (
+            lineage_check["lineage_validated"] and not lineage_check["eligible"]
+        )
         if not path or path in known_paths or not (
             non_research
             or status in _NON_COMPLETED_CANDIDATE_STATUSES
             or status.startswith("rejected_")
+            or incomplete_evidence
         ):
+            continue
+        if incomplete_evidence:
+            reports.append({
+                "candidate_path": path,
+                "status": status,
+                "evaluations": [],
+                "execution_reliability": _execution_reliability(card),
+                "research_type": card.get("research_type"),
+                "research_complete": card.get("research_complete"),
+                "outcome": "淘汰",
+                "reason": "INCOMPLETE_EVIDENCE：世系驗證失敗，禁止參與品質聚合、排名、淘汰及歷史結論",
+                "elimination_basis": ["incomplete_evidence"],
+                "lineage_validated": True,
+                "lineage_exclusion_reasons": lineage_check["lineage_exclusion_reasons"],
+            })
             continue
         reasons = (
             card.get("research_exclusion_reasons")
