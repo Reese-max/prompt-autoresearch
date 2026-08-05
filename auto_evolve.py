@@ -477,6 +477,9 @@ def _stage_comparison(card, stage, stage_data, require_execution=False, require_
     }
 
 
+_NON_COMPLETED_CANDIDATE_STATUSES = {"failed", "incomplete", "timed_out", "timeout"}
+
+
 def _normalise_ranking_evaluation(evaluation, candidate=None):
     """以 basis 重建 key，拒絕與 benchmark 身分不一致的外部 key。"""
     if not isinstance(evaluation, dict) or evaluation.get("comparable") is False:
@@ -485,6 +488,9 @@ def _normalise_ranking_evaluation(evaluation, candidate=None):
         evaluation.get("research_complete") is False
         or evaluation.get("research_type") == "non_research"
     ):
+        return None
+    candidate_status = str((candidate or {}).get("status", "")).lower()
+    if candidate_status in _NON_COMPLETED_CANDIDATE_STATUSES:
         return None
     execution_status = evaluation.get("execution_status")
     if execution_status is not None and execution_status not in _EXECUTION_COMPLETED_STATUSES:
@@ -574,7 +580,7 @@ def _rank_candidate_evaluations(candidates):
             or candidate.get("research_type") == "non_research"
         )
         qualified = (
-            status not in {"failed", "incomplete"}
+            status not in _NON_COMPLETED_CANDIDATE_STATUSES
             and not status.startswith("rejected_")
             and not non_research
         )
@@ -835,7 +841,7 @@ def _scorecard_elimination_reports(known_paths):
         )
         if not path or path in known_paths or not (
             non_research
-            or status in {"failed", "incomplete"}
+            or status in _NON_COMPLETED_CANDIDATE_STATUSES
             or status.startswith("rejected_")
         ):
             continue
@@ -911,9 +917,9 @@ def scan_candidate_evaluations():
             continue
         status = card.get("status") or ""
         if (
-            status in {"failed", "incomplete"}
+            status in _NON_COMPLETED_CANDIDATE_STATUSES
             or status.startswith("rejected_")
-            or card.get("completion_status") in {"failed", "incomplete"}
+            or card.get("completion_status") in _NON_COMPLETED_CANDIDATE_STATUSES
         ):
             continue
         if card.get("missing_evidence_types"):

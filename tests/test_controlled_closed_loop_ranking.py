@@ -371,3 +371,55 @@ def test_controlled_loop_persists_candidate_reasons(tmp_path, monkeypatch):
     by_path = {row["candidate_path"]: row for row in report["candidate_reports"]}
     assert by_path["dev-90"]["outcome"] == "勝出"
     assert by_path["smoke-99"]["elimination_basis"] == ["comparison_basis_mismatch"]
+
+
+def test_ranking_excludes_timed_out_candidate_even_with_high_score():
+    """逾時候選即使持有先前高分評測，也不得勝出。"""
+    good = _evaluation("dev", 90.0)
+    good.update({"execution_status": "completed", "measurement_evidence_complete": True})
+    timed_out_high = _evaluation("dev", 999.0)
+    timed_out_high.update({"execution_status": "completed", "measurement_evidence_complete": True})
+    good_candidate = _candidate("good", [good])
+    timed_out_candidate = _candidate("timed-out", [timed_out_high])
+    timed_out_candidate["status"] = "timed_out"
+
+    winner, report = auto_evolve._rank_candidate_evaluations(
+        [good_candidate, timed_out_candidate]
+    )
+
+    assert winner["candidate_path"] == "good"
+    timeout_report = next(row for row in report if row["candidate_path"] == "timed-out")
+    assert timeout_report["outcome"] == "淘汰"
+    assert "no_comparable_evaluation" in timeout_report["elimination_basis"]
+
+
+def test_ranking_excludes_timeout_status_candidate_with_partial_results():
+    """status='timeout' 候選留下部分結果也不得進入排名。"""
+    good = _evaluation("dev", 80.0)
+    good.update({"execution_status": "completed", "measurement_evidence_complete": True})
+    partial = _evaluation("dev", 999.0)
+    partial.update({"execution_status": "completed", "measurement_evidence_complete": True})
+    good_candidate = _candidate("good", [good])
+    timeout_candidate = _candidate("partial", [partial])
+    timeout_candidate["status"] = "timeout"
+
+    winner, report = auto_evolve._rank_candidate_evaluations(
+        [good_candidate, timeout_candidate]
+    )
+
+    assert winner["candidate_path"] == "good"
+    partial_report = next(row for row in report if row["candidate_path"] == "partial")
+    assert partial_report["outcome"] == "淘汰"
+    assert "no_comparable_evaluation" in partial_report["elimination_basis"]
+
+
+def test_normalise_rejects_evaluation_from_timed_out_candidate():
+    """逾時候選的評測無法通過標準化，不論分數多高。"""
+    evaluation = _evaluation("dev", 999.0)
+    evaluation.update({"execution_status": "completed", "measurement_evidence_complete": True})
+    candidate = _candidate("timed-out", [evaluation])
+    candidate["status"] = "timed_out"
+
+    normalized = auto_evolve._normalise_ranking_evaluation(evaluation, candidate)
+
+    assert normalized is None
