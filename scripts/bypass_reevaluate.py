@@ -33,6 +33,8 @@ import time
 from collections import defaultdict
 from pathlib import Path
 
+from lib.immutable_store import append_row, store_version
+
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 if hasattr(sys.stderr, "reconfigure"):
@@ -47,6 +49,10 @@ CHAMPION_DIR = ROOT / "prompts" / "champions"
 QUESTIONS_FILE = ROOT / "questions" / "dev.jsonl"
 REPORT_JSON = ROOT / "docs" / "bypass-reevaluation-report.json"
 REPORT_MD = ROOT / "docs" / "bypass-reevaluation-report.md"
+IMMUTABLE_STORE_DIR = ROOT / ".cache" / "bypass_eval" / "versions"
+IMMUTABLE_ROWS_PATH = ROOT / ".cache" / "bypass_eval" / "rows.jsonl"
+RESULT_NAMESPACE = "bypass-reeval"
+REPORT_NAMESPACE = "bypass-reeval-report"
 
 
 def sha256_text(text):
@@ -368,6 +374,55 @@ def generate_report(results, dead_zone_threshold):
     }
 
 
+# ---------------------------------------------------------------------------
+# 不可變基準儲存機制
+# ---------------------------------------------------------------------------
+
+def persist_immutable_results(results, store_dir=None, rows_path=None,
+                              namespace=RESULT_NAMESPACE):
+    """將旁路重評結果以內容雜湊與唯一版本 ID 建立不可覆寫版本。
+
+    每個評測結果以內容雜湊派生唯一版本 ID 落盤；若目標版本已存在，一律拒絕覆寫。
+    同時以 append-only 方式記錄資料列；重複內容雜湊的資料列拒絕加入。
+
+    回傳 list of records，每筆含：
+      path / version_id / content_hash / stored / rejected / reason
+    """
+    store_dir = Path(store_dir or IMMUTABLE_STORE_DIR)
+    rows_path = Path(rows_path or IMMUTABLE_ROWS_PATH)
+    records = []
+    for r in results:
+        payload = {
+            "group": r["group"],
+            "path": r["path"],
+            "hash": r["hash"],
+            "hash_short": r["hash_short"],
+            "old_score": r["old_score"],
+            "new_score": r["new_score"],
+            "from_bypass_cache": r.get("from_bypass_cache", False),
+        }
+        version_outcome = store_version(payload, store_dir, namespace=namespace)
+        row_outcome = append_row(rows_path, payload)
+        records.append({
+            "path": r["path"],
+            "version_id": version_outcome["version_id"],
+            "content_hash": version_outcome["content_hash"],
+            "stored": version_outcome["stored"],
+            "rejected": version_outcome["rejected"] or row_outcome["rejected"],
+            "reason": version_outcome["reason"] or row_outcome["reason"],
+        })
+    return records
+
+
+def persist_immutable_report(report, store_dir=None, namespace=REPORT_NAMESPACE):
+    """將整份旁路重評報告以內容雜湊與唯一版本 ID 建立不可覆寫版本。
+
+    若目標版本（相同內容雜湊）已存在，拒絕覆寫並回傳 rejected=True。
+    """
+    store_dir = Path(store_dir or IMMUTABLE_STORE_DIR)
+    return store_version(report, store_dir, namespace=namespace)
+
+
 def generate_markdown(report):
     """人類可讀 Markdown 報告。"""
     L = []
@@ -496,6 +551,18 @@ def main():
     md = generate_markdown(report)
     REPORT_MD.parent.mkdir(parents=True, exist_ok=True)
     REPORT_MD.write_text(md, encoding="utf-8", newline="\n")
+
+    print(f"\n不可變基準儲存...")
+    result_records = persist_immutable_results(results)
+    n_stored = sum(1 for r in result_records if r["stored"])
+    n_rejected = sum(1 for r in result_records if r["rejected"])
+    print(f"  評測結果版本: 新建立 {n_stored}, 拒絕覆寫 {n_rejected}")
+    report_outcome = persist_immutable_report(report)
+    if report_outcome["stored"]:
+        print(f"  報告版本: 新建立 {report_outcome['version_id']}")
+    else:
+        print(f"  報告版本: 拒絕覆寫 {report_outcome['version_id']} "
+              f"({report_outcome['reason']})")
 
     vc = report["variance_comparison"]
     c = report["conclusion"]
