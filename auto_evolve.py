@@ -183,6 +183,22 @@ def _execution_reliability(card):
     }
 
 
+def _has_completed_execution_attempt(candidate, stage=None):
+    """候選在指定 stage 是否留下至少一次成功完成 attempt。
+
+    沒有執行紀錄時視為未知而不阻擋（相容既有無紀錄候選）；有紀錄但全部為
+    失敗（model_error／timeout 等非完成狀態）時，回傳 False 以阻止偽造高分
+    混入品質聚合與排名。
+    """
+    records = _execution_records(candidate, stage)
+    if not records:
+        return True
+    return any(
+        record.get("execution_status") in _EXECUTION_COMPLETED_STATUSES
+        for record in records
+    )
+
+
 def _stage_quality_evidence(card, stage, stage_data, require_execution=False):
     """回傳單一 stage 是否可作品質排名，以及排除理由。"""
     stage_data = stage_data if isinstance(stage_data, dict) else {}
@@ -511,6 +527,8 @@ def _normalise_ranking_evaluation(evaluation, candidate=None):
     stage = basis.get("stage")
     if not isinstance(stage, str) or stage not in _RANKING_STAGE_PRIORITY:
         return None
+    if not _has_completed_execution_attempt(candidate, stage):
+        return None
     comparison_key = _comparison_key_from_basis(basis)
     if comparison_key is None:
         return None
@@ -583,6 +601,7 @@ def _rank_candidate_evaluations(candidates):
             status not in _NON_COMPLETED_CANDIDATE_STATUSES
             and not status.startswith("rejected_")
             and not non_research
+            and _has_completed_execution_attempt(candidate)
         )
         if qualified:
             qualified_candidates.append(candidate)
@@ -612,7 +631,18 @@ def _rank_candidate_evaluations(candidates):
                 entries.append(item)
             else:
                 detail = {"stage": evaluation.get("stage")}
-                if evaluation.get("reason"):
+                stage_failures = [
+                    record for record in _execution_records(
+                        candidate, evaluation.get("stage")
+                    )
+                    if record.get("execution_status") not in _EXECUTION_COMPLETED_STATUSES
+                ]
+                if stage_failures:
+                    detail["execution_failures"] = [
+                        record.get("execution_status") for record in stage_failures
+                    ]
+                    detail["reason"] = "執行失敗（非完成狀態）不納入品質排名"
+                elif evaluation.get("reason"):
                     detail["reason"] = evaluation["reason"]
                 else:
                     detail["missing_fields"] = (
