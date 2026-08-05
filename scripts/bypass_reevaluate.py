@@ -33,7 +33,12 @@ import time
 from collections import defaultdict
 from pathlib import Path
 
-from lib.immutable_store import append_row, store_version
+from lib.immutable_store import append_row, store_version, load_version
+from lib.version import (
+    get_program_version,
+    compute_input_settings_hash,
+    get_baseline_info,
+)
 
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
@@ -238,7 +243,7 @@ def run_bypass_reeval(items, seed_old, seed_new, repetitions):
     return results
 
 
-def generate_report(results, dead_zone_threshold):
+def generate_report(results, dead_zone_threshold, repetitions=5):
     """產生完整分析報告。"""
     cands = [r for r in results if r["group"] == "candidate"]
     champs = [r for r in results if r["group"] == "champion"]
@@ -321,17 +326,38 @@ def generate_report(results, dead_zone_threshold):
 
     overall_pass = vc["new_gt_old_all"] and len(gap_evidence) > 0
 
+    baseline_info = get_baseline_info()
+    input_hash = compute_input_settings_hash(
+        cli_args={
+            "seed_old": None,
+            "seed_new": None,
+            "repetitions": repetitions,
+            "dead_zone": dead_zone_threshold,
+        }
+    )
+
     return {
         "meta": {
             "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
             "cache_namespace": ".cache/bypass_eval/",
             "original_cache_untouched": True,
-            "repetitions": 5,
+            "repetitions": repetitions,
             "question_file": str(QUESTIONS_FILE.relative_to(ROOT).as_posix()),
             "total_items": len(results),
             "n_candidates": len(cands),
             "n_champions": len(champs),
             "dead_zone_threshold": dead_zone_threshold,
+            "source_baseline_version": baseline_info["baseline_version"],
+            "source_baseline_hash": baseline_info["baseline_hash"],
+            "new_version_id": None,
+            "input_settings_hash": input_hash,
+            "program_version": get_program_version(),
+            "artifact_locations": {
+                "report_json": str(REPORT_JSON.relative_to(ROOT).as_posix()),
+                "report_md": str(REPORT_MD.relative_to(ROOT).as_posix()),
+                "immutable_store": str(IMMUTABLE_STORE_DIR.relative_to(ROOT).as_posix()),
+                "immutable_rows": str(IMMUTABLE_ROWS_PATH.relative_to(ROOT).as_posix()),
+            },
         },
         "per_item": [
             {
@@ -423,6 +449,78 @@ def persist_immutable_report(report, store_dir=None, namespace=REPORT_NAMESPACE)
     return store_version(report, store_dir, namespace=namespace)
 
 
+def enrich_report_version_id(report, report_outcome):
+    """將不可變版本 ID 回填至報告 meta.new_version_id。
+
+    報告被持久化後，將實際版本 ID 與產物路徑寫回報告結構，
+    確保追溯中繼資料完整。
+    """
+    report["meta"]["new_version_id"] = report_outcome["version_id"]
+    report["meta"]["artifact_locations"]["immutable_report"] = report_outcome["path"]
+    report["meta"]["artifact_locations"]["immutable_report_content_hash"] = report_outcome["content_hash"]
+    return report
+
+
+REQUIRED_TRACEABILITY_FIELDS = [
+    "source_baseline_version",
+    "source_baseline_hash",
+    "new_version_id",
+    "input_settings_hash",
+    "program_version",
+    "timestamp",
+    "artifact_locations",
+]
+
+REQUIRED_ARTIFACT_KEYS = [
+    "report_json",
+    "report_md",
+    "immutable_store",
+    "immutable_rows",
+    "immutable_report",
+]
+
+
+def verify_traceability_chain(report, store_dir=None):
+    """驗證旁路重評報告的追溯鏈完整性。
+
+    檢查項目：
+      1. meta 中所有必要追溯中繼資料欄位存在。
+      2. artifact_locations 中所有必要產物路徑存在。
+      3. new_version_id 指向的版本確實存在於不可變儲存。
+      4. 該版本的內容雜湊與 meta 中記錄的一致。
+
+    回傳 dict：
+      valid: bool           追溯鏈是否完整
+      errors: list[str]     不符合的項目
+    """
+    store_dir = Path(store_dir or IMMUTABLE_STORE_DIR)
+    meta = report.get("meta", {})
+    errors = []
+
+    for field in REQUIRED_TRACEABILITY_FIELDS:
+        if field not in meta or meta[field] is None:
+            errors.append(f"missing_field:{field}")
+
+    artifacts = meta.get("artifact_locations") or {}
+    for key in REQUIRED_ARTIFACT_KEYS:
+        if key not in artifacts or not artifacts[key]:
+            errors.append(f"missing_artifact:{key}")
+
+    vid = meta.get("new_version_id")
+    ch = (meta.get("artifact_locations") or {}).get("immutable_report_content_hash")
+    if vid and ch:
+        stored = load_version(store_dir, vid)
+        if stored is None:
+            errors.append(f"version_not_found:{vid}")
+        else:
+            from lib.immutable_store import content_hash
+            stored_hash = content_hash(stored)
+            if stored_hash != ch:
+                errors.append(f"content_hash_mismatch:expected={ch},actual={stored_hash}")
+
+    return {"valid": len(errors) == 0, "errors": errors}
+
+
 def generate_markdown(report):
     """人類可讀 Markdown 報告。"""
     L = []
@@ -500,7 +598,22 @@ def generate_markdown(report):
     L.append(f"- 至少一組可量測拉開差距: **{c['at_least_one_gap_measurable']}**")
     L.append(f"- **整體判定: {'PASS' if c['overall_pass'] else 'NEEDS_MORE_VARIANCE'}**\n")
 
-    L.append("## 8. 個項明細（前 30 筆）\n")
+    m = report["meta"]
+    L.append("## 8. 追溯中繼資料\n")
+    L.append(f"- 來源基線版本: `{m.get('source_baseline_version', 'N/A')}`")
+    L.append(f"- 來源基線雜湊: `{m.get('source_baseline_hash', 'N/A')}`")
+    L.append(f"- 新版本 ID: `{m.get('new_version_id', 'N/A')}`")
+    L.append(f"- 輸入與設定雜湊: `{m.get('input_settings_hash', 'N/A')}`")
+    L.append(f"- 程式版本: `{m.get('program_version', 'N/A')}`")
+    L.append(f"- 時間: {m.get('timestamp', 'N/A')}")
+    artifacts = m.get("artifact_locations", {})
+    L.append(f"- 報告 JSON: `{artifacts.get('report_json', 'N/A')}`")
+    L.append(f"- 報告 MD: `{artifacts.get('report_md', 'N/A')}`")
+    L.append(f"- 不可變儲存: `{artifacts.get('immutable_store', 'N/A')}`")
+    L.append(f"- 不可變報告版本: `{artifacts.get('immutable_report', 'N/A')}`")
+    L.append("")
+
+    L.append("## 9. 個項明細（前 30 筆）\n")
     L.append("| 分組 | 路徑 | Hash | 舊分 | 新分 | 差 | 旁路快取 |")
     L.append("|------|------|------|------|------|-----|----------|")
     for item in report["per_item"][:30]:
@@ -545,7 +658,7 @@ def main():
     print(f"  旁路快取命中: {n_cache}, 新建: {len(results) - n_cache}")
 
     print(f"\n產生分析報告...")
-    report = generate_report(results, args.dead_zone)
+    report = generate_report(results, args.dead_zone, args.repetitions)
 
     write_json(REPORT_JSON, report)
     md = generate_markdown(report)
@@ -563,6 +676,19 @@ def main():
     else:
         print(f"  報告版本: 拒絕覆寫 {report_outcome['version_id']} "
               f"({report_outcome['reason']})")
+
+    enrich_report_version_id(report, report_outcome)
+    write_json(REPORT_JSON, report)
+    md = generate_markdown(report)
+    REPORT_MD.write_text(md, encoding="utf-8", newline="\n")
+
+    chain = verify_traceability_chain(report)
+    if chain["valid"]:
+        print(f"\n  追溯鏈驗證: PASS")
+    else:
+        print(f"\n  追溯鏈驗證: FAIL")
+        for err in chain["errors"]:
+            print(f"    - {err}")
 
     vc = report["variance_comparison"]
     c = report["conclusion"]
