@@ -327,6 +327,59 @@ def persist_run_failure(run_dir, failure):
     return True
 
 
+ACCEPTANCE_TARGET_RELATIVE = "tests/ed6a1a498025c1ec-artifact-success-verification.py"
+
+
+def resolve_acceptance_target(workspace_root=None):
+    """解析驗收目標路徑，回傳 (requested_path, resolved_path, error)。
+
+    requested_path 為相對於 repo 根的固定目標路徑。
+    resolved_path 為實際解析後的絕對路徑（若存在且可讀）。
+    error 為空字串表示成功，否則為診斷原因。
+    """
+    root = _workspace_root(workspace_root)
+    requested = ACCEPTANCE_TARGET_RELATIVE
+    resolved = os.path.normpath(os.path.join(root, requested))
+    if not os.path.isfile(resolved):
+        return requested, resolved, "target file does not exist"
+    try:
+        with open(resolved, "rb") as fh:
+            chunk = fh.read(1)
+            if not chunk and os.path.getsize(resolved) == 0:
+                return requested, resolved, "target file is empty"
+    except OSError as exc:
+        return requested, resolved, f"target file is unreadable: {exc}"
+    return requested, resolved, ""
+
+
+def verify_acceptance_target_precheck(workspace_root=None):
+    """在啟動 pytest 前驗證驗收目標檔存在且可讀。
+
+    回傳 dict：
+    - passed: bool
+    - requested_path: 相對路徑
+    - resolved_path: 實際路徑
+    - error: 錯誤診斷（passed=True 時為空）
+    - reason_code: gate-configuration failure 時為 "GATE_CONFIGURATION_FAILURE"
+    """
+    requested, resolved, error = resolve_acceptance_target(workspace_root)
+    if not error:
+        return {
+            "passed": True,
+            "requested_path": requested,
+            "resolved_path": resolved,
+            "error": "",
+            "reason_code": "",
+        }
+    return {
+        "passed": False,
+        "requested_path": requested,
+        "resolved_path": resolved,
+        "error": error,
+        "reason_code": "GATE_CONFIGURATION_FAILURE",
+    }
+
+
 def _has_meaningful_result(result: dict) -> bool:
     """檢查單一結果是否含有意義性內容（answer 或 total_score > 0）。"""
     if not isinstance(result, dict):
@@ -444,6 +497,45 @@ def completion_disposition(task_result):
         "evidence_manifest": evidence_manifest,
         "evidence_errors": evidence_errors,
     }
+
+
+def acceptance_gate_disposition(task_result, workspace_root=None):
+    """驗收閘門專用完成處置 — 結合 precheck 與一般完成證據驗證。
+
+    在啟動 pytest 前驗證目標檔存在且可讀；若目標不存在、解析到其他舊測試或
+    檔案不可讀，將該次驗收標為 GATE_CONFIGURATION_FAILURE，持久化
+    requested/resolved path 與具體診斷，禁止把 pytest exit=4 或零收集誤記為
+    產品驗證失敗或成功。
+
+    回傳 dict 與 completion_disposition 相同，額外包含 precheck 欄位。
+    """
+    if isinstance(task_result, dict):
+        ws = workspace_root or task_result.get("workspace_root") or task_result.get("repo_root")
+    else:
+        ws = workspace_root or getattr(task_result, "workspace_root", None)
+
+    precheck = verify_acceptance_target_precheck(ws)
+    disposition = completion_disposition(task_result)
+
+    if not precheck["passed"]:
+        disposition.update({
+            "status": "failed",
+            "reason_code": "GATE_CONFIGURATION_FAILURE",
+            "rejection_reason": (
+                f"acceptance target precheck failed: "
+                f"requested={precheck['requested_path']!r}, "
+                f"resolved={precheck['resolved_path']!r}, "
+                f"error={precheck['error']!r}"
+            ),
+            "rejection_reasons": [
+                f"gate-configuration failure: requested={precheck['requested_path']!r}, "
+                f"resolved={precheck['resolved_path']!r}, error={precheck['error']!r}"
+            ],
+            "missing_evidence_types": ["acceptance_target"],
+        })
+
+    disposition["precheck"] = precheck
+    return disposition
 
 
 def verify_completion_evidence(task_result):

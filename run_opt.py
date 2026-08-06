@@ -935,6 +935,34 @@ def run_evaluate(prompt_path, question_file, parallel, capture=False, deadline_s
     if deadline_seconds is None:
         deadline_seconds = context.get("deadline_seconds")
     deadline_seconds = _candidate_deadline_seconds(deadline_seconds)
+
+    from lib.completion_gate import verify_acceptance_target_precheck
+    precheck = verify_acceptance_target_precheck()
+    if not precheck["passed"]:
+        precheck_disposition = {
+            "status": "failed",
+            "reason_code": "GATE_CONFIGURATION_FAILURE",
+            "rejection_reason": (
+                f"acceptance target precheck failed: "
+                f"requested={precheck['requested_path']!r}, "
+                f"resolved={precheck['resolved_path']!r}, "
+                f"error={precheck['error']!r}"
+            ),
+            "rejection_reasons": [
+                f"gate-configuration failure: requested={precheck['requested_path']!r}, "
+                f"resolved={precheck['resolved_path']!r}, error={precheck['error']!r}"
+            ],
+            "missing_evidence_types": ["acceptance_target"],
+            "evidence_manifest": [],
+            "evidence_errors": [precheck["error"]],
+            "evidence_types": [],
+            "precheck": precheck,
+        }
+        empty_result = subprocess.CompletedProcess([], 4)
+        empty_result.candidate_id = candidate_id
+        empty_result.precheck_disposition = precheck_disposition
+        return empty_result, None, {}
+
     attempt_id = uuid.uuid4().hex
     before_dirs = list_run_dirs()
     cmd = [PYTHON_BIN, "scripts/evaluate.py", prompt_path, question_file, "--parallel", str(parallel)]
