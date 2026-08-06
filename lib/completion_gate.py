@@ -403,8 +403,17 @@ def verify_acceptance_target_content(workspace_root=None):
         }
 
     try:
-        with open(resolved, "r", encoding="utf-8", errors="replace") as fh:
+        with open(resolved, "r", encoding="utf-8") as fh:
             content = fh.read()
+    except UnicodeDecodeError as exc:
+        return {
+            "passed": False,
+            "requested_path": requested,
+            "resolved_path": resolved,
+            "error": f"content unreadable: not valid utf-8 text: {exc}",
+            "reason_code": "GATE_CONFIGURATION_FAILURE",
+            "content_summary": "",
+        }
     except OSError as exc:
         return {
             "passed": False,

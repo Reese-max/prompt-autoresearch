@@ -195,6 +195,20 @@ class TestVerifyAcceptanceTargetContent:
         assert result["passed"] is True
         assert result["content_summary"] != ""
 
+    def test_content_check_fails_for_binary_unreadable_file(self, tmp_path):
+        """目標檔為非 UTF-8 二進位內容（內容無法讀取為文字）時，
+        content_check 回傳可直接辨識的不可讀失敗原因，而非誤報『無測試類別』。"""
+        target_dir = tmp_path / "tests"
+        target_dir.mkdir()
+        target = target_dir / "ed6a1a498025c1ec-artifact-success-verification.py"
+        target.write_bytes(b"\xff\xfe\x80\x81 binary content, not utf-8")
+        result = completion_gate.verify_acceptance_target_content(str(tmp_path))
+        assert result["passed"] is False
+        assert result["reason_code"] == "GATE_CONFIGURATION_FAILURE"
+        assert "unreadable" in result["error"], result["error"]
+        assert "utf-8" in result["error"], result["error"]
+        assert "no test class" not in result["error"]
+
 
 # ---------------------------------------------------------------------------
 # acceptance_gate_disposition — content verification integration
@@ -286,6 +300,31 @@ class TestAcceptanceGateDispositionContentVerification:
         assert disposition["status"] == "failed"
         assert disposition["reason_code"] == "GATE_CONFIGURATION_FAILURE"
         assert disposition["content_check"]["passed"] is False
+        assert any("content verification failed" in r for r in disposition["rejection_reasons"])
+
+    def test_unreadable_content_no_success_record(self, tmp_path, monkeypatch):
+        """二進位不可讀內容 → GATE_CONFIGURATION_FAILURE，即使 exit=0 且有完整證據。
+        禁止將不可讀內容的 exit=0 記為產品驗證成功。"""
+        fake_root = tmp_path / "repo"
+        tests_dir = fake_root / "tests"
+        tests_dir.mkdir(parents=True)
+        (tests_dir / "ed6a1a498025c1ec-artifact-success-verification.py").write_bytes(
+            b"\xff\xfe\x80 binary"
+        )
+        task = {
+            "exit_code": 0,
+            "stdout": "finished",
+            "stderr": "",
+            "artifacts": {"data": {"path": str(fake_root / "placeholder.txt")}},
+            "results": [{"id": 1, "answer": "yes", "total_score": 100}],
+            "summary": {"average_score": 100.0},
+            "workspace_root": str(fake_root),
+        }
+        disposition = completion_gate.acceptance_gate_disposition(task)
+        assert disposition["status"] == "failed"
+        assert disposition["reason_code"] == "GATE_CONFIGURATION_FAILURE"
+        assert disposition["content_check"]["passed"] is False
+        assert "unreadable" in disposition["content_check"]["error"]
         assert any("content verification failed" in r for r in disposition["rejection_reasons"])
 
 
