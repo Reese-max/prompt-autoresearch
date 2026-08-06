@@ -128,8 +128,166 @@ class TestVerifyAcceptanceTargetPrecheck:
 
 
 # ---------------------------------------------------------------------------
-# acceptance_gate_disposition
+# verify_acceptance_target_content
 # ---------------------------------------------------------------------------
+
+class TestVerifyAcceptanceTargetContent:
+    """驗收目標內容驗證。"""
+
+    def test_content_check_passes_for_valid_test_file(self):
+        """目標為有效測試檔時，content_check 通過。"""
+        result = completion_gate.verify_acceptance_target_content()
+        assert result["passed"] is True
+        assert result["reason_code"] == ""
+        assert result["error"] == ""
+        assert result["content_summary"] != ""
+
+    def test_content_check_fails_for_missing_file(self, tmp_path):
+        """目標不存在時，content_check 失敗。"""
+        fake_root = tmp_path / "empty_repo"
+        fake_root.mkdir()
+        result = completion_gate.verify_acceptance_target_content(str(fake_root))
+        assert result["passed"] is False
+        assert result["reason_code"] == "GATE_CONFIGURATION_FAILURE"
+        assert "does not exist" in result["error"]
+
+    def test_content_check_fails_for_file_without_test_class(self, tmp_path):
+        """目標檔無測試類別時，content_check 失敗。"""
+        target_dir = tmp_path / "tests"
+        target_dir.mkdir()
+        target = target_dir / "ed6a1a498025c1ec-artifact-success-verification.py"
+        target.write_text("def helper():\n    pass\n")
+        result = completion_gate.verify_acceptance_target_content(str(tmp_path))
+        assert result["passed"] is False
+        assert "no test class" in result["error"]
+
+    def test_content_check_fails_for_file_without_assertions(self, tmp_path):
+        """目標檔無斷言時，content_check 失敗。"""
+        target_dir = tmp_path / "tests"
+        target_dir.mkdir()
+        target = target_dir / "ed6a1a498025c1ec-artifact-success-verification.py"
+        target.write_text("class TestSomething:\n    def test_method(self):\n        pass\n")
+        result = completion_gate.verify_acceptance_target_content(str(tmp_path))
+        assert result["passed"] is False
+        assert "no assertions" in result["error"]
+
+    def test_content_check_fails_for_file_without_function_definitions(self, tmp_path):
+        """目標檔無函式定義時，content_check 失敗。"""
+        target_dir = tmp_path / "tests"
+        target_dir.mkdir()
+        target = target_dir / "ed6a1a498025c1ec-artifact-success-verification.py"
+        target.write_text("class TestSomething:\n    assert True\n")
+        result = completion_gate.verify_acceptance_target_content(str(tmp_path))
+        assert result["passed"] is False
+        assert "no function definitions" in result["error"]
+
+    def test_content_check_passes_for_valid_test_code(self, tmp_path):
+        """目標檔含有效測試代碼時，content_check 通過。"""
+        target_dir = tmp_path / "tests"
+        target_dir.mkdir()
+        target = target_dir / "ed6a1a498025c1ec-artifact-success-verification.py"
+        target.write_text(
+            "class TestExample:\n"
+            "    def test_something(self):\n"
+            "        assert 1 + 1 == 2\n"
+        )
+        result = completion_gate.verify_acceptance_target_content(str(tmp_path))
+        assert result["passed"] is True
+        assert result["content_summary"] != ""
+
+
+# ---------------------------------------------------------------------------
+# acceptance_gate_disposition — content verification integration
+# ---------------------------------------------------------------------------
+
+class TestAcceptanceGateDispositionContentVerification:
+    """acceptance_gate_disposition 結合 precheck 與內容驗證。"""
+
+    def test_exit_zero_with_invalid_content_yields_gate_config_failure(self, tmp_path, monkeypatch):
+        """exit_code=0 但目標檔內容無效時，reason_code 為 GATE_CONFIGURATION_FAILURE。
+        禁止將無效內容的 exit=0 記為產品驗證成功。"""
+        fake_root = tmp_path / "repo"
+        tests_dir = fake_root / "tests"
+        tests_dir.mkdir(parents=True)
+        (tests_dir / "ed6a1a498025c1ec-artifact-success-verification.py").write_text(
+            "# just a comment, no test class or assertions\n"
+        )
+        task = {
+            "exit_code": 0,
+            "stdout": "test output",
+            "stderr": "",
+            "artifacts": {},
+            "results": [{"id": 1, "answer": "some answer", "total_score": 80}],
+            "summary": {"average_score": 80.0},
+            "workspace_root": str(fake_root),
+        }
+        disposition = completion_gate.acceptance_gate_disposition(task)
+        assert disposition["status"] == "failed"
+        assert disposition["reason_code"] == "GATE_CONFIGURATION_FAILURE"
+        assert "content_check" in disposition
+        assert disposition["content_check"]["passed"] is False
+
+    def test_exit_zero_with_valid_content_passes(self):
+        """exit_code=0 且目標檔內容有效時，不產生 GATE_CONFIGURATION_FAILURE。"""
+        task = {
+            "exit_code": 0,
+            "stdout": "",
+            "stderr": "",
+            "artifacts": {"report": {"exists": True, "size": 100}},
+            "results": [{"id": 1, "answer": "answer", "total_score": 80}],
+            "summary": {"average_score": 80.0},
+        }
+        disposition = completion_gate.acceptance_gate_disposition(task)
+        assert disposition["reason_code"] != "GATE_CONFIGURATION_FAILURE"
+        assert disposition["precheck"]["passed"] is True
+        assert disposition["content_check"]["passed"] is True
+
+    def test_missing_target_yields_gate_config_failure_before_content_check(self, tmp_path):
+        """目標不存在時，precheck 失敗優先於 content_check。"""
+        fake_root = tmp_path / "empty_repo"
+        fake_root.mkdir()
+        task = {
+            "exit_code": 0,
+            "stdout": "",
+            "stderr": "",
+            "artifacts": {},
+            "results": [],
+            "summary": {},
+            "workspace_root": str(fake_root),
+        }
+        disposition = completion_gate.acceptance_gate_disposition(task)
+        assert disposition["status"] == "failed"
+        assert disposition["reason_code"] == "GATE_CONFIGURATION_FAILURE"
+        assert disposition["precheck"]["passed"] is False
+        assert disposition["content_check"]["passed"] is False
+
+    def test_invalid_content_no_success_record(self, tmp_path, monkeypatch):
+        """無效內容 → GATE_CONFIGURATION_FAILURE，即使 exit=0 且有完整證據。"""
+        fake_root = tmp_path / "repo"
+        tests_dir = fake_root / "tests"
+        tests_dir.mkdir(parents=True)
+        (tests_dir / "ed6a1a498025c1ec-artifact-success-verification.py").write_text(
+            "# no test class\nx = 1\n"
+        )
+        monkeypatch.setattr(
+            completion_gate, "ACCEPTANCE_TARGET_RELATIVE",
+            "tests/ed6a1a498025c1ec-artifact-success-verification.py",
+        )
+        task = {
+            "exit_code": 0,
+            "stdout": "finished",
+            "stderr": "",
+            "artifacts": {"data": {"path": str(fake_root / "placeholder.txt")}},
+            "results": [{"id": 1, "answer": "yes", "total_score": 100}],
+            "summary": {"average_score": 100.0},
+            "workspace_root": str(fake_root),
+        }
+        disposition = completion_gate.acceptance_gate_disposition(task)
+        assert disposition["status"] == "failed"
+        assert disposition["reason_code"] == "GATE_CONFIGURATION_FAILURE"
+        assert disposition["content_check"]["passed"] is False
+        assert any("content verification failed" in r for r in disposition["rejection_reasons"])
+
 
 class TestAcceptanceGateDisposition:
     """acceptance_gate_disposition 結合 precheck 與完成證據驗證。"""

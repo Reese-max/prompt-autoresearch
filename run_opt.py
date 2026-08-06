@@ -936,7 +936,7 @@ def run_evaluate(prompt_path, question_file, parallel, capture=False, deadline_s
         deadline_seconds = context.get("deadline_seconds")
     deadline_seconds = _candidate_deadline_seconds(deadline_seconds)
 
-    from lib.completion_gate import verify_acceptance_target_precheck
+    from lib.completion_gate import verify_acceptance_target_precheck, verify_acceptance_target_content
     precheck = verify_acceptance_target_precheck()
     if not precheck["passed"]:
         precheck_disposition = {
@@ -961,6 +961,34 @@ def run_evaluate(prompt_path, question_file, parallel, capture=False, deadline_s
         empty_result = subprocess.CompletedProcess([], 4)
         empty_result.candidate_id = candidate_id
         empty_result.precheck_disposition = precheck_disposition
+        return empty_result, None, {}
+
+    content_check = verify_acceptance_target_content()
+    if not content_check["passed"]:
+        content_disposition = {
+            "status": "failed",
+            "reason_code": "GATE_CONFIGURATION_FAILURE",
+            "rejection_reason": (
+                f"acceptance target content verification failed: "
+                f"requested={content_check['requested_path']!r}, "
+                f"resolved={content_check['resolved_path']!r}, "
+                f"error={content_check['error']!r}"
+            ),
+            "rejection_reasons": [
+                f"gate-configuration failure: content verification failed, "
+                f"requested={content_check['requested_path']!r}, "
+                f"resolved={content_check['resolved_path']!r}, error={content_check['error']!r}"
+            ],
+            "missing_evidence_types": ["acceptance_target_content"],
+            "evidence_manifest": [],
+            "evidence_errors": [content_check["error"]],
+            "evidence_types": [],
+            "precheck": precheck,
+            "content_check": content_check,
+        }
+        empty_result = subprocess.CompletedProcess([], 4)
+        empty_result.candidate_id = candidate_id
+        empty_result.precheck_disposition = content_disposition
         return empty_result, None, {}
 
     attempt_id = uuid.uuid4().hex

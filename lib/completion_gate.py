@@ -380,6 +380,74 @@ def verify_acceptance_target_precheck(workspace_root=None):
     }
 
 
+def verify_acceptance_target_content(workspace_root=None):
+    """驗證驗收目標檔的內容是否符合預期（含有意義性的測試代碼）。
+
+    回傳 dict：
+    - passed: bool
+    - requested_path: 相對路徑
+    - resolved_path: 實際路徑
+    - error: 錯誤診斷（passed=True 時為空）
+    - reason_code: gate-configuration failure 時為 "GATE_CONFIGURATION_FAILURE"
+    - content_summary: 內容摘要（通過時）
+    """
+    requested, resolved, error = resolve_acceptance_target(workspace_root)
+    if error:
+        return {
+            "passed": False,
+            "requested_path": requested,
+            "resolved_path": resolved,
+            "error": error,
+            "reason_code": "GATE_CONFIGURATION_FAILURE",
+            "content_summary": "",
+        }
+
+    try:
+        with open(resolved, "r", encoding="utf-8", errors="replace") as fh:
+            content = fh.read()
+    except OSError as exc:
+        return {
+            "passed": False,
+            "requested_path": requested,
+            "resolved_path": resolved,
+            "error": f"content unreadable: {exc}",
+            "reason_code": "GATE_CONFIGURATION_FAILURE",
+            "content_summary": "",
+        }
+
+    has_test_class = "class " in content and ("Test" in content or "test_" in content)
+    has_assert = "assert " in content
+    has_def = "def " in content
+    meaningful = has_test_class and has_assert and has_def
+
+    if not meaningful:
+        parts = []
+        if not has_test_class:
+            parts.append("no test class")
+        if not has_assert:
+            parts.append("no assertions")
+        if not has_def:
+            parts.append("no function definitions")
+        error_msg = f"content does not meet expectations: {', '.join(parts)}"
+        return {
+            "passed": False,
+            "requested_path": requested,
+            "resolved_path": resolved,
+            "error": error_msg,
+            "reason_code": "GATE_CONFIGURATION_FAILURE",
+            "content_summary": "",
+        }
+
+    return {
+        "passed": True,
+        "requested_path": requested,
+        "resolved_path": resolved,
+        "error": "",
+        "reason_code": "",
+        "content_summary": f"test_class={has_test_class}, assert={has_assert}, def={has_def}",
+    }
+
+
 def _has_meaningful_result(result: dict) -> bool:
     """檢查單一結果是否含有意義性內容（answer 或 total_score > 0）。"""
     if not isinstance(result, dict):
@@ -500,14 +568,16 @@ def completion_disposition(task_result):
 
 
 def acceptance_gate_disposition(task_result, workspace_root=None):
-    """驗收閘門專用完成處置 — 結合 precheck 與一般完成證據驗證。
+    """驗收閘門專用完成處置 — 結合 precheck、內容驗證與一般完成證據驗證。
 
     在啟動 pytest 前驗證目標檔存在且可讀；若目標不存在、解析到其他舊測試或
     檔案不可讀，將該次驗收標為 GATE_CONFIGURATION_FAILURE，持久化
     requested/resolved path 與具體診斷，禁止把 pytest exit=4 或零收集誤記為
     產品驗證失敗或成功。
 
-    回傳 dict 與 completion_disposition 相同，額外包含 precheck 欄位。
+    成功狀態僅在產物存在、可讀且內容符合預期的驗證全部通過後才設定。
+
+    回傳 dict 與 completion_disposition 相同，額外包含 precheck 與 content_check 欄位。
     """
     if isinstance(task_result, dict):
         ws = workspace_root or task_result.get("workspace_root") or task_result.get("repo_root")
@@ -515,6 +585,7 @@ def acceptance_gate_disposition(task_result, workspace_root=None):
         ws = workspace_root or getattr(task_result, "workspace_root", None)
 
     precheck = verify_acceptance_target_precheck(ws)
+    content_check = verify_acceptance_target_content(ws)
     disposition = completion_disposition(task_result)
 
     if not precheck["passed"]:
@@ -533,8 +604,26 @@ def acceptance_gate_disposition(task_result, workspace_root=None):
             ],
             "missing_evidence_types": ["acceptance_target"],
         })
+    elif not content_check["passed"]:
+        disposition.update({
+            "status": "failed",
+            "reason_code": "GATE_CONFIGURATION_FAILURE",
+            "rejection_reason": (
+                f"acceptance target content verification failed: "
+                f"requested={content_check['requested_path']!r}, "
+                f"resolved={content_check['resolved_path']!r}, "
+                f"error={content_check['error']!r}"
+            ),
+            "rejection_reasons": [
+                f"gate-configuration failure: content verification failed, "
+                f"requested={content_check['requested_path']!r}, "
+                f"resolved={content_check['resolved_path']!r}, error={content_check['error']!r}"
+            ],
+            "missing_evidence_types": ["acceptance_target_content"],
+        })
 
     disposition["precheck"] = precheck
+    disposition["content_check"] = content_check
     return disposition
 
 
