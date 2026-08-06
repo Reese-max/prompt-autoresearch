@@ -329,6 +329,13 @@ def persist_run_failure(run_dir, failure):
 
 ACCEPTANCE_TARGET_RELATIVE = "tests/ed6a1a498025c1ec-artifact-success-verification.py"
 
+ACCEPTANCE_TARGET_EXPECTED_CLASSES = frozenset({
+    "TestResolveAcceptanceTarget",
+    "TestVerifyAcceptanceTargetPrecheck",
+    "TestVerifyAcceptanceTargetContent",
+    "TestAcceptanceGateDisposition",
+})
+
 
 def resolve_acceptance_target(workspace_root=None):
     """解析驗收目標路徑，回傳 (requested_path, resolved_path, error)。
@@ -447,13 +454,39 @@ def verify_acceptance_target_content(workspace_root=None):
             "content_summary": "",
         }
 
+    found_classes = set()
+    for line in content.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("class ") and ":" in stripped:
+            class_name = stripped.split(":", 1)[0].split("class ", 1)[1].strip()
+            if class_name in ACCEPTANCE_TARGET_EXPECTED_CLASSES:
+                found_classes.add(class_name)
+
+    missing_classes = ACCEPTANCE_TARGET_EXPECTED_CLASSES - found_classes
+    if missing_classes:
+        error_msg = (
+            f"content does not meet expectations: "
+            f"missing expected test classes: {', '.join(sorted(missing_classes))}"
+        )
+        return {
+            "passed": False,
+            "requested_path": requested,
+            "resolved_path": resolved,
+            "error": error_msg,
+            "reason_code": "GATE_CONFIGURATION_FAILURE",
+            "content_summary": "",
+        }
+
     return {
         "passed": True,
         "requested_path": requested,
         "resolved_path": resolved,
         "error": "",
         "reason_code": "",
-        "content_summary": f"test_class={has_test_class}, assert={has_assert}, def={has_def}",
+        "content_summary": (
+            f"test_class={has_test_class}, assert={has_assert}, def={has_def}, "
+            f"expected_classes={len(found_classes)}/{len(ACCEPTANCE_TARGET_EXPECTED_CLASSES)}"
+        ),
     }
 
 

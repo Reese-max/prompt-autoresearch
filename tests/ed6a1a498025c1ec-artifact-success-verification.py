@@ -181,8 +181,9 @@ class TestVerifyAcceptanceTargetContent:
         assert result["passed"] is False
         assert "no function definitions" in result["error"]
 
-    def test_content_check_passes_for_valid_test_code(self, tmp_path):
-        """目標檔含有效測試代碼時，content_check 通過。"""
+    def test_content_check_fails_for_valid_test_code_wrong_classes(self, tmp_path):
+        """目標檔含有效測試代碼但缺少預期類別時，content_check 失敗。
+        確認不只檢查結構，也驗證內容符合預期。"""
         target_dir = tmp_path / "tests"
         target_dir.mkdir()
         target = target_dir / "ed6a1a498025c1ec-artifact-success-verification.py"
@@ -192,8 +193,9 @@ class TestVerifyAcceptanceTargetContent:
             "        assert 1 + 1 == 2\n"
         )
         result = completion_gate.verify_acceptance_target_content(str(tmp_path))
-        assert result["passed"] is True
-        assert result["content_summary"] != ""
+        assert result["passed"] is False
+        assert result["reason_code"] == "GATE_CONFIGURATION_FAILURE"
+        assert "missing expected test classes" in result["error"]
 
     def test_content_check_fails_for_binary_unreadable_file(self, tmp_path):
         """目標檔為非 UTF-8 二進位內容（內容無法讀取為文字）時，
@@ -208,6 +210,57 @@ class TestVerifyAcceptanceTargetContent:
         assert "unreadable" in result["error"], result["error"]
         assert "utf-8" in result["error"], result["error"]
         assert "no test class" not in result["error"]
+
+    def test_content_check_fails_for_wrong_test_class_names(self, tmp_path):
+        """目標檔有 test class、assert 與 def，但類別名稱不符合預期時，
+        content_check 失敗。確認不只檢查結構，也驗證內容符合預期。"""
+        target_dir = tmp_path / "tests"
+        target_dir.mkdir()
+        target = target_dir / "ed6a1a498025c1ec-artifact-success-verification.py"
+        target.write_text(
+            "class TestSomethingElse:\n"
+            "    def test_method(self):\n"
+            "        assert True\n"
+        )
+        result = completion_gate.verify_acceptance_target_content(str(tmp_path))
+        assert result["passed"] is False
+        assert result["reason_code"] == "GATE_CONFIGURATION_FAILURE"
+        assert "missing expected test classes" in result["error"]
+
+    def test_content_check_fails_for_partial_expected_classes(self, tmp_path):
+        """目標檔含有部分預期類別但缺漏其餘時，content_check 失敗。"""
+        target_dir = tmp_path / "tests"
+        target_dir.mkdir()
+        target = target_dir / "ed6a1a498025c1ec-artifact-success-verification.py"
+        target.write_text(
+            "class TestResolveAcceptanceTarget:\n"
+            "    def test_a(self):\n"
+            "        assert True\n"
+            "class TestSomethingElse:\n"
+            "    def test_b(self):\n"
+            "        assert True\n"
+        )
+        result = completion_gate.verify_acceptance_target_content(str(tmp_path))
+        assert result["passed"] is False
+        assert result["reason_code"] == "GATE_CONFIGURATION_FAILURE"
+        assert "missing expected test classes" in result["error"]
+        assert "TestVerifyAcceptanceTargetPrecheck" in result["error"]
+
+    def test_content_check_passes_with_all_expected_classes(self, tmp_path):
+        """目標檔含所有預期類別時，content_check 通過。"""
+        target_dir = tmp_path / "tests"
+        target_dir.mkdir()
+        target = target_dir / "ed6a1a498025c1ec-artifact-success-verification.py"
+        lines = []
+        for cls in completion_gate.ACCEPTANCE_TARGET_EXPECTED_CLASSES:
+            lines.append(f"class {cls}:")
+            lines.append("    def test_something(self):")
+            lines.append("        assert True")
+            lines.append("")
+        target.write_text("\n".join(lines))
+        result = completion_gate.verify_acceptance_target_content(str(tmp_path))
+        assert result["passed"] is True
+        assert "expected_classes=4/4" in result["content_summary"]
 
 
 # ---------------------------------------------------------------------------
@@ -255,6 +308,32 @@ class TestAcceptanceGateDispositionContentVerification:
         assert disposition["reason_code"] != "GATE_CONFIGURATION_FAILURE"
         assert disposition["precheck"]["passed"] is True
         assert disposition["content_check"]["passed"] is True
+
+    def test_exit_zero_with_wrong_class_names_yields_gate_config_failure(self, tmp_path):
+        """exit_code=0 但目標檔缺少預期測試類別時，GATE_CONFIGURATION_FAILURE。
+        確認不只檢查結構，也驗證內容符合預期。"""
+        fake_root = tmp_path / "repo"
+        tests_dir = fake_root / "tests"
+        tests_dir.mkdir(parents=True)
+        (tests_dir / "ed6a1a498025c1ec-artifact-success-verification.py").write_text(
+            "class TestSomethingElse:\n"
+            "    def test_method(self):\n"
+            "        assert True\n"
+        )
+        task = {
+            "exit_code": 0,
+            "stdout": "test output",
+            "stderr": "",
+            "artifacts": {},
+            "results": [{"id": 1, "answer": "some answer", "total_score": 80}],
+            "summary": {"average_score": 80.0},
+            "workspace_root": str(fake_root),
+        }
+        disposition = completion_gate.acceptance_gate_disposition(task)
+        assert disposition["status"] == "failed"
+        assert disposition["reason_code"] == "GATE_CONFIGURATION_FAILURE"
+        assert disposition["content_check"]["passed"] is False
+        assert "missing expected test classes" in disposition["content_check"]["error"]
 
     def test_missing_target_yields_gate_config_failure_before_content_check(self, tmp_path):
         """目標不存在時，precheck 失敗優先於 content_check。"""
