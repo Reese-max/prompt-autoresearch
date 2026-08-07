@@ -154,6 +154,239 @@ def _send_message(settings, text):
     return payload
 
 
+def _fmt_number(value):
+    try:
+        return f"{float(value):.2f}"
+    except (TypeError, ValueError):
+        return "n/a"
+
+
+def _fmt_score(entry):
+    if isinstance(entry, dict):
+        return _fmt_number(entry.get("score"))
+    return _fmt_number(entry)
+
+
+def build_conclusion_message(structured, report_path=None):
+    """把結構化研究結論格式化成可讀的 Telegram 通知訊息。
+
+    內容包含勝出候選、品質比較摘要、證據路徑與採用建議。
+    """
+    decision = structured.get("decision") or {}
+    winner = structured.get("winner") or {}
+    quality_ranking = structured.get("quality_ranking") or {}
+    comparison = structured.get("candidate_comparison") or []
+    evidence_files = structured.get("evidence_files") or {}
+    reproduction = structured.get("reproduction") or {}
+    prompt = winner.get("prompt") or {}
+    is_valid = decision.get("status") == "valid"
+
+    lines = []
+    lines.append("Prompt AutoResearch 研究結論")
+    lines.append(f"判定：{decision.get('status', 'inconclusive')}（{decision.get('code', 'n/a')}）")
+
+    lines.append("")
+    lines.append("== 勝出候選 ==")
+    if is_valid and winner.get("candidate_id"):
+        lines.append(f"候選 ID：{winner.get('candidate_id')}")
+        prompt_path = prompt.get("path") or prompt.get("prompt_path") or ""
+        if prompt_path:
+            lines.append(f"勝出候選路徑：{str(prompt_path).replace(chr(92), '/')}")
+        scores = winner.get("scores") or {}
+        dev = scores.get("dev")
+        holdout = scores.get("holdout")
+        if dev is not None or holdout is not None:
+            lines.append("勝出評分（同基準）：")
+            if dev is not None:
+                lines.append(f"  dev：{_fmt_score(dev)}")
+            if holdout is not None:
+                lines.append(f"  holdout：{_fmt_score(holdout)}")
+    else:
+        reason = decision.get("reason") or "證據不完整，拒絕選優"
+        lines.append("無（證據不完整，未產生勝出候選）")
+        if reason:
+            lines.append(f"原因：{reason}")
+
+    lines.append("")
+    lines.append("### 品質比較摘要")
+    eligible = quality_ranking.get("eligible_candidate_ids") or []
+    excluded = quality_ranking.get("excluded_candidate_ids") or []
+    best_status = quality_ranking.get("best_status", "n/a")
+    best_scope = quality_ranking.get("best_scope", "n/a")
+    lines.append(f"最佳狀態：{best_status}；生效範圍：{best_scope or 'none'}")
+    lines.append(f"可比對候選數：{len(eligible)}；排除候選數：{len(excluded)}")
+    rows = []
+    for idx, row in enumerate(comparison, 1):
+        bid = row.get("candidate_id")
+        path = row.get("path") or ""
+        decision_label = row.get("decision") or "PENDING"
+        eligible = bool(row.get("quality_eligible"))
+        scores = row.get("scores") or {}
+        dev = _fmt_number(((scores.get("dev") or {}).get("score")))
+        holdout = _fmt_number(((scores.get("holdout") or {}).get("score")))
+        rows.append(
+            f"  {idx}. {decision_label}（可比{'是' if eligible else '否'}）"
+            f" dev {dev} / holdout {holdout}：{path or bid}"
+        )
+    if rows:
+        lines.extend(rows[:12])
+        if len(rows) > 12:
+            lines.append(f"  …（另有 {len(rows) - 12} 列省略）")
+
+    lines.append("")
+    lines.append("### 證據路徑")
+    evidence_keys = [
+        ("baseline_meta", "基準 meta"),
+        ("champions_dir", "類型冠軍"),
+        ("candidates_dir", "候選評測"),
+        ("evolution_log", "演化紀錄"),
+        ("research_workspace", "研究工作區"),
+    ]
+    found = False
+    for key, label in evidence_keys:
+        value = evidence_files.get(key) or ""
+        if value:
+            lines.append(f"- {label}：{str(value).replace(chr(92), '/')}")
+            found = True
+    if report_path:
+        lines.append(f"- 研究結論報告：{str(report_path).replace(chr(92), '/')}")
+        found = True
+    if not found:
+        lines.append("- 無可回報的證據路徑")
+
+    lines.append("")
+    lines.append("### 採用建議")
+    if is_valid and winner.get("candidate_id"):
+        lines.append("建議採用勝出的候選 prompt 作為基準，並產出最佳版本報告。")
+        reproduction_settings = reproduction.get("settings") or {}
+        winner_input = reproduction_settings.get("winner_input") or {}
+        winner_path = winner_input.get("prompt_path") or prompt.get("path") or ""
+        if winner_path:
+            lines.append(f"可採用輸入：{str(winner_path).replace(chr(92), '/')}")
+    else:
+        lines.append("暫不採用：證據不足或研究執行不可交付，需先補齊證據。")
+        rerun_commands = reproduction.get("rerun_commands") or []
+        if rerun_commands:
+            lines.append("可重跑命令：")
+            for cmd in rerun_commands[:3]:
+                if isinstance(cmd, str):
+                    lines.append(f"  - {cmd}")
+
+    return "\n".join(lines)
+
+
+def _parse_message_id(payload):
+    """自 Telegram payload 取回 message_id；不完整（ok=false 或無 message_id）時回傳 None。"""
+    if not isinstance(payload, dict) or not payload.get("ok"):
+        return None
+    result = payload.get("result")
+    if not isinstance(result, dict):
+        return None
+    message_id = result.get("message_id")
+    if message_id is None:
+        return None
+    return message_id
+
+
+def send_research_conclusion(structured, *, settings=None, report_path=None, failure_path=None):
+    """自研究結論交付事件建立 Telegram 請求並送達。
+
+    只有在 Telegram API 回傳 ok=true 且含有效 result.message_id 時才回傳 delivered。
+    失敗時回傳 failed 並附可分類錯誤；暫時性失敗可重試（但本函式不做自動重試）。
+    """
+    settings = settings or get_telegram_settings()
+    notification_id = hashlib.sha256(
+        ("telegram-conclusion\0" + (report_path or "")
+         + "\0" + json.dumps(structured, ensure_ascii=False, sort_keys=True)).encode("utf-8")
+    ).hexdigest()
+    attempt_id = uuid.uuid4().hex
+    text = build_conclusion_message(structured, report_path)
+
+    if not settings.get("enabled"):
+        error = "Telegram 通知已停用"
+        record = _failure_record(notification_id, [text], report_path, 0, 1, error, attempt_id, attempt_id)
+        _persist_failure_safely(record, failure_path)
+        return {
+            "notification_id": notification_id,
+            "attempt_id": attempt_id,
+            "original_attempt_id": attempt_id,
+            "channel": "telegram",
+            "status": "failed",
+            "delivered": False,
+            "error": error,
+            "error_code": record["error_code"],
+            "error_class": "blocking",
+            "retryable": False,
+        }
+
+    if not settings.get("bot_token") or not settings.get("chat_id"):
+        error = "Telegram 設定不完整：需要 bot_token 與 chat_id"
+        record = _failure_record(notification_id, [text], report_path, 0, 1, error, attempt_id, attempt_id)
+        _persist_failure_safely(record, failure_path)
+        return {
+            "notification_id": notification_id,
+            "attempt_id": attempt_id,
+            "original_attempt_id": attempt_id,
+            "channel": "telegram",
+            "status": "failed",
+            "delivered": False,
+            "error": error,
+            "error_code": record["error_code"],
+            "error_class": "blocking",
+            "retryable": False,
+        }
+
+    try:
+        payload = _send_message(settings, text)
+    except Exception as exc:
+        record = _failure_record(notification_id, [text], report_path, 0, 1, exc, attempt_id, attempt_id)
+        _persist_failure_safely(record, failure_path)
+        return {
+            "notification_id": notification_id,
+            "attempt_id": attempt_id,
+            "original_attempt_id": attempt_id,
+            "channel": "telegram",
+            "status": "failed",
+            "delivered": False,
+            "error": str(exc),
+            "error_code": record["error_code"],
+            "error_class": record["error_class"],
+            "retryable": record["retryable"],
+        }
+
+    message_id = _parse_message_id(payload)
+    if message_id is None:
+        error = "Telegram 回應缺少有效 result.message_id"
+        record = _failure_record(notification_id, [text], report_path, 0, 1, error, attempt_id, attempt_id)
+        record["error_code"] = "invalid_response"
+        record["error_class"] = "temporary"
+        record["retryable"] = True
+        _persist_failure_safely(record, failure_path)
+        return {
+            "notification_id": notification_id,
+            "attempt_id": attempt_id,
+            "original_attempt_id": attempt_id,
+            "channel": "telegram",
+            "status": "failed",
+            "delivered": False,
+            "error": error,
+            "error_code": "invalid_response",
+            "error_class": "temporary",
+            "retryable": True,
+            "payload": payload,
+        }
+
+    return {
+        "notification_id": notification_id,
+        "attempt_id": attempt_id,
+        "original_attempt_id": attempt_id,
+        "channel": "telegram",
+        "status": "delivered",
+        "delivered": True,
+        "message_id": message_id,
+    }
+
+
 def classify_error(error):
     """分類錯誤為 temporary（可重試）或 blocking（阻塞）。"""
     error_str = str(error).lower()
