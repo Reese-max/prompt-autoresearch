@@ -2705,13 +2705,19 @@ def main():
             f.write("\n")
 
     if not args.json:
-        delivery = send_report_to_telegram(
-            report,
-            report_path=report_path,
-            failure_path=os.path.join(ROOT, "output", "delivery_failures.jsonl"),
+        deliverable_allowed = bool(
+            (structured.get("execution_identity") or {}).get("deliverable_allowed", True)
         )
-        if delivery["status"] == "failed":
-            print("[通知失敗] Telegram 未確認收到結論；失敗已持久化，可重試。")
+        if not deliverable_allowed:
+            print("[通知跳過] 研究結論不可交付（INCOMPLETE_EVIDENCE），未發送通知。")
+        else:
+            delivery = send_report_to_telegram(
+                report,
+                report_path=report_path,
+                failure_path=os.path.join(ROOT, "output", "delivery_failures.jsonl"),
+            )
+            if delivery["status"] == "failed":
+                print("[通知失敗] Telegram 未確認收到結論；失敗已持久化，可重試。")
     if args.validate_schema and not structured["schema_validation"]["valid"]:
         return 1
     return 0
