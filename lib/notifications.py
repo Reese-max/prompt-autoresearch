@@ -4,6 +4,7 @@ import hashlib
 import json
 import os
 import time
+import uuid
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
@@ -15,6 +16,22 @@ from lib.io import append_jsonl, read_jsonl
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 FAILURES_PATH = os.path.join(ROOT, "output", "delivery_failures.jsonl")
 MAX_MESSAGE_LENGTH = 3900
+DEFAULT_MAX_RETRIES = 3
+DEFAULT_BACKOFF_BASE = 2
+
+BLOCKING_ERROR_CODES = {
+    "missing_settings",
+    "auth_failed",
+    "forbidden",
+    "disabled",
+}
+TEMPORARY_ERROR_CODES = {
+    "network_error",
+    "rate_limited",
+    "server_error",
+    "timeout",
+    "invalid_response",
+}
 
 
 def get_telegram_settings():
@@ -137,12 +154,44 @@ def _send_message(settings, text):
     return payload
 
 
-def _failure_record(notification_id, messages, report_path, next_index, attempts, error):
+def classify_error(error):
+    """分類錯誤為 temporary（可重試）或 blocking（阻塞）。"""
+    error_str = str(error).lower()
+    if "設定不完整" in error_str or "需要 bot_token" in error_str:
+        return "missing_settings", "blocking"
+    if "disabled" in error_str or "停用" in error_str:
+        return "disabled", "blocking"
+    if "401" in error_str or "unauthorized" in error_str:
+        return "auth_failed", "blocking"
+    if "403" in error_str or "forbidden" in error_str:
+        return "forbidden", "blocking"
+    if "429" in error_str or "rate limit" in error_str or "too many" in error_str:
+        return "rate_limited", "temporary"
+    if "timeout" in error_str or "timed out" in error_str:
+        return "timeout", "temporary"
+    if "500" in error_str or "502" in error_str or "503" in error_str:
+        return "server_error", "temporary"
+    if "ssl" in error_str or "certificate" in error_str:
+        return "network_error", "temporary"
+    if "connection" in error_str or "refused" in error_str or "reset" in error_str:
+        return "network_error", "temporary"
+    if "json" in error_str or "invalid" in error_str or "decode" in error_str:
+        return "invalid_response", "temporary"
+    return "network_error", "temporary"
+
+
+def _failure_record(notification_id, messages, report_path, next_index, attempts, error, attempt_id=None, original_attempt_id=None):
+    error_code, error_class = classify_error(error)
+    retryable = error_class == "temporary"
     return {
         "notification_id": notification_id,
+        "attempt_id": attempt_id or uuid.uuid4().hex,
+        "original_attempt_id": original_attempt_id or uuid.uuid4().hex,
         "channel": "telegram",
         "status": "failed",
-        "retryable": True,
+        "retryable": retryable,
+        "error_code": error_code,
+        "error_class": error_class,
         "attempts": attempts,
         "next_message_index": next_index,
         "messages": messages,
@@ -171,49 +220,82 @@ def send_report_to_telegram(report, report_path=None, settings=None, failure_pat
     notification_id = hashlib.sha256(
         ("telegram\0" + (report_path or "") + "\0" + report).encode("utf-8")
     ).hexdigest()
+    attempt_id = uuid.uuid4().hex
+    original_attempt_id = attempt_id
 
     if not settings.get("enabled"):
+        error = "Telegram 通知已停用"
+        record = _failure_record(notification_id, messages, report_path, 0, 1, error, attempt_id, original_attempt_id)
+        persistence_error = _persist_failure_safely(record, failure_path)
         return {
             "notification_id": notification_id,
-            "status": "skipped",
+            "attempt_id": attempt_id,
+            "original_attempt_id": original_attempt_id,
+            "status": "failed",
             "delivered": False,
-            "reason": "telegram_disabled",
+            "error": error + persistence_error,
+            "error_code": record["error_code"],
+            "error_class": "blocking",
+            "retryable": False,
         }
 
     if not settings.get("bot_token") or not settings.get("chat_id"):
         error = "Telegram 設定不完整：需要 bot_token 與 chat_id"
-        record = _failure_record(notification_id, messages, report_path, 0, 1, error)
+        record = _failure_record(notification_id, messages, report_path, 0, 1, error, attempt_id, original_attempt_id)
         persistence_error = _persist_failure_safely(record, failure_path)
         return {
             "notification_id": notification_id,
+            "attempt_id": attempt_id,
+            "original_attempt_id": original_attempt_id,
             "status": "failed",
             "delivered": False,
             "error": error + persistence_error,
+            "error_code": record["error_code"],
+            "error_class": "blocking",
+            "retryable": False,
         }
 
     for index, message in enumerate(messages):
         try:
             _send_message(settings, message)
         except Exception as exc:
-            record = _failure_record(notification_id, messages, report_path, index, 1, exc)
+            record = _failure_record(notification_id, messages, report_path, index, 1, exc, attempt_id, original_attempt_id)
             persistence_error = _persist_failure_safely(record, failure_path)
             return {
                 "notification_id": notification_id,
+                "attempt_id": attempt_id,
+                "original_attempt_id": original_attempt_id,
                 "status": "failed",
                 "delivered": False,
                 "delivered_messages": index,
                 "error": str(exc) + persistence_error,
+                "error_code": record["error_code"],
+                "error_class": record["error_class"],
+                "retryable": record["retryable"],
             }
 
     return {
         "notification_id": notification_id,
+        "attempt_id": attempt_id,
+        "original_attempt_id": original_attempt_id,
         "status": "delivered",
         "delivered": True,
         "message_count": len(messages),
     }
 
 
-def retry_failed_deliveries(failure_path=None, settings=None):
+def build_resend_command(notification_id, failure_path=None):
+    """產生可執行的重送命令。"""
+    path = failure_path or FAILURES_PATH
+    return (
+        f"python -c \""
+        f"from lib.notifications import retry_failed_deliveries; "
+        f"retry_failed_deliveries(failure_path='{path}')"
+        f"\""
+    )
+
+
+def retry_failed_deliveries(failure_path=None, settings=None, max_retries=None):
     """重試尚未完整送出的失敗記錄，只送出尚未成功的訊息段。"""
     path = failure_path or FAILURES_PATH
     if not os.path.exists(path):
@@ -230,14 +312,54 @@ def retry_failed_deliveries(failure_path=None, settings=None):
             latest[notification_id] = record
 
     settings = settings or get_telegram_settings()
+    retry_limit = max_retries or get("notifications", "max_retries", DEFAULT_MAX_RETRIES)
     results = []
     for notification_id, record in latest.items():
-        if record.get("status") != "failed" or not record.get("retryable"):
+        if record.get("status") != "failed":
             continue
+        if not record.get("retryable", True):
+            error_class = record.get("error_class", "")
+            error_code = record.get("error_code", "")
+            if error_class == "blocking" or error_code in BLOCKING_ERROR_CODES:
+                resend_cmd = build_resend_command(notification_id, path)
+                results.append({
+                    "notification_id": notification_id,
+                    "status": "blocked",
+                    "retryable": False,
+                    "error_code": error_code,
+                    "error_class": "blocking",
+                    "error": record.get("error", ""),
+                    "resend_command": resend_cmd,
+                    "updated_at": time.strftime("%Y-%m-%dT%H:%M:%S"),
+                })
+                continue
+
+        attempts = int(record.get("attempts", 0))
+        if attempts >= retry_limit:
+            resend_cmd = build_resend_command(notification_id, path)
+            results.append({
+                "notification_id": notification_id,
+                "status": "retry_exhausted",
+                "retryable": False,
+                "attempts": attempts,
+                "max_retries": retry_limit,
+                "error": record.get("error", ""),
+                "error_code": record.get("error_code", ""),
+                "error_class": record.get("error_class", ""),
+                "resend_command": resend_cmd,
+                "updated_at": time.strftime("%Y-%m-%dT%H:%M:%S"),
+            })
+            continue
+
         messages = record.get("messages") or []
         next_index = int(record.get("next_message_index", 0))
-        attempts = int(record.get("attempts", 0)) + 1
+        new_attempt_id = uuid.uuid4().hex
+        original_attempt_id = record.get("original_attempt_id") or record.get("attempt_id", new_attempt_id)
         error = None
+
+        backoff_seconds = DEFAULT_BACKOFF_BASE ** min(attempts, 5)
+        time.sleep(min(backoff_seconds, 30))
+
         if not settings.get("enabled"):
             error = "Telegram 通知目前停用"
         elif not settings.get("bot_token") or not settings.get("chat_id"):
@@ -253,18 +375,23 @@ def retry_failed_deliveries(failure_path=None, settings=None):
         if error is not None:
             updated = _failure_record(
                 notification_id, messages, record.get("report_path", ""),
-                next_index, attempts, error,
+                next_index, attempts + 1, error, new_attempt_id, original_attempt_id,
             )
+            updated["original_attempt_id"] = original_attempt_id
             _persist_failure_safely(updated, path)
+            resend_cmd = build_resend_command(notification_id, path)
+            updated["resend_command"] = resend_cmd
             results.append(updated)
             continue
 
         delivered = {
             "notification_id": notification_id,
+            "attempt_id": new_attempt_id,
+            "original_attempt_id": original_attempt_id,
             "channel": "telegram",
             "status": "delivered",
             "retryable": False,
-            "attempts": attempts,
+            "attempts": attempts + 1,
             "message_count": len(messages),
             "updated_at": time.strftime("%Y-%m-%dT%H:%M:%S"),
         }
