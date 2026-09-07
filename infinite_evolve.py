@@ -10,6 +10,7 @@ infinite_evolve.py — Prompt AutoResearch 長跑演化控制器。
 """
 import argparse
 import json
+import math
 import os
 import platform
 import subprocess
@@ -207,9 +208,38 @@ def parse_args(argv=None):
     return args
 
 
+def validate_run_limits(args):
+    """Return invalid run-limit messages before any subprocess or provider work."""
+    errors = []
+
+    if args.max_rounds < 1:
+        errors.append("--max-rounds 必須至少為 1")
+    for name in ("smoke_parallel", "dev_parallel", "holdout_parallel"):
+        if getattr(args, name) < 1:
+            errors.append(f"--{name.replace('_', '-')} 必須至少為 1")
+    for name in ("budget_usd", "estimated_cost_per_call"):
+        value = getattr(args, name)
+        if not math.isfinite(value) or value < 0:
+            errors.append(f"--{name.replace('_', '-')} 必須是有限的非負數")
+    if args.budget_usd > 0 and args.estimated_cost_per_call <= 0:
+        errors.append("--budget-usd > 0 時必須同時提供正的 --estimated-cost-per-call")
+    for name in ("no_improve_limit", "same_failure_limit", "rotate_after", "route_every", "retry_after_no_improve"):
+        if getattr(args, name) < 0:
+            errors.append(f"--{name.replace('_', '-')} 不可為負數")
+    for name in ("sleep_seconds", "round_timeout_seconds", "route_timeout_seconds"):
+        if getattr(args, name) < 0:
+            errors.append(f"--{name.replace('_', '-')} 不可為負數")
+    return errors
+
+
 @isolate_research_entrypoint
 def main(argv=None):
     args = parse_args(argv)
+
+    limit_errors = validate_run_limits(args)
+    if limit_errors:
+        print(f"{C_RED}❌ 執行限制無效：{'；'.join(limit_errors)}{C_RESET}")
+        return 2
 
     print(f"{C_PURPLE}============================================================{C_RESET}")
     print("  Prompt AutoResearch — 長跑自動演化")
@@ -220,20 +250,20 @@ def main(argv=None):
         print(f"  budget_usd={args.budget_usd}, estimated_cost_per_call={args.estimated_cost_per_call}")
     print(f"{C_PURPLE}============================================================{C_RESET}")
 
-    preflight = run_cmd(
-        [
-            sys.executable,
-            "scripts/preflight.py",
-            "--require-git",
-            "--smoke-parallel",
-            str(args.smoke_parallel),
-            "--dev-parallel",
-            str(args.dev_parallel),
-            "--holdout-parallel",
-            str(args.holdout_parallel),
-        ],
-        timeout=120,
-    )
+    preflight_cmd = [
+        sys.executable,
+        "scripts/preflight.py",
+        "--require-git",
+        "--smoke-parallel",
+        str(args.smoke_parallel),
+        "--dev-parallel",
+        str(args.dev_parallel),
+        "--holdout-parallel",
+        str(args.holdout_parallel),
+    ]
+    if args.dry_run:
+        preflight_cmd.append("--offline")
+    preflight = run_cmd(preflight_cmd, timeout=120)
     if preflight.returncode != 0:
         print(f"{C_RED}❌ Preflight 未通過，停止。{C_RESET}")
         return preflight.returncode

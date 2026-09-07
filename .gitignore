@@ -2,6 +2,9 @@ __pycache__/
 *.pyc
 .cache/
 .coverage
+htmlcov/
+*.lcov
+.coverage.tmpl
 .venv-*/
 /output/research_git_preflight.json
 /output/research_validation_state.json

@@ -105,6 +105,42 @@ def _common_argv(**overrides):
     return argv
 
 
+def test_dry_run_forwards_offline_preflight_and_skips_evolution(tmp_path, monkeypatch):
+    """dry-run 必須略過 provider key 並在任何演化 round 前結束。"""
+    monkeypatch.chdir(tmp_path)
+    calls = []
+
+    def fake_run_cmd(cmd, timeout=None):
+        calls.append((cmd, timeout))
+        return SimpleNamespace(returncode=0)
+
+    monkeypatch.setattr(infinite_evolve, "run_cmd", fake_run_cmd)
+    rc = infinite_evolve.main(argv=_common_argv(max_rounds=1) + ["--dry-run"])
+
+    assert rc == 0
+    assert len(calls) == 1
+    assert calls[0][0][-1] == "--offline"
+    assert not (tmp_path / "evolution_log.jsonl").exists()
+
+
+def test_budget_requires_cost_estimate_before_preflight(tmp_path, monkeypatch):
+    """指定預算卻沒有單次成本估計時，不得開始任何 subprocess。"""
+    monkeypatch.chdir(tmp_path)
+    calls = []
+    monkeypatch.setattr(
+        infinite_evolve,
+        "run_cmd",
+        lambda cmd, timeout=None: calls.append((cmd, timeout)),
+    )
+
+    rc = infinite_evolve.main(
+        argv=_common_argv(max_rounds=1) + ["--budget-usd", "1"]
+    )
+
+    assert rc == 2
+    assert calls == []
+
+
 # ---------------------------------------------------------------------------
 # Tests — retry → convergence
 # ---------------------------------------------------------------------------
