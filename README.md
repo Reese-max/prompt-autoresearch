@@ -120,3 +120,6 @@ run 路徑是恢復時的交叉檢查，不是新的評估真相。
 沒有 production publish workflow；api/ 和 index.html 是本機工具/UI
 表面，不能視為已部署。任何 provider call、真實 holdout、模型演化和
 部署都不在本機 contract 驗收內。
+
+本 repository 目前沒有 LICENSE 檔；在 owner 明確加入授權前，不要把程式、題庫、
+prompt 或歷史證據宣稱為 MIT 或其他可再散布授權。
