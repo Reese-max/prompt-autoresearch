@@ -141,6 +141,43 @@ def test_budget_requires_cost_estimate_before_preflight(tmp_path, monkeypatch):
     assert calls == []
 
 
+@pytest.mark.parametrize(
+    ("flag", "attribute"),
+    [
+        ("--smoke-parallel", "smoke_parallel"),
+        ("--dev-parallel", "dev_parallel"),
+        ("--holdout-parallel", "holdout_parallel"),
+    ],
+)
+def test_stage_parallel_falls_back_only_when_omitted(flag, attribute):
+    """Only an omitted stage value inherits --parallel; explicit values survive parsing."""
+    omitted = infinite_evolve.parse_args(["--parallel", "7"])
+    assert getattr(omitted, attribute) == 7
+
+    explicit = infinite_evolve.parse_args(["--parallel", "7", flag, "3"])
+    assert getattr(explicit, attribute) == 3
+
+
+@pytest.mark.parametrize("flag", ["--smoke-parallel", "--dev-parallel", "--holdout-parallel"])
+@pytest.mark.parametrize("value", ["0", "-1"])
+def test_invalid_explicit_stage_parallel_rejected_before_preflight(tmp_path, monkeypatch, flag, value):
+    """Zero/negative stage values fail validation before any preflight subprocess."""
+    monkeypatch.chdir(tmp_path)
+    calls = []
+    monkeypatch.setattr(
+        infinite_evolve,
+        "run_cmd",
+        lambda cmd, timeout=None: calls.append((cmd, timeout)),
+    )
+
+    rc = infinite_evolve.main(
+        argv=_common_argv(max_rounds=1) + ["--parallel", "7", flag, value]
+    )
+
+    assert rc == 2
+    assert calls == []
+
+
 # ---------------------------------------------------------------------------
 # Tests — retry → convergence
 # ---------------------------------------------------------------------------

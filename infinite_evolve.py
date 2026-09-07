@@ -202,9 +202,9 @@ def parse_args(argv=None):
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--retry-after-no-improve", type=int, default=3, help="達到 no_improve_limit 後的重試次數；0 表示停用。")
     args = parser.parse_args(argv)
-    args.smoke_parallel = args.smoke_parallel or args.parallel
-    args.dev_parallel = args.dev_parallel or args.parallel
-    args.holdout_parallel = args.holdout_parallel or args.parallel
+    args.smoke_parallel = args.parallel if args.smoke_parallel is None else args.smoke_parallel
+    args.dev_parallel = args.parallel if args.dev_parallel is None else args.dev_parallel
+    args.holdout_parallel = args.parallel if args.holdout_parallel is None else args.holdout_parallel
     return args
 
 
