@@ -232,15 +232,22 @@ def validate_run_limits(args):
     return errors
 
 
-@isolate_research_entrypoint
 def main(argv=None):
+    """Parse and validate CLI limits before entering an isolated worktree."""
     args = parse_args(argv)
-
     limit_errors = validate_run_limits(args)
     if limit_errors:
         print(f"{C_RED}❌ 執行限制無效：{'；'.join(limit_errors)}{C_RESET}")
         return 2
+    return _run_isolated(args)
 
+
+@isolate_research_entrypoint
+def _run_isolated(args):
+    return _run_validated(args)
+
+
+def _run_validated(args):
     print(f"{C_PURPLE}============================================================{C_RESET}")
     print("  Prompt AutoResearch — 長跑自動演化")
     print(f"  max_rounds={args.max_rounds}, smoke={args.smoke_parallel}, dev={args.dev_parallel}, holdout={args.holdout_parallel}")

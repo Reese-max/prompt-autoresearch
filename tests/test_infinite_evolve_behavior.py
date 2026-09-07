@@ -18,6 +18,7 @@ from types import SimpleNamespace
 import pytest
 
 import infinite_evolve
+from scripts import git_reproducibility
 
 
 # ---------------------------------------------------------------------------
@@ -176,6 +177,26 @@ def test_invalid_explicit_stage_parallel_rejected_before_preflight(tmp_path, mon
 
     assert rc == 2
     assert calls == []
+
+
+def test_invalid_stage_rejected_before_isolation_workspace(tmp_path, monkeypatch):
+    """The true CLI isolation wrapper must not run for invalid stage limits."""
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("AUTORESEARCH_ISOLATE_WORKSPACE", "1")
+
+    def unexpected_workspace_creation(*args, **kwargs):
+        pytest.fail("invalid CLI must be rejected before creating a research workspace")
+
+    monkeypatch.setattr(
+        git_reproducibility,
+        "create_research_workspace",
+        unexpected_workspace_creation,
+    )
+    rc = infinite_evolve.main(
+        argv=_common_argv(max_rounds=1) + ["--parallel", "7", "--smoke-parallel", "0"]
+    )
+
+    assert rc == 2
 
 
 # ---------------------------------------------------------------------------
