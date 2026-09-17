@@ -179,29 +179,39 @@ def load_evolution_summary():
 
 
 def load_config():
+    """讀取 config.yaml；任何失敗一律回傳 {} 走 INCOMPLETE_EVIDENCE 型別化結果。"""
     if not os.path.exists(CONFIG_PATH):
         return {}
     try:
         import yaml
-        with open(CONFIG_PATH, "r", encoding="utf-8") as f:
-            return yaml.safe_load(f) or {}
     except ImportError:
-        return _parse_config_simple(CONFIG_PATH)
+        try:
+            return _parse_config_simple(CONFIG_PATH)
+        except Exception:
+            return {}
+    try:
+        with open(CONFIG_PATH, "r", encoding="utf-8") as f:
+            data = yaml.safe_load(f)
     except Exception:
         return {}
+    return data if isinstance(data, dict) else {}
 
 
 def _parse_config_simple(path):
+    """無 PyYAML 時的最佳努力解析器；僅支援扁平 key: value，任何錯誤回傳 {}。"""
     result = {}
-    with open(path, "r", encoding="utf-8") as f:
-        for line in f:
-            stripped = line.strip()
-            if stripped and not stripped.startswith("#") and ":" in stripped:
-                key, _, val = stripped.partition(":")
-                key = key.strip()
-                val = val.strip().strip('"').strip("'")
-                if key and val:
-                    result[key] = val
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            for line in f:
+                stripped = line.strip()
+                if stripped and not stripped.startswith("#") and ":" in stripped:
+                    key, _, val = stripped.partition(":")
+                    key = key.strip()
+                    val = val.strip().strip('"').strip("'")
+                    if key and val:
+                        result[key] = val
+    except OSError:
+        return {}
     return result
 
 
@@ -1158,9 +1168,11 @@ def load_report_schema():
     path = os.path.join(ROOT, SCHEMA_REL_PATH)
     if os.path.isfile(path):
         return load_json(path, {})
+    # 內嵌後備契約：required 必須與 schemas/best_version_evidence_report.schema.json
+    # 的頂層 required 保持一致，避免雙契約漂移。
     return {
         "type": "object",
-        "required": ["schema_version", "report_type", "decision", "winner", "quality", "candidate_comparison", "reproduction", "execution", "evidence", "schema_validation"],
+        "required": ["schema_version", "report_type", "generated_at", "decision", "winner", "quality", "candidate_comparison", "reproduction", "execution", "evidence", "delivery_consistency", "schema_validation"],
     }
 
 
@@ -1217,16 +1229,27 @@ def schema_validation_errors(report, schema=None):
         pass
     else:
         validator = jsonschema.Draft202012Validator(schema)
-        return [
-            "$%s: %s" % (
-                ".".join(str(part) for part in error.absolute_path),
-                error.message,
-            )
-            for error in sorted(
-                validator.iter_errors(report),
-                key=lambda item: list(item.absolute_path),
-            )
-        ]
+        normalized = []
+        for error in sorted(
+            validator.iter_errors(report),
+            key=lambda item: list(item.absolute_path),
+        ):
+            path = ".".join(str(part) for part in error.absolute_path)
+            # required 錯誤把缺失欄位名併入路徑，確保診斷點名缺漏欄位。
+            missing = []
+            if error.validator == "required" and isinstance(error.instance, dict):
+                missing = [
+                    name for name in error.validator_value
+                    if name not in error.instance
+                ]
+            targets = [
+                f"{path}.{name}" if path else name for name in missing
+            ] or [path]
+            for target in targets:
+                normalized.append(
+                    f"$.{target}: {error.message}" if target else f"$: {error.message}"
+                )
+        return normalized
     errors = []
     _validate_schema_fragment(report, schema, "$", errors)
     return errors
