@@ -140,8 +140,10 @@ const FailureTaxonomy = [
 // --- MODEL DEFINITIONS ---
 const ProviderModels = {
     gemini: [
-        { id: 'gemini-1.5-flash', name: 'Gemini 1.5 Flash (快速演化)' },
-        { id: 'gemini-1.5-pro', name: 'Gemini 1.5 Pro (深度邏輯)' }
+        { id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash (高性價比/通用)' },
+        { id: 'gemini-2.5-pro', name: 'Gemini 2.5 Pro (深度推理/複雜任務)' },
+        { id: 'gemini-3.5-flash', name: 'Gemini 3.5 Flash (前沿性能/代理編程)' },
+        { id: 'gemini-3.5-flash-lite', name: 'Gemini 3.5 Flash-Lite (低延遲/大量自動化)' }
     ],
     openai: [
         { id: 'gpt-4o-mini', name: 'GPT-4o Mini (高CP值)' },
