@@ -71,6 +71,11 @@ def main(argv=None):
     parser = argparse.ArgumentParser()
     parser.add_argument("--json", action="store_true")
     parser.add_argument(
+        "--offline",
+        action="store_true",
+        help="離線檢查：不要求 provider key；不會執行模型呼叫。",
+    )
+    parser.add_argument(
         "--require-git",
         action="store_true",
         help="研究執行入口使用：Git 工作區預檢失敗時硬阻塞。",
@@ -99,7 +104,14 @@ def main(argv=None):
             git_preflight.get("blocking_reason") or "Git metadata、repository root 與 HEAD 可解析",
         )
 
-    add("MINIMAX_API_KEY", bool(os.environ.get("MINIMAX_API_KEY")), "環境變數已設定" if os.environ.get("MINIMAX_API_KEY") else "缺少 MINIMAX_API_KEY")
+    if args.offline:
+        add("MINIMAX_API_KEY", True, "offline mode：略過 provider key 檢查")
+    else:
+        add(
+            "MINIMAX_API_KEY",
+            bool(os.environ.get("MINIMAX_API_KEY")),
+            "環境變數已設定" if os.environ.get("MINIMAX_API_KEY") else "缺少 MINIMAX_API_KEY",
+        )
     add("Python version", sys.version_info >= (3, 10), f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}")
 
     for path, expected in EXPECTED_COUNTS.items():
@@ -136,6 +148,7 @@ def main(argv=None):
     passed = not errors
 
     payload = {
+        "offline": args.offline,
         "passed": passed,
         "errors": errors,
         "warnings": warnings,

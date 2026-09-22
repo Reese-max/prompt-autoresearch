@@ -18,6 +18,7 @@ from types import SimpleNamespace
 import pytest
 
 import infinite_evolve
+from scripts import git_reproducibility
 
 
 # ---------------------------------------------------------------------------
@@ -103,6 +104,99 @@ def _common_argv(**overrides):
         flag = "--" + k.replace("_", "-")
         argv.extend([flag, str(v)])
     return argv
+
+
+def test_dry_run_forwards_offline_preflight_and_skips_evolution(tmp_path, monkeypatch):
+    """dry-run 必須略過 provider key 並在任何演化 round 前結束。"""
+    monkeypatch.chdir(tmp_path)
+    calls = []
+
+    def fake_run_cmd(cmd, timeout=None):
+        calls.append((cmd, timeout))
+        return SimpleNamespace(returncode=0)
+
+    monkeypatch.setattr(infinite_evolve, "run_cmd", fake_run_cmd)
+    rc = infinite_evolve.main(argv=_common_argv(max_rounds=1) + ["--dry-run"])
+
+    assert rc == 0
+    assert len(calls) == 1
+    assert calls[0][0][-1] == "--offline"
+    assert not (tmp_path / "evolution_log.jsonl").exists()
+
+
+def test_budget_requires_cost_estimate_before_preflight(tmp_path, monkeypatch):
+    """指定預算卻沒有單次成本估計時，不得開始任何 subprocess。"""
+    monkeypatch.chdir(tmp_path)
+    calls = []
+    monkeypatch.setattr(
+        infinite_evolve,
+        "run_cmd",
+        lambda cmd, timeout=None: calls.append((cmd, timeout)),
+    )
+
+    rc = infinite_evolve.main(
+        argv=_common_argv(max_rounds=1) + ["--budget-usd", "1"]
+    )
+
+    assert rc == 2
+    assert calls == []
+
+
+@pytest.mark.parametrize(
+    ("flag", "attribute"),
+    [
+        ("--smoke-parallel", "smoke_parallel"),
+        ("--dev-parallel", "dev_parallel"),
+        ("--holdout-parallel", "holdout_parallel"),
+    ],
+)
+def test_stage_parallel_falls_back_only_when_omitted(flag, attribute):
+    """Only an omitted stage value inherits --parallel; explicit values survive parsing."""
+    omitted = infinite_evolve.parse_args(["--parallel", "7"])
+    assert getattr(omitted, attribute) == 7
+
+    explicit = infinite_evolve.parse_args(["--parallel", "7", flag, "3"])
+    assert getattr(explicit, attribute) == 3
+
+
+@pytest.mark.parametrize("flag", ["--smoke-parallel", "--dev-parallel", "--holdout-parallel"])
+@pytest.mark.parametrize("value", ["0", "-1"])
+def test_invalid_explicit_stage_parallel_rejected_before_preflight(tmp_path, monkeypatch, flag, value):
+    """Zero/negative stage values fail validation before any preflight subprocess."""
+    monkeypatch.chdir(tmp_path)
+    calls = []
+    monkeypatch.setattr(
+        infinite_evolve,
+        "run_cmd",
+        lambda cmd, timeout=None: calls.append((cmd, timeout)),
+    )
+
+    rc = infinite_evolve.main(
+        argv=_common_argv(max_rounds=1) + ["--parallel", "7", flag, value]
+    )
+
+    assert rc == 2
+    assert calls == []
+
+
+def test_invalid_stage_rejected_before_isolation_workspace(tmp_path, monkeypatch):
+    """The true CLI isolation wrapper must not run for invalid stage limits."""
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("AUTORESEARCH_ISOLATE_WORKSPACE", "1")
+
+    def unexpected_workspace_creation(*args, **kwargs):
+        pytest.fail("invalid CLI must be rejected before creating a research workspace")
+
+    monkeypatch.setattr(
+        git_reproducibility,
+        "create_research_workspace",
+        unexpected_workspace_creation,
+    )
+    rc = infinite_evolve.main(
+        argv=_common_argv(max_rounds=1) + ["--parallel", "7", "--smoke-parallel", "0"]
+    )
+
+    assert rc == 2
 
 
 # ---------------------------------------------------------------------------

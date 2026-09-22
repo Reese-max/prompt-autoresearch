@@ -141,6 +141,19 @@ def test_main_all_pass_json_output(tmp_path, monkeypatch, capsys):
     assert "runs/latest" in names
 
 
+def test_main_offline_passes_without_provider_key(tmp_path, monkeypatch, capsys):
+    build_healthy_env(tmp_path, monkeypatch)
+    monkeypatch.delenv("MINIMAX_API_KEY", raising=False)
+    rc = preflight.main(["--json", "--offline"])
+    payload = json.loads(capsys.readouterr().out)
+    assert rc == 0
+    assert payload["offline"] is True
+    assert payload["passed"] is True
+    key_check = next(c for c in payload["checks"] if c["name"] == "MINIMAX_API_KEY")
+    assert key_check["passed"] is True
+    assert "略過" in key_check["detail"]
+
+
 def test_main_empty_dir_fails(tmp_path, monkeypatch, capsys):
     monkeypatch.chdir(tmp_path)
     monkeypatch.delenv("MINIMAX_API_KEY", raising=False)
