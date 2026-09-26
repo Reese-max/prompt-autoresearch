@@ -233,6 +233,41 @@ def test_schema_drift_diagnostic_format_matches_jsonschema_path(monkeypatch):
     assert "$: root type mismatch" in errors
 
 
+def test_schema_drift_does_not_mislabel_multiple_missing_required_fields(monkeypatch):
+    """同一 required 清單缺漏兩項時，每個錯誤只標示自己的欄位。"""
+
+    class _FakeValidator:
+        def __init__(self, _schema):
+            pass
+
+        def iter_errors(self, _report):
+            return iter([
+                _FakeValidationError(
+                    (), "'decision' is a required property",
+                    validator="required",
+                    validator_value=["decision", "winner"],
+                    instance={},
+                ),
+                _FakeValidationError(
+                    (), "'winner' is a required property",
+                    validator="required",
+                    validator_value=["decision", "winner"],
+                    instance={},
+                ),
+            ])
+
+    monkeypatch.setitem(
+        sys.modules,
+        "jsonschema",
+        types.SimpleNamespace(Draft202012Validator=_FakeValidator),
+    )
+
+    assert bvr.schema_validation_errors({}, schema={"type": "object"}) == [
+        "$.decision: 'decision' is a required property",
+        "$.winner: 'winner' is a required property",
+    ]
+
+
 def test_removing_required_evidence_field_fails_closed(sandbox):
     """移除完整證據的必要欄位 → 型別化 INCOMPLETE_EVIDENCE，不得宣稱最佳。"""
     build_minimal_complete_evidence(sandbox)

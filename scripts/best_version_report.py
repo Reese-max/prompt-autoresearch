@@ -1235,20 +1235,23 @@ def schema_validation_errors(report, schema=None):
             key=lambda item: list(item.absolute_path),
         ):
             path = ".".join(str(part) for part in error.absolute_path)
-            # required 錯誤把缺失欄位名併入路徑，確保診斷點名缺漏欄位。
-            missing = []
+            # 每個 required 錯誤只對應其訊息點名的欄位；validator_value
+            # 列出全部 required 欄位，同時缺漏多項時不能逐項展開。
+            target = path
             if error.validator == "required" and isinstance(error.instance, dict):
-                missing = [
-                    name for name in error.validator_value
-                    if name not in error.instance
-                ]
-            targets = [
-                f"{path}.{name}" if path else name for name in missing
-            ] or [path]
-            for target in targets:
-                normalized.append(
-                    f"$.{target}: {error.message}" if target else f"$: {error.message}"
+                missing_name = next(
+                    (
+                        name for name in error.validator_value
+                        if name not in error.instance
+                        and error.message == f"{name!r} is a required property"
+                    ),
+                    None,
                 )
+                if missing_name is not None:
+                    target = f"{path}.{missing_name}" if path else missing_name
+            normalized.append(
+                f"$.{target}: {error.message}" if target else f"$: {error.message}"
+            )
         return normalized
     errors = []
     _validate_schema_fragment(report, schema, "$", errors)

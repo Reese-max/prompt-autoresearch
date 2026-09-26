@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 import http.server
+import ipaddress
 import socketserver
 import urllib.request
 import urllib.error
@@ -19,6 +20,44 @@ ALLOWED_PROXY_HOSTS = {
     "api.anthropic.com",
     "generativelanguage.googleapis.com",
 }
+
+LOOPBACK_HOSTS = {"127.0.0.1", "localhost"}
+
+
+def local_request_allowed(peer_ip, host_header, origin_header, port):
+    """Only the local UI origin may read data or start work.
+
+    Host validation also prevents DNS rebinding to the loopback listener.
+    Requests without Origin are allowed for local command-line clients.
+    """
+    try:
+        if not ipaddress.ip_address(peer_ip).is_loopback or not host_header:
+            return False
+        host = urlparse("http://" + host_header)
+        if (
+            host.hostname not in LOOPBACK_HOSTS
+            or host.port != port
+            or host.username is not None
+            or host.password is not None
+            or any((host.path, host.params, host.query, host.fragment))
+        ):
+            return False
+        if origin_header is not None:
+            if not origin_header:
+                return False
+            origin = urlparse(origin_header)
+            if (
+                origin.scheme != "http"
+                or origin.hostname != host.hostname
+                or origin.port != port
+                or origin.username is not None
+                or origin.password is not None
+                or any((origin.path, origin.params, origin.query, origin.fragment))
+            ):
+                return False
+        return True
+    except (TypeError, ValueError):
+        return False
 
 def read_text(path, default=""):
     if not os.path.exists(path):
@@ -234,7 +273,7 @@ def build_architecture_snapshot(project_root=None):
             {
                 "name": "Local UI Server",
                 "path": "run_app.py",
-                "role": "服務靜態前端、讀取本機資料、啟動評估/演化 subprocess、提供安全 CORS proxy。",
+                "role": "服務靜態前端、讀取本機資料、啟動評估/演化 subprocess、提供本機同源供應商代理。",
             },
             {
                 "name": "Optimization Engine",
@@ -338,25 +377,39 @@ def build_experiment_report_snapshot(limit=10):
 
 
 class LocalProxyHandler(http.server.SimpleHTTPRequestHandler):
+    def trusted_request(self):
+        return local_request_allowed(
+            self.client_address[0],
+            self.headers.get("Host"),
+            self.headers.get("Origin"),
+            self.server.server_address[1],
+        )
+
+    def reject_untrusted_request(self):
+        if self.trusted_request():
+            return False
+        self.send_json(403, {"error": "local UI origin required"})
+        return True
+
     def send_json(self, status, payload):
         self.send_response(status)
         self.send_header("Content-Type", "application/json; charset=utf-8")
-        self.send_header("Access-Control-Allow-Origin", "*")
         self.end_headers()
-        self.wfile.write(json.dumps(payload, ensure_ascii=False).encode("utf-8"))
+        if self.command != "HEAD":
+            self.wfile.write(json.dumps(payload, ensure_ascii=False).encode("utf-8"))
 
     def send_text(self, status, text, content_type="text/plain; charset=utf-8"):
         self.send_response(status)
         self.send_header("Content-Type", content_type)
-        self.send_header("Access-Control-Allow-Origin", "*")
         self.end_headers()
         self.wfile.write(text.encode("utf-8"))
 
     def do_GET(self):
+        if self.reject_untrusted_request():
+            return
         if self.path == "/favicon.ico":
             self.send_response(200)
             self.send_header("Content-Type", "image/x-icon")
-            self.send_header("Access-Control-Allow-Origin", "*")
             self.end_headers()
             self.wfile.write(b"")
             return
@@ -426,16 +479,24 @@ class LocalProxyHandler(http.server.SimpleHTTPRequestHandler):
             return
         else:
             super().do_GET()
+
+    def do_HEAD(self):
+        if self.reject_untrusted_request():
+            return
+        super().do_HEAD()
+
     def do_OPTIONS(self):
-        self.send_response(200)
-        self.send_header('Access-Control-Allow-Origin', '*')
-        self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
-        self.send_header('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-api-key, anthropic-version, anthropic-dangerously-allow-browser')
+        if self.reject_untrusted_request():
+            return
+        self.send_response(204)
+        self.send_header("Allow", "GET, HEAD, POST, OPTIONS")
         self.end_headers()
 
     def do_POST(self):
+        if self.reject_untrusted_request():
+            return
         if self.path == '/api/run-evolution':
-            print("[CORS Proxy] 正在後台啟動自動化深度演化引擎...")
+            print("[Local Proxy] 正在後台啟動自動化深度演化引擎...")
             try:
                 content_length = int(self.headers.get('Content-Length', '0') or 0)
                 body = self.rfile.read(content_length) if content_length else b"{}"
@@ -463,7 +524,6 @@ class LocalProxyHandler(http.server.SimpleHTTPRequestHandler):
             
             self.send_response(200)
             self.send_header('Content-Type', 'application/json')
-            self.send_header('Access-Control-Allow-Origin', '*')
             self.end_headers()
             self.wfile.write(json.dumps({
                 "status": "started",
@@ -512,7 +572,7 @@ class LocalProxyHandler(http.server.SimpleHTTPRequestHandler):
             headers = req_json['headers']
             body = req_json['body']
             
-            print(f"[CORS Proxy] 正在將請求轉發至: {target_url}")
+            print(f"[Local Proxy] 正在將請求轉發至: {target_url}")
             
             # Perform server-side call to bypass browser CORS
             req = urllib.request.Request(
@@ -529,46 +589,45 @@ class LocalProxyHandler(http.server.SimpleHTTPRequestHandler):
                     
                     self.send_response(res_status)
                     self.send_header('Content-Type', 'application/json')
-                    self.send_header('Access-Control-Allow-Origin', '*')
                     self.end_headers()
                     self.wfile.write(res_body)
             except urllib.error.HTTPError as e:
                 res_body = e.read()
                 self.send_response(e.code)
                 self.send_header('Content-Type', 'application/json')
-                self.send_header('Access-Control-Allow-Origin', '*')
                 self.end_headers()
                 self.wfile.write(res_body)
             except Exception as e:
                 self.send_response(500)
                 self.send_header('Content-Type', 'application/json')
-                self.send_header('Access-Control-Allow-Origin', '*')
                 self.end_headers()
                 self.wfile.write(json.dumps({'error': str(e)}).encode('utf-8'))
         else:
             self.send_response(404)
             self.end_headers()
 
-    def end_headers(self):
-        self.send_header('Access-Control-Allow-Origin', '*')
-        super().end_headers()
+class LocalHTTPServer(socketserver.ThreadingTCPServer):
+    allow_reuse_address = True
+    daemon_threads = True
+
+
+def create_server(port=PORT):
+    return LocalHTTPServer(("127.0.0.1", port), LocalProxyHandler)
+
 
 def main():
     # Change directory to script location
     os.chdir(os.path.dirname(os.path.abspath(__file__)))
 
-    # Allow socket address reuse
-    socketserver.ThreadingTCPServer.allow_reuse_address = True
-
-    with socketserver.ThreadingTCPServer(("", PORT), LocalProxyHandler) as httpd:
+    with create_server() as httpd:
         print(f"==========================================================")
-        print(f"   Prompt AutoResearch v3 本機伺服器與 CORS 代理啟動成功！")
-        print(f"   請在您的瀏覽器中開啟： http://localhost:{PORT}")
+        print(f"   Prompt AutoResearch v3 本機伺服器與代理啟動成功！")
+        print(f"   請在您的瀏覽器中開啟： http://127.0.0.1:{PORT}")
         print(f"==========================================================")
         
         if "--open" in sys.argv:
             try:
-                webbrowser.open(f"http://localhost:{PORT}")
+                webbrowser.open(f"http://127.0.0.1:{PORT}")
             except Exception:
                 pass
         
