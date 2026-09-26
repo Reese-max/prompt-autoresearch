@@ -183,10 +183,14 @@ def load_config():
         return {}
     try:
         import yaml
+    except ImportError:
+        try:
+            return _parse_config_simple(CONFIG_PATH)
+        except Exception:
+            return {}
+    try:
         with open(CONFIG_PATH, "r", encoding="utf-8") as f:
             return yaml.safe_load(f) or {}
-    except ImportError:
-        return _parse_config_simple(CONFIG_PATH)
     except Exception:
         return {}
 
