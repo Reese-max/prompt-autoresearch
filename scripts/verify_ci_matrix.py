@@ -66,7 +66,7 @@ def load_workflow_matrix():
     
     try:
         matrix_entries = workflow["jobs"]["test"]["strategy"]["matrix"]["include"]
-    except KeyError as e:
+    except (KeyError, TypeError) as e:
         print(f"錯誤：workflow 結構不符預期，缺少鍵值: {e}", file=sys.stderr)
         sys.exit(1)
     
