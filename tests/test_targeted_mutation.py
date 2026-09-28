@@ -76,6 +76,44 @@ def _capture_mutation_prompt(tmp_path, monkeypatch, *, force_direction=None, avo
     return captured[0], run_opt.LAST_ROUND_COUNTERMEASURES
 
 
+def test_mutation_prompt_uses_dev_feedback_when_latest_is_holdout(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "prompts").mkdir()
+    (tmp_path / "prompts" / "baseline.md").write_text("你是一位國考專家。", encoding="utf-8")
+    runs = tmp_path / "runs"
+    dev_run = runs / "20260929_000001"
+    holdout_run = runs / "20260929_000002"
+    for run_dir, question_file, marker in (
+        (dev_run, "questions/dev.jsonl", "DEV_FEEDBACK_ONLY"),
+        (holdout_run, "questions/holdout.jsonl", "HOLDOUT_FEEDBACK_MUST_STAY_OUT"),
+    ):
+        run_dir.mkdir(parents=True)
+        (run_dir / "summary.json").write_text(
+            json.dumps({"question_file": question_file}), encoding="utf-8"
+        )
+        (run_dir / "summary.md").write_text(marker, encoding="utf-8")
+    (runs / "latest").mkdir()
+    (runs / "latest" / "summary.md").write_text(
+        "HOLDOUT_FEEDBACK_MUST_STAY_OUT", encoding="utf-8"
+    )
+
+    captured = []
+
+    def capture_then_stop(_system, prompt, temperature):
+        captured.append(prompt)
+        raise RuntimeError("test stops before provider call")
+
+    monkeypatch.setattr(run_opt, "baseline_runs_from_meta", lambda _hash: ({}, {}))
+    monkeypatch.setattr(run_opt, "collect_recent_failure_trend", lambda *_args, **_kwargs: ({}, []))
+    monkeypatch.setattr(run_opt, "champion_context", lambda: "")
+    monkeypatch.setattr(run_opt, "call_minimax", capture_then_stop)
+
+    assert not run_opt.run_opt_pass(smoke_parallel=1, dev_parallel=1, holdout_parallel=1)
+    assert len(captured) == 1
+    assert "DEV_FEEDBACK_ONLY" in captured[0]
+    assert "HOLDOUT_FEEDBACK_MUST_STAY_OUT" not in captured[0]
+
+
 class TestActualTargetedMutation:
     @pytest.mark.parametrize(("failure_code", "direction"), [("F03", "D03"), ("F04", "D04")])
     def test_dominant_failure_injects_verbatim_taxonomy_countermeasure(

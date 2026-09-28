@@ -342,7 +342,6 @@ def _run_validated(args):
         dev_run = latest_dev_run_since(before_runs)
         latest_run = latest_run_since(before_runs)
         dev_summary = run_summary(dev_run) if dev_run else {}
-        latest_summary = run_summary(latest_run) if latest_run else {}
         after_baseline = baseline_dev_score()
         promoted = after_baseline > before_baseline
         if promoted:
@@ -357,7 +356,8 @@ def _run_validated(args):
         if args.estimated_cost_per_call:
             estimated_cost_total += round_calls * args.estimated_cost_per_call
 
-        failure_code = dominant_failure(dev_summary or latest_summary)
+        # A missing dev run must not make holdout feedback steer the next round.
+        failure_code = dominant_failure(dev_summary)
         if failure_code and failure_code == last_dominant_failure:
             same_failure_count += 1
         elif failure_code:

@@ -5,7 +5,7 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 """
 run_opt.py — Prompt AutoResearch v3 單次演化優化入口
 實作完整的三層閉環流程：
-1. 讀取最新運行報告 runs/latest/summary.md，讓 MiniMax 進行定向突變（選擇 D01-D10 中的一個方向）。
+1. 讀取最新 dev 運行報告，讓 MiniMax 進行定向突變（選擇 D01-D10 中的一個方向）。
 2. 硬性規則防呆（Gatekeeper）。
 3. 快速小題庫篩選（Smoke Test）。
 4. 全量開發測試（Dev Test）。
@@ -643,6 +643,12 @@ def find_latest_run_for(question_file, before=None):
             candidates.append(run_dir)
     return candidates[-1] if candidates else None
 
+
+def load_latest_dev_report():
+    """Keep holdout feedback out of the next candidate-generation prompt."""
+    latest_dev_run = find_latest_run_for("questions/dev.jsonl")
+    return load_file(os.path.join(latest_dev_run, "summary.md")) if latest_dev_run else ""
+
 def find_latest_run_for_hash(question_file, prompt_hash):
     normalized = question_file.replace("\\", "/")
     candidates = []
@@ -1159,7 +1165,9 @@ def run_opt_pass(smoke_parallel=None, dev_parallel=None, holdout_parallel=None, 
     # --------------------------------------------------
     print(f"\n{C_YELLOW}[步驟 2] 分析歷史報告，生成優化候選提示詞...{C_RESET}")
     baseline_report = load_file(os.path.join(baseline_dev_run, "summary.md")) if baseline_dev_run else ""
-    latest_report = load_file("runs/latest/summary.md")
+    # runs/latest is overwritten by smoke, dev and holdout evaluations alike.
+    # A previous holdout summary must never steer the next candidate mutation.
+    latest_report = load_latest_dev_report()
     trend_counts, trend_runs = collect_recent_failure_trend("questions/dev.jsonl", limit=4)
     trend_report = format_failure_trend(trend_counts, trend_runs)
     champion_report = champion_context()

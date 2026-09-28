@@ -98,7 +98,10 @@ archive.max_versions 的最舊備份；需要更長期保存舊 baseline 時，�
 ## Holdout、最佳 baseline 和恢復
 
 候選先寫入 prompts/candidates/，再依序通過 gatekeeper、smoke、dev，
-最後才評估 holdout。只有完整接受條件通過才複製舊 baseline 到 archive 並
+最後才評估 holdout。下一輪候選生成只讀最新 dev 報告，不讀可能含有
+holdout 結果的 runs/latest；若本輪沒有 dev run，長跑入口也不以 holdout
+失敗碼引導下一輪。這只能防止主要候選路徑的報告回流，不能讓 tracked
+holdout 成為真正隱藏的資料。只有完整接受條件通過才複製舊 baseline 到 archive 並
 更新 prompts/baseline.md 和 prompts/baseline.meta.json；失敗流程會把
 prompts/current.md 還原。baseline metadata 的 prompt_hash、dev/holdout
 run 路徑是恢復時的交叉檢查，不是新的評估真相。

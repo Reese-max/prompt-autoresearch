@@ -145,6 +145,31 @@ def test_dry_run_skips_research_workspace_even_with_cli_isolation_enabled(tmp_pa
     assert calls[0][-1] == "--offline"
 
 
+def test_missing_dev_run_does_not_turn_holdout_failures_into_next_round_feedback(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    _write_baseline(tmp_path)
+    monkeypatch.setattr(
+        infinite_evolve, "run_cmd", lambda cmd, timeout=None: SimpleNamespace(returncode=0)
+    )
+    calls = _install_fake_run_opt(monkeypatch, always_success=False)
+    monkeypatch.setattr(infinite_evolve, "latest_dev_run_since", lambda _before: None)
+    monkeypatch.setattr(infinite_evolve, "latest_run_since", lambda _before: "runs/holdout")
+    monkeypatch.setattr(
+        infinite_evolve,
+        "run_summary",
+        lambda _run: {"question_file": "questions/holdout.jsonl", "failure_counts": {"F99": 4}},
+    )
+    monkeypatch.setattr(infinite_evolve.time, "sleep", lambda _: None)
+
+    assert infinite_evolve.main(argv=_common_argv(
+        max_rounds=2, no_improve_limit=3, retry_after_no_improve=0
+    )) == 0
+    assert len(calls) == 2
+    assert calls[1]["dominant_failure"] in (None, "")
+    assert all(row["dominant_failure"] == "" for row in _read_log(tmp_path)
+               if row.get("event") == "round_complete")
+
+
 def test_budget_requires_cost_estimate_before_preflight(tmp_path, monkeypatch):
     """指定預算卻沒有單次成本估計時，不得開始任何 subprocess。"""
     monkeypatch.chdir(tmp_path)
