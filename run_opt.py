@@ -649,6 +649,7 @@ def load_latest_dev_report():
     latest_dev_run = find_latest_run_for("questions/dev.jsonl")
     return load_file(os.path.join(latest_dev_run, "summary.md")) if latest_dev_run else ""
 
+
 def find_latest_run_for_hash(question_file, prompt_hash):
     normalized = question_file.replace("\\", "/")
     candidates = []

@@ -161,13 +161,14 @@ def test_missing_dev_run_does_not_turn_holdout_failures_into_next_round_feedback
     )
     monkeypatch.setattr(infinite_evolve.time, "sleep", lambda _: None)
 
-    assert infinite_evolve.main(argv=_common_argv(
-        max_rounds=2, no_improve_limit=3, retry_after_no_improve=0
-    )) == 0
+    assert infinite_evolve.main(
+        argv=_common_argv(max_rounds=2, no_improve_limit=3, retry_after_no_improve=0)
+    ) == 0
     assert len(calls) == 2
     assert calls[1]["dominant_failure"] in (None, "")
-    assert all(row["dominant_failure"] == "" for row in _read_log(tmp_path)
-               if row.get("event") == "round_complete")
+    round_events = [row for row in _read_log(tmp_path) if row.get("event") == "round_complete"]
+    assert len(round_events) == 2
+    assert all(row["dominant_failure"] == "" for row in round_events)
 
 
 def test_budget_requires_cost_estimate_before_preflight(tmp_path, monkeypatch):
