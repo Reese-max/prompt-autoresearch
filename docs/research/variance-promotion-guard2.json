@@ -1,0 +1,724 @@
+{
+  "decision": "NARROW",
+  "evidence_kind": "SYNTHETIC_ONLY",
+  "example_receipt": {
+    "baseline": {
+      "cohort": {
+        "dataset_sha256": "9201f68b69af8a419b78d4666e6a712712b6882ccb4d43baafe034e60e457d05",
+        "dataset_split": "dev",
+        "evaluator_sha256": "d66b1effffc75ffd9a4feaaf77e103c73e8953f2055dcf3b8b6cefa87f78534d",
+        "judge_sha256": "bc5e9c20cb5959889bae1c96f6be9b6388a7c44e6e4c189e6003c9474f2b1458",
+        "model_version": "known-noise-v1",
+        "provider": "synthetic",
+        "scorer_sha256": "d66b1effffc75ffd9a4feaaf77e103c73e8953f2055dcf3b8b6cefa87f78534d"
+      },
+      "evidence_kind": "SYNTHETIC",
+      "prompt_sha256": "63048f58aca8119a2e74663a539121ff3fe52dc85686bb43bb7c1d1edf6519e4",
+      "schema_version": 1,
+      "summary": {
+        "by_type": {
+          "analysis": {
+            "mean": 75.13338903236581,
+            "median": 75.53700562024098,
+            "n": 10,
+            "stddev": 3.0380514629128936
+          },
+          "legal": {
+            "mean": 76.96213222698879,
+            "median": 77.06881855550259,
+            "n": 10,
+            "stddev": 3.737726984447517
+          }
+        },
+        "failure_rate": 0.0,
+        "risk_score": {
+          "mean": 10,
+          "median": 10.0,
+          "n": 20,
+          "stddev": 0.0
+        },
+        "total_score": {
+          "mean": 76.0477606296773,
+          "median": 76.47972903664063,
+          "n": 20,
+          "stddev": 3.4452465015588616
+        }
+      },
+      "trials": [
+        {
+          "cached": false,
+          "error": null,
+          "items": {
+            "q1": {
+              "failures": [],
+              "risk_score": 10,
+              "total_score": 73.67251026084493,
+              "type": "analysis"
+            },
+            "q2": {
+              "failures": [],
+              "risk_score": 10,
+              "total_score": 77.28696837517901,
+              "type": "legal"
+            },
+            "q3": {
+              "failures": [],
+              "risk_score": 10,
+              "total_score": 76.10878933745512,
+              "type": "analysis"
+            },
+            "q4": {
+              "failures": [],
+              "risk_score": 10,
+              "total_score": 77.52369097148309,
+              "type": "legal"
+            }
+          },
+          "latency_ms": {
+            "status": "UNKNOWN",
+            "value": null
+          },
+          "replicate_index": 0,
+          "seed": 4167206110,
+          "usage": {
+            "judge": {
+              "cost_usd": null,
+              "status": "UNKNOWN",
+              "tokens": null
+            },
+            "primary": {
+              "cost_usd": null,
+              "status": "UNKNOWN",
+              "tokens": null
+            },
+            "retry": {
+              "cost_usd": null,
+              "status": "UNKNOWN",
+              "tokens": null
+            }
+          }
+        },
+        {
+          "cached": false,
+          "error": null,
+          "items": {
+            "q1": {
+              "failures": [],
+              "risk_score": 10,
+              "total_score": 70.06222764397381,
+              "type": "analysis"
+            },
+            "q2": {
+              "failures": [],
+              "risk_score": 10,
+              "total_score": 75.42227189556408,
+              "type": "legal"
+            },
+            "q3": {
+              "failures": [],
+              "risk_score": 10,
+              "total_score": 78.87141911341905,
+              "type": "analysis"
+            },
+            "q4": {
+              "failures": [],
+              "risk_score": 10,
+              "total_score": 83.69778898838747,
+              "type": "legal"
+            }
+          },
+          "latency_ms": {
+            "status": "UNKNOWN",
+            "value": null
+          },
+          "replicate_index": 1,
+          "seed": 790637991,
+          "usage": {
+            "judge": {
+              "cost_usd": null,
+              "status": "UNKNOWN",
+              "tokens": null
+            },
+            "primary": {
+              "cost_usd": null,
+              "status": "UNKNOWN",
+              "tokens": null
+            },
+            "retry": {
+              "cost_usd": null,
+              "status": "UNKNOWN",
+              "tokens": null
+            }
+          }
+        },
+        {
+          "cached": false,
+          "error": null,
+          "items": {
+            "q1": {
+              "failures": [],
+              "risk_score": 10,
+              "total_score": 77.50464156111619,
+              "type": "analysis"
+            },
+            "q2": {
+              "failures": [],
+              "risk_score": 10,
+              "total_score": 75.71073872272981,
+              "type": "legal"
+            },
+            "q3": {
+              "failures": [],
+              "risk_score": 10,
+              "total_score": 78.2414810108762,
+              "type": "analysis"
+            },
+            "q4": {
+              "failures": [],
+              "risk_score": 10,
+              "total_score": 76.85066873582615,
+              "type": "legal"
+            }
+          },
+          "latency_ms": {
+            "status": "UNKNOWN",
+            "value": null
+          },
+          "replicate_index": 2,
+          "seed": 779828146,
+          "usage": {
+            "judge": {
+              "cost_usd": null,
+              "status": "UNKNOWN",
+              "tokens": null
+            },
+            "primary": {
+              "cost_usd": null,
+              "status": "UNKNOWN",
+              "tokens": null
+            },
+            "retry": {
+              "cost_usd": null,
+              "status": "UNKNOWN",
+              "tokens": null
+            }
+          }
+        },
+        {
+          "cached": false,
+          "error": null,
+          "items": {
+            "q1": {
+              "failures": [],
+              "risk_score": 10,
+              "total_score": 70.7368715309568,
+              "type": "analysis"
+            },
+            "q2": {
+              "failures": [],
+              "risk_score": 10,
+              "total_score": 71.82246134672177,
+              "type": "legal"
+            },
+            "q3": {
+              "failures": [],
+              "risk_score": 10,
+              "total_score": 77.20453161184565,
+              "type": "analysis"
+            },
+            "q4": {
+              "failures": [],
+              "risk_score": 10,
+              "total_score": 77.43721320670329,
+              "type": "legal"
+            }
+          },
+          "latency_ms": {
+            "status": "UNKNOWN",
+            "value": null
+          },
+          "replicate_index": 3,
+          "seed": 3897030690,
+          "usage": {
+            "judge": {
+              "cost_usd": null,
+              "status": "UNKNOWN",
+              "tokens": null
+            },
+            "primary": {
+              "cost_usd": null,
+              "status": "UNKNOWN",
+              "tokens": null
+            },
+            "retry": {
+              "cost_usd": null,
+              "status": "UNKNOWN",
+              "tokens": null
+            }
+          }
+        },
+        {
+          "cached": false,
+          "error": null,
+          "items": {
+            "q1": {
+              "failures": [],
+              "risk_score": 10,
+              "total_score": 74.96522190302683,
+              "type": "analysis"
+            },
+            "q2": {
+              "failures": [],
+              "risk_score": 10,
+              "total_score": 71.96724093895737,
+              "type": "legal"
+            },
+            "q3": {
+              "failures": [],
+              "risk_score": 10,
+              "total_score": 73.96619635014353,
+              "type": "analysis"
+            },
+            "q4": {
+              "failures": [],
+              "risk_score": 10,
+              "total_score": 81.9022790883358,
+              "type": "legal"
+            }
+          },
+          "latency_ms": {
+            "status": "UNKNOWN",
+            "value": null
+          },
+          "replicate_index": 4,
+          "seed": 314728867,
+          "usage": {
+            "judge": {
+              "cost_usd": null,
+              "status": "UNKNOWN",
+              "tokens": null
+            },
+            "primary": {
+              "cost_usd": null,
+              "status": "UNKNOWN",
+              "tokens": null
+            },
+            "retry": {
+              "cost_usd": null,
+              "status": "UNKNOWN",
+              "tokens": null
+            }
+          }
+        }
+      ]
+    },
+    "candidate": {
+      "cohort": {
+        "dataset_sha256": "9201f68b69af8a419b78d4666e6a712712b6882ccb4d43baafe034e60e457d05",
+        "dataset_split": "dev",
+        "evaluator_sha256": "d66b1effffc75ffd9a4feaaf77e103c73e8953f2055dcf3b8b6cefa87f78534d",
+        "judge_sha256": "bc5e9c20cb5959889bae1c96f6be9b6388a7c44e6e4c189e6003c9474f2b1458",
+        "model_version": "known-noise-v1",
+        "provider": "synthetic",
+        "scorer_sha256": "d66b1effffc75ffd9a4feaaf77e103c73e8953f2055dcf3b8b6cefa87f78534d"
+      },
+      "evidence_kind": "SYNTHETIC",
+      "prompt_sha256": "c5fd3aeca7923beff4dab96abe2dfa35ee816667308c65d83d416cef4b2f478a",
+      "schema_version": 1,
+      "summary": {
+        "by_type": {
+          "analysis": {
+            "mean": 74.90748235823607,
+            "median": 74.61028376679968,
+            "n": 10,
+            "stddev": 2.349211478554672
+          },
+          "legal": {
+            "mean": 76.14936535521043,
+            "median": 76.88240478309356,
+            "n": 10,
+            "stddev": 2.0171213431887693
+          }
+        },
+        "failure_rate": 0.0,
+        "risk_score": {
+          "mean": 10,
+          "median": 10.0,
+          "n": 20,
+          "stddev": 0.0
+        },
+        "total_score": {
+          "mean": 75.52842385672325,
+          "median": 75.13853554164031,
+          "n": 20,
+          "stddev": 2.2242624401189763
+        }
+      },
+      "trials": [
+        {
+          "cached": false,
+          "error": null,
+          "items": {
+            "q1": {
+              "failures": [],
+              "risk_score": 10,
+              "total_score": 77.81644534096327,
+              "type": "analysis"
+            },
+            "q2": {
+              "failures": [],
+              "risk_score": 10,
+              "total_score": 74.51884215481621,
+              "type": "legal"
+            },
+            "q3": {
+              "failures": [],
+              "risk_score": 10,
+              "total_score": 74.09156744744473,
+              "type": "analysis"
+            },
+            "q4": {
+              "failures": [],
+              "risk_score": 10,
+              "total_score": 77.96530160005112,
+              "type": "legal"
+            }
+          },
+          "latency_ms": {
+            "status": "UNKNOWN",
+            "value": null
+          },
+          "replicate_index": 0,
+          "seed": 4167206110,
+          "usage": {
+            "judge": {
+              "cost_usd": null,
+              "status": "UNKNOWN",
+              "tokens": null
+            },
+            "primary": {
+              "cost_usd": null,
+              "status": "UNKNOWN",
+              "tokens": null
+            },
+            "retry": {
+              "cost_usd": null,
+              "status": "UNKNOWN",
+              "tokens": null
+            }
+          }
+        },
+        {
+          "cached": false,
+          "error": null,
+          "items": {
+            "q1": {
+              "failures": [],
+              "risk_score": 10,
+              "total_score": 75.61455001543645,
+              "type": "analysis"
+            },
+            "q2": {
+              "failures": [],
+              "risk_score": 10,
+              "total_score": 73.13967058805008,
+              "type": "legal"
+            },
+            "q3": {
+              "failures": [],
+              "risk_score": 10,
+              "total_score": 79.70330181601376,
+              "type": "analysis"
+            },
+            "q4": {
+              "failures": [],
+              "risk_score": 10,
+              "total_score": 78.71143231938721,
+              "type": "legal"
+            }
+          },
+          "latency_ms": {
+            "status": "UNKNOWN",
+            "value": null
+          },
+          "replicate_index": 1,
+          "seed": 790637991,
+          "usage": {
+            "judge": {
+              "cost_usd": null,
+              "status": "UNKNOWN",
+              "tokens": null
+            },
+            "primary": {
+              "cost_usd": null,
+              "status": "UNKNOWN",
+              "tokens": null
+            },
+            "retry": {
+              "cost_usd": null,
+              "status": "UNKNOWN",
+              "tokens": null
+            }
+          }
+        },
+        {
+          "cached": false,
+          "error": null,
+          "items": {
+            "q1": {
+              "failures": [],
+              "risk_score": 10,
+              "total_score": 73.19917786890103,
+              "type": "analysis"
+            },
+            "q2": {
+              "failures": [],
+              "risk_score": 10,
+              "total_score": 74.52286003748432,
+              "type": "legal"
+            },
+            "q3": {
+              "failures": [],
+              "risk_score": 10,
+              "total_score": 73.39265899432547,
+              "type": "analysis"
+            },
+            "q4": {
+              "failures": [],
+              "risk_score": 10,
+              "total_score": 77.77160773780147,
+              "type": "legal"
+            }
+          },
+          "latency_ms": {
+            "status": "UNKNOWN",
+            "value": null
+          },
+          "replicate_index": 2,
+          "seed": 779828146,
+          "usage": {
+            "judge": {
+              "cost_usd": null,
+              "status": "UNKNOWN",
+              "tokens": null
+            },
+            "primary": {
+              "cost_usd": null,
+              "status": "UNKNOWN",
+              "tokens": null
+            },
+            "retry": {
+              "cost_usd": null,
+              "status": "UNKNOWN",
+              "tokens": null
+            }
+          }
+        },
+        {
+          "cached": false,
+          "error": null,
+          "items": {
+            "q1": {
+              "failures": [],
+              "risk_score": 10,
+              "total_score": 72.61924842424028,
+              "type": "analysis"
+            },
+            "q2": {
+              "failures": [],
+              "risk_score": 10,
+              "total_score": 73.63849890897559,
+              "type": "legal"
+            },
+            "q3": {
+              "failures": [],
+              "risk_score": 10,
+              "total_score": 75.12900008615462,
+              "type": "analysis"
+            },
+            "q4": {
+              "failures": [],
+              "risk_score": 10,
+              "total_score": 77.46063063935122,
+              "type": "legal"
+            }
+          },
+          "latency_ms": {
+            "status": "UNKNOWN",
+            "value": null
+          },
+          "replicate_index": 3,
+          "seed": 3897030690,
+          "usage": {
+            "judge": {
+              "cost_usd": null,
+              "status": "UNKNOWN",
+              "tokens": null
+            },
+            "primary": {
+              "cost_usd": null,
+              "status": "UNKNOWN",
+              "tokens": null
+            },
+            "retry": {
+              "cost_usd": null,
+              "status": "UNKNOWN",
+              "tokens": null
+            }
+          }
+        },
+        {
+          "cached": false,
+          "error": null,
+          "items": {
+            "q1": {
+              "failures": [],
+              "risk_score": 10,
+              "total_score": 72.36080259175503,
+              "type": "analysis"
+            },
+            "q2": {
+              "failures": [],
+              "risk_score": 10,
+              "total_score": 77.4588490940341,
+              "type": "legal"
+            },
+            "q3": {
+              "failures": [],
+              "risk_score": 10,
+              "total_score": 75.148070997126,
+              "type": "analysis"
+            },
+            "q4": {
+              "failures": [],
+              "risk_score": 10,
+              "total_score": 76.30596047215302,
+              "type": "legal"
+            }
+          },
+          "latency_ms": {
+            "status": "UNKNOWN",
+            "value": null
+          },
+          "replicate_index": 4,
+          "seed": 314728867,
+          "usage": {
+            "judge": {
+              "cost_usd": null,
+              "status": "UNKNOWN",
+              "tokens": null
+            },
+            "primary": {
+              "cost_usd": null,
+              "status": "UNKNOWN",
+              "tokens": null
+            },
+            "retry": {
+              "cost_usd": null,
+              "status": "UNKNOWN",
+              "tokens": null
+            }
+          }
+        }
+      ]
+    },
+    "paired_decision": {
+      "decision": "REJECT",
+      "eval_units": 6,
+      "guard_width": 1.7472179734899707,
+      "paired_mean_delta": -0.8754817246816486,
+      "pairs_used": 3,
+      "reason": "paired_margin_below_boundary"
+    }
+  },
+  "holdout_policy": "No holdout input or item-level holdout output; reserve one bounded final gate outside this research module.",
+  "noise_profile": {
+    "calibration_pairs": 24,
+    "cohort": {
+      "dataset_sha256": "9201f68b69af8a419b78d4666e6a712712b6882ccb4d43baafe034e60e457d05",
+      "dataset_split": "dev",
+      "evaluator_sha256": "d66b1effffc75ffd9a4feaaf77e103c73e8953f2055dcf3b8b6cefa87f78534d",
+      "judge_sha256": "bc5e9c20cb5959889bae1c96f6be9b6388a7c44e6e4c189e6003c9474f2b1458",
+      "model_version": "known-noise-v1",
+      "provider": "synthetic",
+      "scorer_sha256": "d66b1effffc75ffd9a4feaaf77e103c73e8953f2055dcf3b8b6cefa87f78534d"
+    },
+    "evidence_kind": "SYNTHETIC",
+    "guard_multiplier": 2.0,
+    "guard_width": 3.026270301982161,
+    "paired_risk_delta": {
+      "mean": 0,
+      "median": 0.0,
+      "n": 24,
+      "stddev": 0.0
+    },
+    "paired_score_delta": {
+      "mean": 0.209213551384375,
+      "median": -0.027657652139041033,
+      "n": 24,
+      "stddev": 1.5131351509910804
+    },
+    "paired_type_delta": {
+      "analysis": {
+        "mean": -0.39031343451909645,
+        "median": 0.03252091755433639,
+        "n": 24,
+        "stddev": 2.435307589825152
+      },
+      "legal": {
+        "mean": 0.8087405372878465,
+        "median": 0.3070085403860716,
+        "n": 24,
+        "stddev": 1.6455460974689187
+      }
+    },
+    "profile_version": 1,
+    "prompt_sha256": "63048f58aca8119a2e74663a539121ff3fe52dc85686bb43bb7c1d1edf6519e4",
+    "provider_tokens_cost_latency": "UNKNOWN"
+  },
+  "parameters": {
+    "budget_eval_units_per_case": 10,
+    "calibration_eval_units": 48,
+    "calibration_pairs": 24,
+    "cases_per_scenario": 500,
+    "guard_multiplier": 2.0,
+    "items_per_trial": 4,
+    "max_pairs": 5,
+    "min_pairs": 2,
+    "noise_model": "paired shared N(0,1) plus independent arm N(0,2) per item",
+    "score_gate_min_improvement": 2.0
+  },
+  "provider_tokens_cost_latency": "UNKNOWN: synthetic evaluation units are not provider billing or elapsed time",
+  "report_version": 1,
+  "scenarios": {
+    "large_improvement": {
+      "extra_eval_units": 3370,
+      "paired_eval_units": 4370,
+      "paired_research_rule": {
+        "INCONCLUSIVE_NEEDS_MORE_TRIALS": 324,
+        "PROMOTE": 176
+      },
+      "single_run_eval_units": 1000,
+      "single_run_score_gate": {
+        "PROMOTE": 369,
+        "REJECT": 131
+      },
+      "true_delta": 3.0
+    },
+    "no_improvement": {
+      "extra_eval_units": 2162,
+      "paired_eval_units": 3162,
+      "paired_research_rule": {
+        "INCONCLUSIVE_NEEDS_MORE_TRIALS": 68,
+        "REJECT": 432
+      },
+      "single_run_eval_units": 1000,
+      "single_run_score_gate": {
+        "PROMOTE": 38,
+        "REJECT": 462
+      },
+      "true_delta": 0.0
+    }
+  },
+  "seed": 20260929
+}
