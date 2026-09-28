@@ -25,6 +25,10 @@
 2. 再看 [Prompt AutoResearch v3 架構總覽](./architecture.md) 補齊細節
 3. 回頭追看 `output/` 的實驗報告與歷史 `runs/` 決策紀錄
 
+## 瀏覽器 Gemini 模型
+
+設定頁面的 Gemini 選項為 **Gemini 3.5 Flash-Lite** (`gemini-3.5-flash-lite`) 與 **Gemini 3.8 Flash** (`gemini-3.8-flash`)。Google 的[模型清單](https://ai.google.dev/gemini-api/docs/models)與[退場時程](https://ai.google.dev/gemini-api/docs/deprecations)在 2026-09-29 將兩者列為穩定模型，且未宣布停止日期。曾儲存舊 Gemini 型號的使用者需在設定頁重新選擇並儲存；舊型號不會送出 API 請求。正式 provider 可用性仍需經授權的 `generateContent` 呼叫驗證。
+
 ## 文件互連
 
 - [architecture-overview.md](./architecture-overview.md) 會引導你到 `architecture.md` 進一步看實際模組與流程。

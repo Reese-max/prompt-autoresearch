@@ -140,8 +140,8 @@ const FailureTaxonomy = [
 // --- MODEL DEFINITIONS ---
 const ProviderModels = {
     gemini: [
-        { id: 'gemini-1.5-flash', name: 'Gemini 1.5 Flash (快速演化)' },
-        { id: 'gemini-1.5-pro', name: 'Gemini 1.5 Pro (深度邏輯)' }
+        { id: 'gemini-3.5-flash-lite', name: 'Gemini 3.5 Flash-Lite (快速演化)' },
+        { id: 'gemini-3.8-flash', name: 'Gemini 3.8 Flash (深度邏輯)' }
     ],
     openai: [
         { id: 'gpt-4o-mini', name: 'GPT-4o Mini (高CP值)' },
@@ -1504,6 +1504,9 @@ async function fetchWithCORSProxy(targetUrl, headers, bodyObj) {
 
 // API CALL WRAPPER (GEMINI, OPENAI, CLAUDE)
 async function callGeminiAPI(key, model, promptText, temp) {
+    if (!ProviderModels.gemini.some(m => m.id === model)) {
+        throw new Error('不支援的 Gemini 模型。請在設定中重新選擇並儲存。');
+    }
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`;
     const payload = {
         contents: [{ parts: [{ text: promptText }] }],
@@ -1820,19 +1823,29 @@ function initSettingsPanel() {
 function populateModelDropdown() {
     const provider = elements.settingsProvider.value;
     const models = ProviderModels[provider] || [];
+    const savedModelIsSelectable = AppState.settings.provider === provider
+        && models.some(m => m.id === AppState.settings.model);
+    const needsGeminiReselection = provider === 'gemini'
+        && AppState.settings.provider === 'gemini' && !savedModelIsSelectable;
     
-    let html = '';
+    let html = needsGeminiReselection
+        ? '<option value="" disabled selected>請重新選擇 Gemini 模型並儲存</option>' : '';
     models.forEach(m => {
         html += `<option value="${m.id}">${m.name}</option>`;
     });
     elements.settingsModel.innerHTML = html;
     
-    if (AppState.settings.provider === provider && AppState.settings.model) {
+    if (savedModelIsSelectable) {
         elements.settingsModel.value = AppState.settings.model;
     }
 }
 
 function saveSettingsToLocal() {
+    if (elements.settingsProvider.value === 'gemini'
+        && !ProviderModels.gemini.some(m => m.id === elements.settingsModel.value)) {
+        showToast('請選擇支援的 Gemini 模型後再儲存。', 'error');
+        return;
+    }
     AppState.settings.provider = elements.settingsProvider.value;
     AppState.settings.apiKey = elements.settingsApiKey.value;
     AppState.settings.model = elements.settingsModel.value;
