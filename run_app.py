@@ -392,11 +392,13 @@ class LocalProxyHandler(http.server.SimpleHTTPRequestHandler):
         return True
 
     def send_json(self, status, payload):
+        body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
         self.send_response(status)
         self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         if self.command != "HEAD":
-            self.wfile.write(json.dumps(payload, ensure_ascii=False).encode("utf-8"))
+            self.wfile.write(body)
 
     def send_text(self, status, text, content_type="text/plain; charset=utf-8"):
         self.send_response(status)

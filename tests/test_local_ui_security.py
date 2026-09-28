@@ -109,11 +109,12 @@ class LocalUiSecurityTests(unittest.TestCase):
             )
             for path, payload in cases:
                 with self.subTest(path=path):
-                    status, headers, _ = request(
+                    status, headers, body = request(
                         port, "POST", path, payload,
                         origin="https://attacker.example",
                     )
                     self.assertEqual(status, 403)
+                    self.assertEqual(int(headers["Content-Length"]), len(body))
                     self.assertNotIn("Access-Control-Allow-Origin", headers)
             status, _, _ = request(
                 port, "POST", "/api/run-evolution", {"generations": 1},
