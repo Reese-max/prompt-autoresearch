@@ -16,8 +16,9 @@ holdout 評量，只有通過既有接受條件的候選才會更新 prompts/bas
 | route_evolve.py、route_loop.py | route subset 研究 | 會呼叫既有 evaluator/provider |
 | scripts/evaluate.py、scripts/evaluate_routed.py | 依題庫評估答案 | 會呼叫 MiniMax；本機測試請用 fake/stub |
 
-所有 model calls 都經過 lib/api.py。它要求 MINIMAX_API_KEY，讀取 runtime
-config 的 API URL/model/timeout/retry 和 api.rate_limit.max_concurrent。
+CLI 研究流程的 model calls 經過 lib/api.py。它要求 MINIMAX_API_KEY，讀取 runtime
+config 的 API URL/model/timeout/retry 和 api.rate_limit.max_concurrent。瀏覽器
+UI (`app.js`) 另有依使用者設定直接呼叫 provider 的路徑，不使用此 CLI limiter。
 本 repository 的真實 provider endpoint 只作程式設定，不代表本次驗收會連線。
 
 ## 零成本檢查、開始和停止
@@ -30,7 +31,7 @@ config 的 API URL/model/timeout/retry 和 api.rate_limit.max_concurrent。
 
     python infinite_evolve.py --dry-run --max-rounds 1 --parallel 1 --route-every 0 --sleep-seconds 0
 
-dry-run 仍會檢查題庫、baseline metadata、Git 和平行設定，然後在任何
+dry-run 不建立研究 worktree；它仍會檢查題庫、baseline metadata、Git 和平行設定，然後在任何
 run_opt round 前結束。--offline 只跳過 key 存在性檢查，不是假裝完成
 model evaluation；帶 --require-git 的檢查可能更新被 .gitignore 排除的
 output/research_git_preflight.json。
@@ -44,7 +45,9 @@ budget-usd 而沒有正的 estimated-cost-per-call 會在 preflight 前拒絕。
 API limiter 每個 process 的 max_concurrent 預設是 8；stage worker 數可以
 高於它但呼叫會由 limiter 排隊，跨 process 的總量仍須由操作者自行控制。
 成本 gate 依評估結果的 estimated API calls 計算，會在完整 round 後停止，
-因此一次 round 可能略微超過估計預算；它不是 provider 帳單保證。
+因此一次 round 可能超過估計預算；它不是 provider 帳單保證。
+`--route-timeout-seconds` 限制 route 子程序；目前 `--round-timeout-seconds`
+只做參數檢查，未對 in-process 的 `run_opt_pass()` 強制逾時，不能視為每輪實際時間上限。
 
 用 Ctrl+C 停止執行。不要刪除中斷留下的 runs/、候選、log 或 metadata。
 這些檔案是恢復和稽核證據。

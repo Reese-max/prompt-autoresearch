@@ -8,6 +8,8 @@
   - 給第一次接手專案的快速閱讀順序與核心術語導覽。
 - [Prompt AutoResearch v3 架構總覽](./architecture.md)  
   - 收錄模組職責、資料流與 API 路徑的完整細節。
+- [最佳版本證據契約](./best-version-evidence-contract.md)  
+  - 證據報告的 canonical schema、最小完整證據夾具與 fail-closed 規則。
 
 ## 測試與輪次紀錄
 

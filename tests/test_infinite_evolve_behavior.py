@@ -124,6 +124,27 @@ def test_dry_run_forwards_offline_preflight_and_skips_evolution(tmp_path, monkey
     assert not (tmp_path / "evolution_log.jsonl").exists()
 
 
+def test_dry_run_skips_research_workspace_even_with_cli_isolation_enabled(tmp_path, monkeypatch):
+    """The real CLI sets isolation, but a zero-cost dry-run must not clone a worktree."""
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("AUTORESEARCH_ISOLATE_WORKSPACE", "1")
+    monkeypatch.setattr(
+        git_reproducibility,
+        "create_research_workspace",
+        lambda *args, **kwargs: pytest.fail("dry-run created a research worktree"),
+    )
+    calls = []
+    monkeypatch.setattr(
+        infinite_evolve,
+        "run_cmd",
+        lambda cmd, timeout=None: calls.append(cmd) or SimpleNamespace(returncode=0),
+    )
+
+    assert infinite_evolve.main(argv=_common_argv(max_rounds=1) + ["--dry-run"]) == 0
+    assert len(calls) == 1
+    assert calls[0][-1] == "--offline"
+
+
 def test_budget_requires_cost_estimate_before_preflight(tmp_path, monkeypatch):
     """指定預算卻沒有單次成本估計時，不得開始任何 subprocess。"""
     monkeypatch.chdir(tmp_path)

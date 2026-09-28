@@ -64,7 +64,14 @@ def load_json(path):
 
 
 def check_run_path(path):
-    return bool(path and os.path.exists(os.path.join(path, "summary.md")) and os.path.exists(os.path.join(path, "details.jsonl")))
+    if not path:
+        return False
+    # 歷史 baseline metadata 在 Windows 產生，POSIX 也須可讀取相同 run。
+    normalized = path.replace("\\", "/")
+    return (
+        os.path.exists(os.path.join(normalized, "summary.md"))
+        and os.path.exists(os.path.join(normalized, "details.jsonl"))
+    )
 
 
 def main(argv=None):

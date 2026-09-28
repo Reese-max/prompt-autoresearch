@@ -233,12 +233,14 @@ def validate_run_limits(args):
 
 
 def main(argv=None):
-    """Parse and validate CLI limits before entering an isolated worktree."""
+    """Validate limits before any work; offline dry-run needs no worktree."""
     args = parse_args(argv)
     limit_errors = validate_run_limits(args)
     if limit_errors:
         print(f"{C_RED}❌ 執行限制無效：{'；'.join(limit_errors)}{C_RESET}")
         return 2
+    if args.dry_run:
+        return _run_validated(args)
     return _run_isolated(args)
 
 
