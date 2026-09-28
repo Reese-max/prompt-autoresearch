@@ -82,6 +82,13 @@ def clean_config_state(monkeypatch, tmp_path):
             None,
             {"api": {"url": "https://localhost"}},
         ),
+        # 4d. 有效的 IPv6 URL 在所有支援的 Python 版本皆可接受
+        (
+            {"api": {"url": "https://original.com"}},
+            {"AUTORESEARCH_API_URL": "https://[::1]/v1"},
+            None,
+            {"api": {"url": "https://[::1]/v1"}},
+        ),
         # 5. 其他非數值邊界 (Illegal values like <= 0 on positive keys)
         (
             {"thresholds": {"max_candidate_length": 500}},

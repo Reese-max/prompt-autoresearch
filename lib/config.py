@@ -12,6 +12,7 @@ import copy
 import json
 import math
 import os
+from ipaddress import IPv6Address
 from urllib.parse import urlparse
 
 _CONFIG = None
@@ -199,7 +200,11 @@ def validate_config(cfg):
             )
         if "url_prefixes" in rules:
             try:
-                hostname = urlparse(value).hostname
+                parsed = urlparse(value)
+                hostname = parsed.hostname
+                # Python 3.10 的 urlparse 可能接受非 IPv6 的方括號主機。
+                if parsed.netloc.rsplit("@", 1)[-1].startswith("["):
+                    IPv6Address(hostname or "")
             except ValueError:
                 hostname = None
             if not any(value.startswith(p) for p in rules["url_prefixes"]) or not hostname:
