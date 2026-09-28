@@ -42,8 +42,9 @@ invocation, and separate spend/quality evidence. The estimated budget gate is
 checked after a completed round, so it cannot guarantee an exact provider
 invoice cap. Holdout data is tracked in this repository and is protocol
 isolated rather than secret; a hidden external holdout requires a separate
-runner. Retention and rotation remain maintainer policy rather than automatic
-enforcement.
+runner. Evolution logs and model-run directories have a manual retention policy;
+successful promotions automatically prune old baseline prompt backups to
+`archive.max_versions` (20 by default).
 
 The legacy auto_evolve.py, run_opt.py, route_evolve.py, and route_loop.py
 entry points remain provider-consuming paths; use infinite_evolve.py
