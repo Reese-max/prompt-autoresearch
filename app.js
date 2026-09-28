@@ -140,8 +140,8 @@ const FailureTaxonomy = [
 // --- MODEL DEFINITIONS ---
 const ProviderModels = {
     gemini: [
-        { id: 'gemini-1.5-flash', name: 'Gemini 1.5 Flash (快速演化)' },
-        { id: 'gemini-1.5-pro', name: 'Gemini 1.5 Pro (深度邏輯)' }
+        { id: 'gemini-3.8-flash', name: 'Gemini 3.8 Flash (快速演化)' },
+        { id: 'gemini-2.5-pro', name: 'Gemini 2.5 Pro (深度邏輯)' }
     ],
     openai: [
         { id: 'gpt-4o-mini', name: 'GPT-4o Mini (高CP值)' },
@@ -1827,8 +1827,12 @@ function populateModelDropdown() {
     });
     elements.settingsModel.innerHTML = html;
     
-    if (AppState.settings.provider === provider && AppState.settings.model) {
+    if (AppState.settings.provider === provider && AppState.settings.model
+        && models.some(m => m.id === AppState.settings.model)) {
         elements.settingsModel.value = AppState.settings.model;
+    } else if (models.length > 0) {
+        AppState.settings.model = models[0].id;
+        elements.settingsModel.value = models[0].id;
     }
 }
 
