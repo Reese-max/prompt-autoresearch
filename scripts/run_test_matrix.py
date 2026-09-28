@@ -154,6 +154,10 @@ def _run_pytest(test_set, tests):
 
 
 def main(argv=None):
+    # Windows Git Bash 可能以 cp1252 啟動 Python；預檢 JSON 含中文。
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8", errors="replace")
     actual_platform, actual_version, actual_minor = _runtime()
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--platform", required=True, choices=SUPPORTED_PLATFORMS)
