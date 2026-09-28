@@ -16,6 +16,7 @@ import urllib.error
 import urllib.request
 
 from lib.config import get
+from lib.request_budget import BudgetExhausted, reserve_attempt
 
 
 class APIError(RuntimeError):
@@ -24,6 +25,10 @@ class APIError(RuntimeError):
 
 class APITimeoutError(APIError, TimeoutError):
     """MiniMax API 呼叫逾時（connect / read 階段一律轉為此型別）。"""
+
+
+class APIBudgetExceeded(APIError):
+    """A shared invocation cap prevented this request before network I/O."""
 
 
 def _translate_error(e, max_retry):
@@ -103,6 +108,14 @@ def call_minimax(system_prompt, user_content, temperature=0.7):
     for attempt in range(attempts):
         with semaphore:
             _rate_wait()
+            budget_path = os.environ.get("AUTORESEARCH_REQUEST_BUDGET_DB")
+            if budget_path:
+                try:
+                    reserve_attempt(budget_path)
+                except BudgetExhausted as exc:
+                    raise APIBudgetExceeded(str(exc)) from exc
+                except Exception as exc:
+                    raise APIError("request budget ledger unavailable") from exc
             try:
                 with urllib.request.urlopen(req, timeout=timeout) as response:
                     res_data = response.read()
