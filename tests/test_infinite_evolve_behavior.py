@@ -11,6 +11,7 @@
 import hashlib
 import json
 import sys
+import time
 import types
 from pathlib import Path
 from types import SimpleNamespace
@@ -143,6 +144,76 @@ def test_dry_run_skips_research_workspace_even_with_cli_isolation_enabled(tmp_pa
     assert infinite_evolve.main(argv=_common_argv(max_rounds=1) + ["--dry-run"]) == 0
     assert len(calls) == 1
     assert calls[0][-1] == "--offline"
+
+
+def test_live_cli_rejects_unbounded_budget_and_timeout_before_preflight(monkeypatch):
+    monkeypatch.setenv("AUTORESEARCH_CLI_RUN", "1")
+    monkeypatch.setattr(
+        infinite_evolve, "run_cmd", lambda *_args, **_kwargs: pytest.fail("preflight ran")
+    )
+    assert infinite_evolve.main(argv=_common_argv(max_rounds=1)) == 2
+    assert infinite_evolve.main(argv=_common_argv(max_rounds=1, round_timeout_seconds=0)
+                                + ["--budget-usd", "1", "--estimated-cost-per-call", "0.1"]) == 2
+
+
+def test_bounded_round_process_is_terminated_on_deadline():
+    started = time.monotonic()
+    with pytest.raises(infinite_evolve.RoundTimeoutError):
+        infinite_evolve._run_bounded_process(
+            [sys.executable, "-c", "import time; time.sleep(30)"], timeout=0.2
+        )
+    assert time.monotonic() - started < 10
+
+
+def test_round_worker_uses_active_research_worktree(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "infinite_evolve.py").write_text("# active worktree worker\n", encoding="utf-8")
+    captured = []
+
+    def fake_bounded_process(cmd, timeout):
+        captured.append((cmd, timeout))
+        Path(cmd[4]).write_text(
+            json.dumps({"status": "completed", "success": True, "countermeasures": ["F03"]}),
+            encoding="utf-8",
+        )
+        return 0
+
+    monkeypatch.setattr(infinite_evolve, "_run_bounded_process", fake_bounded_process)
+    args = infinite_evolve.parse_args(["--round-timeout-seconds", "13"])
+    success, countermeasures = infinite_evolve._run_round_subprocess(
+        args, 1, ["F04"], "F03"
+    )
+    assert success is True
+    assert countermeasures == ["F03"]
+    assert Path(captured[0][0][1]) == tmp_path / "infinite_evolve.py"
+    assert captured[0][1] == 13
+
+
+def test_round_timeout_stops_before_route_and_restores_budget_env(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    _write_baseline(tmp_path)
+    monkeypatch.setenv("AUTORESEARCH_CLI_RUN", "1")
+    monkeypatch.delenv("AUTORESEARCH_ISOLATE_WORKSPACE", raising=False)
+    monkeypatch.setattr(
+        infinite_evolve, "run_cmd", lambda *_args, **_kwargs: SimpleNamespace(returncode=0)
+    )
+    monkeypatch.setattr(
+        infinite_evolve, "_run_round_subprocess",
+        lambda *_args: (_ for _ in ()).throw(infinite_evolve.RoundTimeoutError("expired")),
+    )
+    monkeypatch.setattr(
+        infinite_evolve, "maybe_run_route",
+        lambda *_args, **_kwargs: pytest.fail("route ran after timeout"),
+    )
+    assert infinite_evolve.main(argv=_common_argv(max_rounds=2)
+                                + ["--budget-usd", "0.02", "--estimated-cost-per-call", "0.01"]) == 124
+    assert "AUTORESEARCH_REQUEST_BUDGET_DB" not in infinite_evolve.os.environ
+    events = _read_log(tmp_path)
+    rounds = [event for event in events if event.get("event") == "round_complete"]
+    assert len(rounds) == 1
+    assert rounds[0]["round_timed_out"] is True
+    assert rounds[0]["promoted"] is False
+    assert [event for event in events if event.get("event") == "stop"]
 
 
 def test_missing_dev_run_does_not_turn_holdout_failures_into_next_round_feedback(tmp_path, monkeypatch):

@@ -38,9 +38,10 @@ and holdout data were preserved.
 
 The offline path proves configuration and local fixture checks only. A real
 provider run still requires an authorized key, an explicitly bounded
-invocation, and separate spend/quality evidence. The estimated budget gate is
-checked after a completed round, so it cannot guarantee an exact provider
-invoice cap. The main mutation loop now selects dev-only feedback instead of
+invocation, and separate spend/quality evidence. The long-run CLI now reserves
+from a cross-process provider-attempt cap before each request and terminates a
+timed-out round process tree, but an estimated per-call price cannot guarantee
+the provider's actual invoice. The main mutation loop selects dev-only feedback instead of
 the mixed-stage `runs/latest` summary, but holdout data is tracked in this
 repository and is not secret; a hidden external holdout requires a separate
 runner. Evolution logs and model-run directories have a manual retention policy;

@@ -5,17 +5,20 @@ infinite_evolve.py — Prompt AutoResearch 長跑演化控制器。
 這不是無條件死循環，而是可長時間執行、具備硬停止條件的自動演化流程。
 
 範例：
-  python infinite_evolve.py --max-rounds 100 --parallel 24
+  python infinite_evolve.py --dry-run --max-rounds 1 --parallel 1
   python infinite_evolve.py --max-rounds 100 --parallel 24 --budget-usd 50 --estimated-cost-per-call 0.002
 """
 import argparse
+from decimal import Decimal, ROUND_FLOOR
 import json
 import math
 import os
 import platform
+import signal
 import subprocess
 import sys
 import time
+import uuid
 
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8", errors="replace", line_buffering=True)
@@ -28,6 +31,7 @@ from scripts.git_reproducibility import (
     isolate_research_entrypoint,
     load_persisted_git_preflight,
 )
+from lib.request_budget import create_budget, read_budget
 
 C_GREEN = "\033[92m"
 C_CYAN = "\033[96m"
@@ -126,6 +130,114 @@ def run_cmd(cmd, timeout=None):
     return subprocess.run(cmd, timeout=timeout)
 
 
+class RoundTimeoutError(TimeoutError):
+    """The round exceeded its wall-clock limit and its process tree was stopped."""
+
+
+def _terminate_process_tree(process):
+    if process.poll() is not None:
+        return
+    if os.name == "nt":
+        killed = subprocess.run(
+            ["taskkill", "/PID", str(process.pid), "/T", "/F"],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=15,
+            check=False,
+        )
+        if killed.returncode != 0 and process.poll() is None:
+            process.kill()
+            process.wait(timeout=10)
+            raise RuntimeError("round timed out; descendant termination is unverified")
+    else:
+        try:
+            os.killpg(process.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+    process.wait(timeout=10)
+
+
+def _run_bounded_process(cmd, timeout):
+    options = (
+        {"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP}
+        if os.name == "nt" else {"start_new_session": True}
+    )
+    process = subprocess.Popen(cmd, **options)
+    try:
+        return process.wait(timeout=timeout)
+    except subprocess.TimeoutExpired as exc:
+        _terminate_process_tree(process)
+        raise RoundTimeoutError(f"round exceeded {timeout} seconds") from exc
+    except KeyboardInterrupt:
+        _terminate_process_tree(process)
+        raise
+
+
+def _run_round_worker(request_path, result_path):
+    budget_path = os.environ.get("AUTORESEARCH_REQUEST_BUDGET_DB")
+    if not budget_path:
+        raise RuntimeError("bounded round worker requires a request budget ledger")
+    read_budget(budget_path)
+    with open(request_path, "r", encoding="utf-8") as handle:
+        options = json.load(handle)
+    import run_opt
+
+    try:
+        success = run_opt.run_opt_pass(**options)
+        result = {
+            "status": "completed", "success": bool(success),
+            "countermeasures": list(run_opt.LAST_ROUND_COUNTERMEASURES or []),
+        }
+    except Exception as exc:
+        result = {"status": "error", "error": f"{type(exc).__name__}: {exc}"}
+    temporary = result_path + ".tmp"
+    with open(temporary, "w", encoding="utf-8") as handle:
+        json.dump(result, handle, ensure_ascii=False)
+    os.replace(temporary, result_path)
+    return 0 if result["status"] == "completed" else 1
+
+
+def _run_round_subprocess(args, round_no, avoid_failures, dominant_failure_code):
+    evidence_dir = os.path.join("output", "round-workers")
+    os.makedirs(evidence_dir, exist_ok=True)
+    prefix = os.path.join(evidence_dir, f"round-{round_no}-{uuid.uuid4().hex}")
+    request_path, result_path = prefix + ".request.json", prefix + ".result.json"
+    options = {
+        "smoke_parallel": args.smoke_parallel,
+        "dev_parallel": args.dev_parallel,
+        "holdout_parallel": args.holdout_parallel,
+        "force_direction": args.force_direction,
+        "avoid_failures": avoid_failures,
+        "dominant_failure": dominant_failure_code,
+    }
+    with open(request_path, "w", encoding="utf-8") as handle:
+        json.dump(options, handle, ensure_ascii=False)
+    # The controller may be executing inside a newly activated research worktree.
+    # Launch that worktree's copy, since module __file__ still names the caller checkout.
+    worker_script = os.path.abspath("infinite_evolve.py")
+    if not os.path.isfile(worker_script):
+        raise RuntimeError(f"round worker script missing from active workspace: {worker_script}")
+    cmd = [sys.executable, worker_script, "--_round-worker", request_path, result_path]
+    returncode = _run_bounded_process(cmd, args.round_timeout_seconds)
+    result = load_json(result_path)
+    if returncode != 0 or result.get("status") != "completed":
+        raise RuntimeError(result.get("error") or f"round worker exited {returncode} without evidence")
+    return result["success"], result["countermeasures"]
+
+
+def _run_one_round(args, round_no, avoid_failures, dominant_failure_code):
+    if os.environ.get("AUTORESEARCH_CLI_RUN") == "1":
+        return _run_round_subprocess(args, round_no, avoid_failures, dominant_failure_code)
+    import run_opt
+    success = run_opt.run_opt_pass(
+        smoke_parallel=args.smoke_parallel,
+        dev_parallel=args.dev_parallel,
+        holdout_parallel=args.holdout_parallel,
+        force_direction=args.force_direction,
+        avoid_failures=avoid_failures,
+        dominant_failure=dominant_failure_code,
+    )
+    return success, list(getattr(run_opt, "LAST_ROUND_COUNTERMEASURES", []) or [])
+
+
 def route_accepts(route_run_dir, baseline_run="runs/20260524_041843"):
     import scripts.compare_runs as compare_runs
 
@@ -134,7 +246,7 @@ def route_accepts(route_run_dir, baseline_run="runs/20260524_041843"):
     return accepted, diff, comparison
 
 
-def maybe_run_route(args, round_no, previous_runs):
+def maybe_run_route(args, round_no, previous_runs, timeout_seconds=None):
     if not args.route_every or round_no % args.route_every != 0:
         return None
     if not os.path.exists(ROUTE_PATH):
@@ -152,7 +264,7 @@ def maybe_run_route(args, round_no, previous_runs):
             "--parallel",
             str(args.dev_parallel),
         ],
-        timeout=args.route_timeout_seconds,
+        timeout=timeout_seconds if timeout_seconds is not None else args.route_timeout_seconds,
     )
     route_run = latest_dev_run_since(before)
     payload = {
@@ -223,6 +335,22 @@ def validate_run_limits(args):
             errors.append(f"--{name.replace('_', '-')} 必須是有限的非負數")
     if args.budget_usd > 0 and args.estimated_cost_per_call <= 0:
         errors.append("--budget-usd > 0 時必須同時提供正的 --estimated-cost-per-call")
+    if args.budget_usd > 0 and args.estimated_cost_per_call > args.budget_usd:
+        errors.append("--budget-usd 必須足以容納至少一次估計 API 呼叫")
+    if (
+        math.isfinite(args.budget_usd) and math.isfinite(args.estimated_cost_per_call)
+        and args.budget_usd > 0 and args.estimated_cost_per_call > 0
+    ):
+        cap = Decimal(str(args.budget_usd)) / Decimal(str(args.estimated_cost_per_call))
+        if cap > 9_223_372_036_854_775_807:
+            errors.append("估計 API 嘗試配額超出可支援範圍")
+    if not args.dry_run and os.environ.get("AUTORESEARCH_CLI_RUN") == "1":
+        if args.budget_usd <= 0:
+            errors.append("CLI 研究必須提供正的 --budget-usd 與 --estimated-cost-per-call")
+        if args.round_timeout_seconds <= 0:
+            errors.append("CLI 研究必須提供正的 --round-timeout-seconds")
+        if args.route_every > 0 and args.route_timeout_seconds <= 0:
+            errors.append("CLI route 評估必須提供正的 --route-timeout-seconds")
     for name in ("no_improve_limit", "same_failure_limit", "rotate_after", "route_every", "retry_after_no_improve"):
         if getattr(args, name) < 0:
             errors.append(f"--{name.replace('_', '-')} 不可為負數")
@@ -230,6 +358,22 @@ def validate_run_limits(args):
         if getattr(args, name) < 0:
             errors.append(f"--{name.replace('_', '-')} 不可為負數")
     return errors
+
+
+def _start_request_budget(args):
+    if args.budget_usd <= 0:
+        return None
+    cap = int(
+        (Decimal(str(args.budget_usd)) / Decimal(str(args.estimated_cost_per_call)))
+        .to_integral_value(rounding=ROUND_FLOOR)
+    )
+    if cap < 1:
+        raise ValueError("budget cannot cover one estimated provider request")
+    evidence_dir = os.path.abspath(os.path.join("output", "request-budgets"))
+    os.makedirs(evidence_dir, exist_ok=True)
+    ledger_path = os.path.join(evidence_dir, f"budget-{uuid.uuid4().hex}.sqlite3")
+    create_budget(ledger_path, cap)
+    return ledger_path
 
 
 def main(argv=None):
@@ -283,6 +427,24 @@ def _run_validated(args):
         print(f"{C_GREEN}✅ dry-run 完成：只檢查設定，不執行演化。{C_RESET}")
         return 0
 
+    previous_budget = os.environ.get("AUTORESEARCH_REQUEST_BUDGET_DB")
+    budget_path = _start_request_budget(args)
+    if budget_path:
+        os.environ["AUTORESEARCH_REQUEST_BUDGET_DB"] = budget_path
+        cap = read_budget(budget_path)["max_attempts"]
+        print(f"{C_CYAN}Provider 請求嘗試上限：{cap}（依每次成本估計換算）{C_RESET}")
+    else:
+        os.environ.pop("AUTORESEARCH_REQUEST_BUDGET_DB", None)
+    try:
+        return _evolve(args, git_preflight, budget_path)
+    finally:
+        if previous_budget is None:
+            os.environ.pop("AUTORESEARCH_REQUEST_BUDGET_DB", None)
+        else:
+            os.environ["AUTORESEARCH_REQUEST_BUDGET_DB"] = previous_budget
+
+
+def _evolve(args, git_preflight, budget_path):
     started = time.time()
     best_score = baseline_dev_score()
     no_improve_count = 0
@@ -294,6 +456,7 @@ def _run_validated(args):
     successful_promotions = 0
     retry_count = 0
     retry_mode = False
+    terminal_exit_code = 0
 
     append_jsonl(
         LOG_PATH,
@@ -303,10 +466,10 @@ def _run_validated(args):
             "args": vars(args),
             "baseline_dev_score": best_score,
             "git_preflight": git_preflight,
+            "request_budget_ledger": budget_path,
+            "request_budget": read_budget(budget_path) if budget_path else None,
         },
     )
-
-    import run_opt as _run_opt
 
     for round_no in range(1, args.max_rounds + 1):
         print(f"\n{C_PURPLE}{'=' * 64}{C_RESET}")
@@ -316,7 +479,12 @@ def _run_validated(args):
         before_runs = list_run_dirs()
         before_baseline = baseline_dev_score()
         round_started = time.time()
+        round_deadline = (
+            time.monotonic() + args.round_timeout_seconds
+            if os.environ.get("AUTORESEARCH_CLI_RUN") == "1" else None
+        )
         error = ""
+        round_timed_out = False
 
         round_avoid_failures = list(avoid_failures_next)
         countermeasures_injected = []
@@ -324,15 +492,14 @@ def _run_validated(args):
             avoid_failures_next = []
             if round_avoid_failures:
                 print(f"{C_YELLOW}本輪方向避開：{', '.join(round_avoid_failures)}{C_RESET}")
-            success = _run_opt.run_opt_pass(
-                smoke_parallel=args.smoke_parallel,
-                dev_parallel=args.dev_parallel,
-                holdout_parallel=args.holdout_parallel,
-                force_direction=args.force_direction,
-                avoid_failures=round_avoid_failures,
-                dominant_failure=last_dominant_failure,
+            success, countermeasures_injected = _run_one_round(
+                args, round_no, round_avoid_failures, last_dominant_failure,
             )
-            countermeasures_injected = list(getattr(_run_opt, "LAST_ROUND_COUNTERMEASURES", []) or [])
+        except RoundTimeoutError as exc:
+            success = False
+            error = str(exc)
+            round_timed_out = True
+            print(f"{C_RED}❌ round 逾時並停止：{error}{C_RESET}")
         except Exception as exc:
             success = False
             error = str(exc)
@@ -343,7 +510,8 @@ def _run_validated(args):
         latest_run = latest_run_since(before_runs)
         dev_summary = run_summary(dev_run) if dev_run else {}
         after_baseline = baseline_dev_score()
-        promoted = after_baseline > before_baseline
+        baseline_changed = after_baseline > before_baseline
+        promoted = bool(success) and not round_timed_out and not error and baseline_changed
         if promoted:
             successful_promotions += 1
             best_score = after_baseline
@@ -366,13 +534,42 @@ def _run_validated(args):
         if args.rotate_after and failure_code and same_failure_count >= args.rotate_after:
             avoid_failures_next = [failure_code]
 
-        route_payload = maybe_run_route(args, round_no, before_runs)
+        budget_before_route = read_budget(budget_path) if budget_path else None
+        budget_exhausted = bool(
+            budget_before_route
+            and budget_before_route["used_attempts"] >= budget_before_route["max_attempts"]
+        )
+        route_payload = None
+        if (
+            not round_timed_out and not budget_exhausted
+            and not (error and os.environ.get("AUTORESEARCH_CLI_RUN") == "1")
+        ):
+            remaining = round_deadline - time.monotonic() if round_deadline else None
+            if remaining is not None and remaining <= 0:
+                round_timed_out = True
+                error = "round deadline elapsed before route evaluation"
+            else:
+                route_timeout = (
+                    min(args.route_timeout_seconds, remaining)
+                    if remaining is not None else None
+                )
+                try:
+                    route_payload = maybe_run_route(
+                        args, round_no, before_runs, timeout_seconds=route_timeout,
+                    )
+                except subprocess.TimeoutExpired:
+                    round_timed_out = True
+                    error = "round deadline elapsed during route evaluation"
         if route_payload:
             route_calls = int((route_payload.get("summary") or {}).get("estimated_api_calls") or 0)
             estimated_calls_total += route_calls
             if args.estimated_cost_per_call:
                 estimated_cost_total += route_calls * args.estimated_cost_per_call
 
+        budget_state = read_budget(budget_path) if budget_path else None
+        budget_exhausted = bool(
+            budget_state and budget_state["used_attempts"] >= budget_state["max_attempts"]
+        )
         elapsed = time.time() - round_started
         payload = {
             "event": "round_complete",
@@ -385,6 +582,7 @@ def _run_validated(args):
             "latest_run": latest_run,
             "before_baseline_dev": before_baseline,
             "after_baseline_dev": after_baseline,
+            "baseline_changed_during_incomplete_round": baseline_changed and not promoted,
             "best_score": best_score,
             "no_improve_count": no_improve_count,
             "dominant_failure": failure_code,
@@ -394,6 +592,8 @@ def _run_validated(args):
             "round_estimated_api_calls": round_calls,
             "estimated_api_calls_total": estimated_calls_total,
             "estimated_cost_total": estimated_cost_total,
+            "request_budget": budget_state,
+            "round_timed_out": round_timed_out,
             "elapsed_seconds": elapsed,
         }
         append_jsonl(LOG_PATH, payload)
@@ -404,11 +604,29 @@ def _run_validated(args):
         if avoid_failures_next:
             print(f"{C_YELLOW}下輪將暫時避開：{', '.join(avoid_failures_next)}{C_RESET}")
         print(f"{C_CYAN}估計 API calls：本輪 {round_calls}，累計 {estimated_calls_total}{C_RESET}")
+        if budget_state:
+            print(
+                f"{C_CYAN}Provider 嘗試配額："
+                f"{budget_state['used_attempts']}/{budget_state['max_attempts']}{C_RESET}"
+            )
         if args.estimated_cost_per_call:
             print(f"{C_CYAN}估計成本：${estimated_cost_total:.4f}{C_RESET}")
 
         stop_reason = ""
-        if args.no_improve_limit and no_improve_count >= args.no_improve_limit:
+        if round_timed_out:
+            stop_reason = error or "round deadline elapsed"
+            terminal_exit_code = 124
+        elif error and os.environ.get("AUTORESEARCH_CLI_RUN") == "1":
+            stop_reason = f"round 執行證據不完整：{error}"
+            terminal_exit_code = 1
+        elif budget_exhausted:
+            stop_reason = (
+                f"Provider 嘗試配額用盡："
+                f"{budget_state['used_attempts']}/{budget_state['max_attempts']}"
+            )
+            if not success:
+                terminal_exit_code = 3
+        elif args.no_improve_limit and no_improve_count >= args.no_improve_limit:
             if not retry_mode and args.retry_after_no_improve > 0:
                 # 進入重試模式
                 retry_mode = True
@@ -497,7 +715,7 @@ def _run_validated(args):
                     convergence_report["latest_dev_summary"] = dev_summary
                 if latest_run:
                     convergence_report["latest_run"] = latest_run
-                    convergence_report["latest_summary"] = latest_summary
+                    convergence_report["latest_summary"] = run_summary(latest_run)
                 
                 # 寫入結構化結論檔案
                 conclusion_path = f"docs/convergence_report_{time.strftime('%Y%m%d_%H%M%S')}.json"
@@ -538,9 +756,12 @@ def _run_validated(args):
         print(f"  估計成本: ${estimated_cost_total:.4f}")
     print(f"  log: {LOG_PATH}")
     print(f"{C_PURPLE}============================================================{C_RESET}")
-    return 0
+    return terminal_exit_code
 
 
 if __name__ == "__main__":
+    if len(sys.argv) == 4 and sys.argv[1] == "--_round-worker":
+        sys.exit(_run_round_worker(sys.argv[2], sys.argv[3]))
+    os.environ["AUTORESEARCH_CLI_RUN"] = "1"
     os.environ["AUTORESEARCH_ISOLATE_WORKSPACE"] = "1"
     sys.exit(main())
