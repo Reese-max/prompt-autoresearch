@@ -116,6 +116,13 @@ def test_check_run_path(tmp_path):
     assert preflight.check_run_path(str(complete)) is True
 
 
+def test_check_run_path_accepts_windows_separators_on_all_platforms(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    make_run_dir(tmp_path, "runs/dev1")
+    assert preflight.check_run_path(r"runs\dev1") is True
+    assert preflight.check_run_path(r"runs\missing") is False
+
+
 # ---------- main() ----------
 
 def test_main_all_pass_text_output(tmp_path, monkeypatch, capsys):
