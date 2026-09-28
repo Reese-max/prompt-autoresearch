@@ -1835,7 +1835,8 @@ function populateModelDropdown() {
     });
     elements.settingsModel.innerHTML = html;
     
-    if (savedModelIsSelectable) {
+    if (AppState.settings.provider === provider && AppState.settings.model
+        && (provider !== 'gemini' || savedModelIsSelectable)) {
         elements.settingsModel.value = AppState.settings.model;
     }
 }

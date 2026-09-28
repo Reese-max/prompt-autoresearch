@@ -104,6 +104,11 @@ async function main() {
     run('populateModelDropdown()');
     assert.equal(run('AppState.settings.provider'), 'minimax');
     assert.equal(run('AppState.settings.model'), 'MiniMax-M2.7', 'preview must not mutate saved settings');
+    run("AppState.settings.model = 'unlisted-minimax-model'");
+    document.getElementById('settings-provider').value = 'minimax';
+    run('populateModelDropdown()');
+    assert.equal(settingsModel.value, '', 'other providers keep their original invalid-saved-model display');
+    assert.equal(run('AppState.settings.model'), 'unlisted-minimax-model');
 
     assert.deepEqual(Array.from(run('ProviderModels.openai'), model => model.id), ['gpt-4o-mini', 'gpt-4o']);
     assert.deepEqual(Array.from(run('ProviderModels.anthropic'), model => model.id), ['claude-3-5-sonnet-20241022']);
