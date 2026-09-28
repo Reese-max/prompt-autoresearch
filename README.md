@@ -83,14 +83,17 @@ questions/、rubrics/、scripts/ 和 program.md 是評估規則/資料，不得�
 | 研究規則/程式 | *.py、lib/、api/、scripts/、program.md | source；人工 review 後修改 |
 | prompt 和固定資料 | prompts/、questions/、rubrics/、schemas/ | source/fixture；保留 baseline 與 holdout |
 | append-only 歷史證據 | evolution_log.jsonl、metrics.jsonl、route_*_log.jsonl、results.tsv | 由流程產生；不要手動改寫或覆蓋 |
-| 每次 run 證據 | runs/、prompts/candidates/、prompts/archive/、output/ | 可再生或稽核資料；先保留，經 maintainer review 才歸檔 |
+| 每次 run 證據 | runs/、prompts/candidates/、output/ | 可再生或稽核資料；先保留，經 maintainer review 才歸檔 |
+| 舊 baseline 備份 | prompts/archive/baseline_*.md | 成功晉升時建立；run_opt.py 依 config.json 的 archive.max_versions 自動只保留最新 20 份 |
 | 舊測試/覆蓋輸出 | test_output.txt、目前 tracked 的 htmlcov/ | 歷史產物；不當成最新 coverage 證據 |
 | 未來本機生成物 | .cache/、新的 htmlcov/、*.lcov、.coverage*、output/ | .gitignore 排除；不刪既有 tracked evidence |
 
-log 和 run 目錄沒有程式化自動 retention/rotation。建議每輪保留到
-review 完成；之後由 maintainer 以日期和 baseline hash 歸檔，並保留
-evolution_log.jsonl、metrics.jsonl 的原始副本。不要宣稱上述建議是
-enforced retention。
+log 和 run 目錄沒有程式化自動 retention/rotation。維護政策是每輪至少
+保留到 review 完成；之後由 maintainer 以日期和 baseline hash 歸檔，並
+保留 evolution_log.jsonl、metrics.jsonl 的原始副本。這項人工政策沒有
+程式強制執行。prompts/archive/baseline_*.md 則在成功晉升後自動刪除超過
+archive.max_versions 的最舊備份；需要更長期保存舊 baseline 時，請在晉升前
+另行歸檔。
 
 ## Holdout、最佳 baseline 和恢復
 
