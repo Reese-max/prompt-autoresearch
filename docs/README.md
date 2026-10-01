@@ -27,7 +27,14 @@
 
 ## 瀏覽器 Gemini 模型
 
-設定頁面的 Gemini 選項為 **Gemini 3.5 Flash-Lite** (`gemini-3.5-flash-lite`) 與 **Gemini 3.8 Flash** (`gemini-3.8-flash`)。Google 的[模型清單](https://ai.google.dev/gemini-api/docs/models)與[退場時程](https://ai.google.dev/gemini-api/docs/deprecations)在 2026-09-29 將兩者列為穩定模型，且未宣布停止日期。曾儲存舊 Gemini 型號的使用者需在設定頁重新選擇並儲存；舊型號不會送出 API 請求。正式 provider 可用性仍需經授權的 `generateContent` 呼叫驗證。
+設定頁面的 Gemini 選項為 **Gemini 2.5 Flash** (`gemini-2.5-flash`) 與 **Gemini 2.5 Pro** (`gemini-2.5-pro`)，沿用原本「快速演化 / 深度邏輯」兩種角色。已於 2025-09-29 shutdown 的 `gemini-1.5-flash` / `gemini-1.5-pro` 已從可選清單移除（[Google 退場時程](https://ai.google.dev/gemini-api/docs/changelog)）。
+
+行為契約：
+
+- `callGeminiAPI()` 在送出前比對可選清單；已退場或未列出的 model ID 直接拒絕，不會送出請求。
+- 曾儲存舊 Gemini 型號的使用者，設定頁會顯示「請重新選擇 Gemini 模型並儲存」，且在重新選擇前無法儲存，舊 ID 不會被沿用。
+- 型號清單以 Google 官方[模型清單](https://ai.google.dev/gemini-api/docs/models)與[退場時程](https://ai.google.dev/gemini-api/docs/deprecations)為準；升級型號前需重新核對當時 lifecycle。
+- 正式 provider 可用性仍為 `NEEDS_RUNTIME_VERIFICATION`：需在有明確測試授權的環境以選定替代型號做一次 bounded `generateContent` smoke 後才能宣告恢復，單元測試只驗證 selector 與請求組裝契約。
 
 ## 文件互連
 
