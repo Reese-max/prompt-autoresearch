@@ -4,6 +4,7 @@ const path = require('node:path');
 const vm = require('node:vm');
 
 const source = fs.readFileSync(path.join(__dirname, '..', 'app.js'), 'utf8');
+const settingsHtml = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
 const nodes = new Map();
 const settingsModel = {
     selected: '',
@@ -60,12 +61,14 @@ const run = expression => vm.runInContext(expression, context);
 async function main() {
     const models = run('ProviderModels.gemini');
     assert.deepEqual(Array.from(models, model => model.id), [
-        'gemini-2.5-flash', 'gemini-2.5-pro'
+        'gemini-3.5-flash-lite', 'gemini-3.8-flash'
     ]);
     assert.deepEqual(Array.from(models, model => model.name.split(' (')[0]), [
-        'Gemini 2.5 Flash', 'Gemini 2.5 Pro'
+        'Gemini 3.5 Flash-Lite', 'Gemini 3.8 Flash'
     ]);
     const selectableIds = Array.from(models, model => model.id);
+    assert.match(settingsHtml, /Gemini 3 使用 Google 預設值/,
+        'the UI explains that Gemini 3 uses Google sampling defaults');
     for (const retired of ['gemini-1.5-flash', 'gemini-1.5-pro']) {
         assert.ok(!selectableIds.includes(retired), `${retired} was shut down and must not be selectable`);
     }
@@ -77,9 +80,10 @@ async function main() {
     assert.equal(run('AppState.settings.model'), 'gemini-1.5-pro');
     assert.equal(settingsModel.value, '');
     assert.match(settingsModel.innerHTML, /請重新選擇 Gemini 模型並儲存/);
-    await assert.rejects(run("callGeminiAPI('test-key', AppState.settings.model, 'hello', 0.4)"), /不支援的 Gemini 模型/);
-    await assert.rejects(run("callGeminiAPI('test-key', 'gemini-1.5-flash', 'hello', 0.4)"), /不支援的 Gemini 模型/);
-    await assert.rejects(run("callGeminiAPI('test-key', 'gemini-2.5-pro/other', 'hello', 0.4)"), /不支援的 Gemini 模型/);
+    await assert.rejects(run("callGeminiAPI('test-key', AppState.settings.model, 'hello')"), /不支援的 Gemini 模型/);
+    await assert.rejects(run("callGeminiAPI('test-key', 'gemini-1.5-flash', 'hello')"), /不支援的 Gemini 模型/);
+    await assert.rejects(run("callGeminiAPI('test-key', 'gemini-2.5-pro/other', 'hello')"), /不支援的 Gemini 模型/);
+    await assert.rejects(run("callGeminiAPI('test-key', 'gemini-2.5-pro', 'hello')"), /不支援的 Gemini 模型/);
     assert.equal(requests.length, 0, 'retired and unknown models must not leave the browser');
 
     run('saveSettingsToLocal()');
@@ -89,19 +93,18 @@ async function main() {
         run('saveSettingsToLocal()');
         assert.equal(run('AppState.settings.model'), model.id);
         assert.equal(JSON.parse(stored.get('prompt_lab_settings_v2')).model, model.id);
-        assert.equal(await run("callGeminiAPI('test-key', AppState.settings.model, 'hello', 0.4)"), 'gemini response');
+        assert.equal(await run("callGeminiAPI('test-key', AppState.settings.model, 'hello')"), 'gemini response');
         const request = requests.at(-1);
         assert.equal(request.url, `https://generativelanguage.googleapis.com/v1beta/models/${model.id}:generateContent?key=test-key`);
         assert.deepEqual(JSON.parse(request.options.body), {
-            contents: [{ parts: [{ text: 'hello' }] }],
-            generationConfig: { temperature: 0.4 }
+            contents: [{ parts: [{ text: 'hello' }] }]
         });
     }
     context.window.location.hostname = 'localhost';
-    await run("callGeminiAPI('test-key', 'gemini-2.5-pro', 'hello', 0.4)");
+    await run("callGeminiAPI('test-key', 'gemini-3.8-flash', 'hello')");
     assert.equal(requests.at(-1).url, '/api/proxy');
     assert.equal(JSON.parse(requests.at(-1).options.body).url,
-        'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent?key=test-key');
+        'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=test-key');
     context.window.location.hostname = 'example.test';
 
     run("AppState.settings.provider = 'minimax'; AppState.settings.model = 'MiniMax-M2.7'");
