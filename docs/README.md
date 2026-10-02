@@ -27,15 +27,15 @@
 
 ## 瀏覽器 Gemini 模型
 
-設定頁面的 Gemini 選項為 **Gemini 2.5 Flash** (`gemini-2.5-flash`) 與 **Gemini 2.5 Pro** (`gemini-2.5-pro`)，沿用原本「快速演化 / 深度邏輯」兩種角色。已於 2025-09-29 shutdown 的 `gemini-1.5-flash` / `gemini-1.5-pro` 已從可選清單移除（[Google 退場時程](https://ai.google.dev/gemini-api/docs/changelog)）。
+設定頁提供 **Gemini 3.5 Flash-Lite** (`gemini-3.5-flash-lite`) 與 **Gemini 3.8 Flash** (`gemini-3.8-flash`)，分別沿用「快速演化 / 深度邏輯」角色。Google 最新模型文件將這兩個型號列為新專案選項；Gemini 2.5 型號目前只對曾使用過的帳號開放，因此不作為通用替代型號。已於 2025-09-29 shutdown 的 `gemini-1.5-flash` / `gemini-1.5-pro` 不再列入選單（[Google 模型清單](https://ai.google.dev/gemini-api/docs/models)、[退場時程](https://ai.google.dev/gemini-api/docs/deprecations)）。
 
 行為契約：
 
-- `callGeminiAPI()` 在送出前比對可選清單；已退場或未列出的 model ID 直接拒絕，不會送出請求。
-- 曾儲存舊 Gemini 型號的使用者，設定頁會顯示「請重新選擇 Gemini 模型並儲存」，且在重新選擇前無法儲存，舊 ID 不會被沿用。
-- 型號清單以 Google 官方[模型清單](https://ai.google.dev/gemini-api/docs/models)與[退場時程](https://ai.google.dev/gemini-api/docs/deprecations)為準；升級型號前需重新核對當時 lifecycle。
+- `callGeminiAPI()` 在送出前比對可選清單，URL 中的 model ID 與選項相同；退場、受限或未列出的 ID 直接拒絕。
+- Gemini 3 請求採用 Google 預設 sampling 設定，不傳送 `temperature`、`top_p` 或 `top_k`。設定頁的溫度滑桿只作用於其他供應商。
+- 曾儲存舊 Gemini 型號的使用者，設定頁要求重新選型並儲存；舊 ID 不會被沿用。
+- 型號清單以 Google 官方[模型清單](https://ai.google.dev/gemini-api/docs/models)、[退場時程](https://ai.google.dev/gemini-api/docs/deprecations)與[Gemini 3.8 遷移指引](https://ai.google.dev/gemini-api/docs/generate-content/latest-model)為準；升級型號前需重新核對當時 lifecycle。
 - 正式 provider 可用性仍為 `NEEDS_RUNTIME_VERIFICATION`：需在有明確測試授權的環境以選定替代型號做一次 bounded `generateContent` smoke 後才能宣告恢復，單元測試只驗證 selector 與請求組裝契約。
-
 ## 文件互連
 
 - [architecture-overview.md](./architecture-overview.md) 會引導你到 `architecture.md` 進一步看實際模組與流程。
