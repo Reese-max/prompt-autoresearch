@@ -11,6 +11,7 @@
 import hashlib
 import json
 import sys
+import time
 import types
 from pathlib import Path
 from types import SimpleNamespace
@@ -18,6 +19,7 @@ from types import SimpleNamespace
 import pytest
 
 import infinite_evolve
+from scripts import git_reproducibility
 
 
 # ---------------------------------------------------------------------------
@@ -103,6 +105,216 @@ def _common_argv(**overrides):
         flag = "--" + k.replace("_", "-")
         argv.extend([flag, str(v)])
     return argv
+
+
+def test_dry_run_forwards_offline_preflight_and_skips_evolution(tmp_path, monkeypatch):
+    """dry-run 必須略過 provider key 並在任何演化 round 前結束。"""
+    monkeypatch.chdir(tmp_path)
+    calls = []
+
+    def fake_run_cmd(cmd, timeout=None):
+        calls.append((cmd, timeout))
+        return SimpleNamespace(returncode=0)
+
+    monkeypatch.setattr(infinite_evolve, "run_cmd", fake_run_cmd)
+    rc = infinite_evolve.main(argv=_common_argv(max_rounds=1) + ["--dry-run"])
+
+    assert rc == 0
+    assert len(calls) == 1
+    assert calls[0][0][-1] == "--offline"
+    assert not (tmp_path / "evolution_log.jsonl").exists()
+
+
+def test_dry_run_skips_research_workspace_even_with_cli_isolation_enabled(tmp_path, monkeypatch):
+    """The real CLI sets isolation, but a zero-cost dry-run must not clone a worktree."""
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("AUTORESEARCH_ISOLATE_WORKSPACE", "1")
+    monkeypatch.setattr(
+        git_reproducibility,
+        "create_research_workspace",
+        lambda *args, **kwargs: pytest.fail("dry-run created a research worktree"),
+    )
+    calls = []
+    monkeypatch.setattr(
+        infinite_evolve,
+        "run_cmd",
+        lambda cmd, timeout=None: calls.append(cmd) or SimpleNamespace(returncode=0),
+    )
+
+    assert infinite_evolve.main(argv=_common_argv(max_rounds=1) + ["--dry-run"]) == 0
+    assert len(calls) == 1
+    assert calls[0][-1] == "--offline"
+
+
+def test_live_cli_rejects_unbounded_budget_and_timeout_before_preflight(monkeypatch):
+    monkeypatch.setenv("AUTORESEARCH_CLI_RUN", "1")
+    monkeypatch.setattr(
+        infinite_evolve, "run_cmd", lambda *_args, **_kwargs: pytest.fail("preflight ran")
+    )
+    assert infinite_evolve.main(argv=_common_argv(max_rounds=1)) == 2
+    assert infinite_evolve.main(argv=_common_argv(max_rounds=1, round_timeout_seconds=0)
+                                + ["--budget-usd", "1", "--estimated-cost-per-call", "0.1"]) == 2
+
+
+def test_bounded_round_process_is_terminated_on_deadline():
+    started = time.monotonic()
+    with pytest.raises(infinite_evolve.RoundTimeoutError):
+        infinite_evolve._run_bounded_process(
+            [sys.executable, "-c", "import time; time.sleep(30)"], timeout=0.2
+        )
+    assert time.monotonic() - started < 10
+
+
+def test_round_worker_uses_active_research_worktree(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "infinite_evolve.py").write_text("# active worktree worker\n", encoding="utf-8")
+    captured = []
+
+    def fake_bounded_process(cmd, timeout):
+        captured.append((cmd, timeout))
+        Path(cmd[4]).write_text(
+            json.dumps({"status": "completed", "success": True, "countermeasures": ["F03"]}),
+            encoding="utf-8",
+        )
+        return 0
+
+    monkeypatch.setattr(infinite_evolve, "_run_bounded_process", fake_bounded_process)
+    args = infinite_evolve.parse_args(["--round-timeout-seconds", "13"])
+    success, countermeasures = infinite_evolve._run_round_subprocess(
+        args, 1, ["F04"], "F03"
+    )
+    assert success is True
+    assert countermeasures == ["F03"]
+    assert Path(captured[0][0][1]) == tmp_path / "infinite_evolve.py"
+    assert captured[0][1] == 13
+
+
+def test_round_timeout_stops_before_route_and_restores_budget_env(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    _write_baseline(tmp_path)
+    monkeypatch.setenv("AUTORESEARCH_CLI_RUN", "1")
+    monkeypatch.delenv("AUTORESEARCH_ISOLATE_WORKSPACE", raising=False)
+    monkeypatch.setattr(
+        infinite_evolve, "run_cmd", lambda *_args, **_kwargs: SimpleNamespace(returncode=0)
+    )
+    monkeypatch.setattr(
+        infinite_evolve, "_run_round_subprocess",
+        lambda *_args: (_ for _ in ()).throw(infinite_evolve.RoundTimeoutError("expired")),
+    )
+    monkeypatch.setattr(
+        infinite_evolve, "maybe_run_route",
+        lambda *_args, **_kwargs: pytest.fail("route ran after timeout"),
+    )
+    assert infinite_evolve.main(argv=_common_argv(max_rounds=2)
+                                + ["--budget-usd", "0.02", "--estimated-cost-per-call", "0.01"]) == 124
+    assert "AUTORESEARCH_REQUEST_BUDGET_DB" not in infinite_evolve.os.environ
+    events = _read_log(tmp_path)
+    rounds = [event for event in events if event.get("event") == "round_complete"]
+    assert len(rounds) == 1
+    assert rounds[0]["round_timed_out"] is True
+    assert rounds[0]["promoted"] is False
+    assert [event for event in events if event.get("event") == "stop"]
+
+
+def test_missing_dev_run_does_not_turn_holdout_failures_into_next_round_feedback(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    _write_baseline(tmp_path)
+    monkeypatch.setattr(
+        infinite_evolve, "run_cmd", lambda cmd, timeout=None: SimpleNamespace(returncode=0)
+    )
+    calls = _install_fake_run_opt(monkeypatch, always_success=False)
+    monkeypatch.setattr(infinite_evolve, "latest_dev_run_since", lambda _before: None)
+    monkeypatch.setattr(infinite_evolve, "latest_run_since", lambda _before: "runs/holdout")
+    monkeypatch.setattr(
+        infinite_evolve,
+        "run_summary",
+        lambda _run: {"question_file": "questions/holdout.jsonl", "failure_counts": {"F99": 4}},
+    )
+    monkeypatch.setattr(infinite_evolve.time, "sleep", lambda _: None)
+
+    assert infinite_evolve.main(
+        argv=_common_argv(max_rounds=2, no_improve_limit=3, retry_after_no_improve=0)
+    ) == 0
+    assert len(calls) == 2
+    assert calls[1]["dominant_failure"] in (None, "")
+    round_events = [row for row in _read_log(tmp_path) if row.get("event") == "round_complete"]
+    assert len(round_events) == 2
+    assert all(row["dominant_failure"] == "" for row in round_events)
+
+
+def test_budget_requires_cost_estimate_before_preflight(tmp_path, monkeypatch):
+    """指定預算卻沒有單次成本估計時，不得開始任何 subprocess。"""
+    monkeypatch.chdir(tmp_path)
+    calls = []
+    monkeypatch.setattr(
+        infinite_evolve,
+        "run_cmd",
+        lambda cmd, timeout=None: calls.append((cmd, timeout)),
+    )
+
+    rc = infinite_evolve.main(
+        argv=_common_argv(max_rounds=1) + ["--budget-usd", "1"]
+    )
+
+    assert rc == 2
+    assert calls == []
+
+
+@pytest.mark.parametrize(
+    ("flag", "attribute"),
+    [
+        ("--smoke-parallel", "smoke_parallel"),
+        ("--dev-parallel", "dev_parallel"),
+        ("--holdout-parallel", "holdout_parallel"),
+    ],
+)
+def test_stage_parallel_falls_back_only_when_omitted(flag, attribute):
+    """Only an omitted stage value inherits --parallel; explicit values survive parsing."""
+    omitted = infinite_evolve.parse_args(["--parallel", "7"])
+    assert getattr(omitted, attribute) == 7
+
+    explicit = infinite_evolve.parse_args(["--parallel", "7", flag, "3"])
+    assert getattr(explicit, attribute) == 3
+
+
+@pytest.mark.parametrize("flag", ["--smoke-parallel", "--dev-parallel", "--holdout-parallel"])
+@pytest.mark.parametrize("value", ["0", "-1"])
+def test_invalid_explicit_stage_parallel_rejected_before_preflight(tmp_path, monkeypatch, flag, value):
+    """Zero/negative stage values fail validation before any preflight subprocess."""
+    monkeypatch.chdir(tmp_path)
+    calls = []
+    monkeypatch.setattr(
+        infinite_evolve,
+        "run_cmd",
+        lambda cmd, timeout=None: calls.append((cmd, timeout)),
+    )
+
+    rc = infinite_evolve.main(
+        argv=_common_argv(max_rounds=1) + ["--parallel", "7", flag, value]
+    )
+
+    assert rc == 2
+    assert calls == []
+
+
+def test_invalid_stage_rejected_before_isolation_workspace(tmp_path, monkeypatch):
+    """The true CLI isolation wrapper must not run for invalid stage limits."""
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("AUTORESEARCH_ISOLATE_WORKSPACE", "1")
+
+    def unexpected_workspace_creation(*args, **kwargs):
+        pytest.fail("invalid CLI must be rejected before creating a research workspace")
+
+    monkeypatch.setattr(
+        git_reproducibility,
+        "create_research_workspace",
+        unexpected_workspace_creation,
+    )
+    rc = infinite_evolve.main(
+        argv=_common_argv(max_rounds=1) + ["--parallel", "7", "--smoke-parallel", "0"]
+    )
+
+    assert rc == 2
 
 
 # ---------------------------------------------------------------------------
