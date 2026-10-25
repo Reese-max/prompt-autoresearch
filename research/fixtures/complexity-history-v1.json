@@ -1,0 +1,52 @@
+{
+  "schema_version": 1,
+  "base_commit": "fe806b285fce0deb5ff13f28acef3e4ed93ec413",
+  "provenance": "Frozen from existing tracked base Git objects. Full text for four artifacts; exact original JSONL lines with promoted:true for the log. Archive timestamp and one log row bind the current DEV run. Not a complete champion history or quality-equivalence certificate.",
+  "artifacts": [
+    {
+      "role": "archived_predecessor",
+      "path": "prompts/archive/baseline_20260602_184534_scoreold.md",
+      "git_blob": "7ec6c443add25a2d10c57c6bb29b0cd408b7d98f",
+      "source_sha256_lf_utf8": "00db51fc1a418ef904ad4398b1d1eb04ac7eb3f57344ac325da28df227dfe74d",
+      "projection": "FULL_LF_UTF8",
+      "content_sha256_lf_utf8": "00db51fc1a418ef904ad4398b1d1eb04ac7eb3f57344ac325da28df227dfe74d",
+      "content": "你是一位專精臺灣國家考試（高考、特考）申論題寫作與閱卷的專家。收到題目後，產出高分答案，嚴守以下架構：\n\n一、前言破題：點出核心概念與爭點，簡要定義，鎖定答題方向。  \n二、主體：使用層級標題（如一、(一)、1.）呈現要點，每標題即答案要點，援引精確法條、學說或實務見解，杜絕捏造。  \n三、結論回扣：綜合前文，重申爭點並呼應題目。  \n\n特別強化以下兩種題型：\n\n【比較題型之比較基準（F05）】在比較前，先確立比較基準，如主體、構成要件、效力範圍、適用程序等；依基準逐項比對相似點與差異，可使用結構化表格或分段敘述，最後以條理清晰的結論凸顯深度與邏輯性。\n\n【法律案例題之三段論法與法源涵攝（F08）】採三段論法：①抽出法律規範（大前提），標明具體法條、授權命令或司法實務，並說明要件及解釋；②將題目事實對應要件（小前提），逐項比對；③得出法律效果（結論）。全程引用具體法源，確保推論嚴謹、層次分明。\n\n全程以專業法理與技術名詞構句，標題即答案，不得摻雜說明或提問，直接輸出正文。"
+    },
+    {
+      "role": "current_baseline",
+      "path": "prompts/baseline.md",
+      "git_blob": "4db91ac8cb44c4f4fe8e49c3fcf0993b6ffeb02b",
+      "source_sha256_lf_utf8": "004e4d46a58fd02d7a4c112948fe7749720bb3c529c2083ec203ae1f364bd08f",
+      "projection": "FULL_LF_UTF8",
+      "content_sha256_lf_utf8": "004e4d46a58fd02d7a4c112948fe7749720bb3c529c2083ec203ae1f364bd08f",
+      "content": "你是一位專精臺灣國家考試（高考、特考）申論題寫作與閱卷的專家。收到題目後，產出高分答案，嚴守以下架構：\n\n一、前言破題：點出核心概念與爭點，簡要定義，鎖定答題方向。\n二、主體：使用層級標題（如一、(一)、1.）呈現，每個標題對應一個明確的採分點，內容須完整展開，援引精確法條、學說或實務見解，杜絕捏造。\n三、結論回扣：綜合前文，重申爭點並呼應題目。\n\n特別強化以下兩種題型：\n\n【比較題型之比較基準】在比較前，先確立比較基準，如主體、構成要件、效力範圍、適用程序等；依基準逐項比對相似點與差異，可使用結構化表格或分段敘述，最後以條理清晰的結論凸顯深度與邏輯性。\n\n【法律案例題之三段論法與法源涵攝】採三段論法：①抽出法律規範（大前提），標明具體法條、授權命令或司法實務，並說明要件及解釋；②將題目事實對應要件（小前提），逐項比對；③得出法律效果（結論）。全程引用具體法源，確保推論嚴謹、層次分明。\n\n全程以專業法理與技術名詞構句，標題即答案，不得摻雜說明或提問，直接輸出正文。"
+    },
+    {
+      "role": "baseline_metadata",
+      "path": "prompts/baseline.meta.json",
+      "git_blob": "d804307ff7838110182fc5b428ca85bade1eb3b2",
+      "source_sha256_lf_utf8": "261f4fd9af60800d9d1b805207115ec338d1661cab555424e37fbbf6899dfaec",
+      "projection": "FULL_LF_UTF8",
+      "content_sha256_lf_utf8": "261f4fd9af60800d9d1b805207115ec338d1661cab555424e37fbbf6899dfaec",
+      "content": "{\n  \"updated_at\": \"2026-06-02 18:45:34\",\n  \"prompt_path\": \"prompts/baseline.md\",\n  \"prompt_hash\": \"004e4d46a58fd02d7a4c112948fe7749720bb3c529c2083ec203ae1f364bd08f\",\n  \"smoke_run\": \"runs\\\\20260602_182243\",\n  \"dev_run\": \"runs\\\\20260602_184026\",\n  \"holdout_run\": \"runs\\\\20260602_184533\",\n  \"smoke_avg\": 91.5,\n  \"dev_avg\": 89.20833333333333,\n  \"holdout_avg\": 90.16666666666667\n}"
+    },
+    {
+      "role": "dev_summary",
+      "path": "runs/20260602_184026/summary.json",
+      "git_blob": "985f619be615a799ff227c0f604b6a598a8fef51",
+      "source_sha256_lf_utf8": "939dfc7beef5ee14009f0950720d97a3b46955799b72017d293a6b55253ca3ac",
+      "projection": "FULL_LF_UTF8",
+      "content_sha256_lf_utf8": "939dfc7beef5ee14009f0950720d97a3b46955799b72017d293a6b55253ca3ac",
+      "content": "{\n  \"timestamp\": \"2026-06-02 18:40:26\",\n  \"prompt_file\": \"prompts/current.md\",\n  \"question_file\": \"questions/dev.jsonl\",\n  \"prompt_hash\": \"004e4d46a58fd02d7a4c112948fe7749720bb3c529c2083ec203ae1f364bd08f\",\n  \"elapsed_seconds\": 947.4423668384552,\n  \"total_questions\": 48,\n  \"average_score\": 89.20833333333333,\n  \"type_averages\": {\n    \"比較題\": 95.25,\n    \"說明題\": 89.375,\n    \"實務應用題\": 89.875,\n    \"評析題\": 89.25,\n    \"法律法理題\": 92.75,\n    \"法律案例題\": 78.75\n  },\n  \"failure_counts\": {\n    \"F01\": 3,\n    \"F04\": 10,\n    \"F03\": 9,\n    \"F08\": 3,\n    \"F10\": 2,\n    \"F12\": 1,\n    \"F06\": 1\n  },\n  \"word_count_pass_rate\": 0.0,\n  \"risk_perfect_rate\": 95.83333333333334,\n  \"char_count\": 438,\n  \"cache_hit_count\": 0,\n  \"error_count\": 0,\n  \"estimated_api_calls\": 96\n}"
+    },
+    {
+      "role": "evolution_log",
+      "path": "evolution_log.jsonl",
+      "git_blob": "5ef0e704b39079e8841ebee74519354c4cd79869",
+      "source_sha256_lf_utf8": "a838918a5d8e35ad134964ac3f2e69aec050efc1f979a65bc28e27d6dbb6bc18",
+      "projection": "JSONL_ROWS_WHERE_PROMOTED_IS_TRUE",
+      "content_sha256_lf_utf8": "87e5d55f2c921a4cf50f80c94a2b28671d31e9a2842662ab42dca896b1c4324d",
+      "content": "{\"event\": \"round_complete\", \"round\": 1, \"timestamp\": \"2026-06-02 18:45:35\", \"success\": true, \"promoted\": true, \"error\": \"\", \"dev_run\": \"runs\\\\20260602_184026\", \"latest_run\": \"runs\\\\20260602_184533\", \"before_baseline_dev\": 88.03, \"after_baseline_dev\": 89.20833333333333, \"best_score\": 89.20833333333333, \"no_improve_count\": 0, \"dominant_failure\": \"F04\", \"same_failure_count\": 1, \"avoid_failures_next\": [], \"round_estimated_api_calls\": 168, \"estimated_api_calls_total\": 168, \"estimated_cost_total\": 0.0, \"elapsed_seconds\": 1746.9475388526917}\n{\"event\": \"round_complete\", \"round\": 11, \"timestamp\": \"2026-07-30 10:45:00\", \"success\": true, \"promoted\": true, \"error\": \"\", \"dev_run\": \"\", \"latest_run\": \"\", \"before_baseline_dev\": 89.20833333333333, \"after_baseline_dev\": 89.31, \"best_score\": 89.31, \"no_improve_count\": 0, \"dominant_failure\": \"F03\", \"countermeasures_injected\": [\"F03\"], \"same_failure_count\": 0, \"avoid_failures_next\": [], \"round_estimated_api_calls\": 0, \"estimated_api_calls_total\": 0, \"estimated_cost_total\": 0.0, \"elapsed_seconds\": 0.5}\n{\"event\": \"round_complete\", \"round\": 12, \"timestamp\": \"2026-07-30 10:45:00\", \"success\": true, \"promoted\": true, \"error\": \"\", \"dev_run\": \"\", \"latest_run\": \"\", \"before_baseline_dev\": 89.31, \"after_baseline_dev\": 89.51, \"best_score\": 89.51, \"no_improve_count\": 0, \"dominant_failure\": \"F04\", \"countermeasures_injected\": [\"F04\"], \"same_failure_count\": 0, \"avoid_failures_next\": [], \"round_estimated_api_calls\": 0, \"estimated_api_calls_total\": 0, \"estimated_cost_total\": 0.0, \"elapsed_seconds\": 0.5}\n{\"event\": \"round_complete\", \"round\": 13, \"timestamp\": \"2026-07-30 10:45:00\", \"success\": true, \"promoted\": true, \"error\": \"\", \"dev_run\": \"\", \"latest_run\": \"\", \"before_baseline_dev\": 89.51, \"after_baseline_dev\": 89.81, \"best_score\": 89.81, \"no_improve_count\": 0, \"dominant_failure\": \"F03\", \"countermeasures_injected\": [\"F03\", \"F04\"], \"same_failure_count\": 0, \"avoid_failures_next\": [], \"round_estimated_api_calls\": 0, \"estimated_api_calls_total\": 0, \"estimated_cost_total\": 0.0, \"elapsed_seconds\": 0.5}\n{\"event\": \"round_complete\", \"round\": 14, \"timestamp\": \"2026-07-30 10:45:20\", \"success\": true, \"promoted\": true, \"error\": \"\", \"dev_run\": \"\", \"latest_run\": \"\", \"before_baseline_dev\": 89.81, \"after_baseline_dev\": 89.91, \"best_score\": 89.91, \"no_improve_count\": 0, \"dominant_failure\": \"F03\", \"countermeasures_injected\": [\"F03\"], \"same_failure_count\": 0, \"avoid_failures_next\": [], \"round_estimated_api_calls\": 0, \"estimated_api_calls_total\": 0, \"estimated_cost_total\": 0.0, \"elapsed_seconds\": 0.5}\n{\"event\": \"round_complete\", \"round\": 15, \"timestamp\": \"2026-07-30 10:45:20\", \"success\": true, \"promoted\": true, \"error\": \"\", \"dev_run\": \"\", \"latest_run\": \"\", \"before_baseline_dev\": 89.91, \"after_baseline_dev\": 90.11, \"best_score\": 90.11, \"no_improve_count\": 0, \"dominant_failure\": \"F04\", \"countermeasures_injected\": [\"F04\"], \"same_failure_count\": 0, \"avoid_failures_next\": [], \"round_estimated_api_calls\": 0, \"estimated_api_calls_total\": 0, \"estimated_cost_total\": 0.0, \"elapsed_seconds\": 0.5}\n{\"event\": \"round_complete\", \"round\": 16, \"timestamp\": \"2026-07-30 10:45:20\", \"success\": true, \"promoted\": true, \"error\": \"\", \"dev_run\": \"\", \"latest_run\": \"\", \"before_baseline_dev\": 90.11, \"after_baseline_dev\": 90.41, \"best_score\": 90.41, \"no_improve_count\": 0, \"dominant_failure\": \"F03\", \"countermeasures_injected\": [\"F03\", \"F04\"], \"same_failure_count\": 0, \"avoid_failures_next\": [], \"round_estimated_api_calls\": 0, \"estimated_api_calls_total\": 0, \"estimated_cost_total\": 0.0, \"elapsed_seconds\": 0.5}\n"
+    }
+  ]
+}
