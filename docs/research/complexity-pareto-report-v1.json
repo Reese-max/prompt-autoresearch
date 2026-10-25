@@ -1,0 +1,535 @@
+{
+  "active": false,
+  "decision": "NARROW",
+  "evidence_kind": "OFFLINE_SYNTHETIC_AND_FROZEN_HISTORY",
+  "historical": {
+    "bound_promotion_log_rows": 1,
+    "characters_delta": -4,
+    "decision": "NO_VERIFIED_COMPACTION_OPPORTUNITY",
+    "documented_10_percent_token_policy": "UNKNOWN: no matching tokenizer observation",
+    "existing_gatekeeper_700_character_cap": "both historical texts below cap; not evidence of all quality gates",
+    "historical_dev_machine_summary_only": {
+      "average_score": 89.20833333333333,
+      "cache_hit_count": 0,
+      "elapsed_seconds": 947.4423668384552,
+      "error_count": 0,
+      "risk_perfect_rate": 95.83333333333334,
+      "total_questions": 48,
+      "word_count_pass_rate": 0.0
+    },
+    "holdout_evidence": "NOT_READ",
+    "manifest_version": 1,
+    "normalization": "UTF-8 decoded text; universal newlines to LF; counts refer to that prompt input",
+    "provider_cost_latency_cohort": "UNKNOWN: wall time is not a matched latency distribution or billing",
+    "quality_equivalence": "UNKNOWN: no matched repeated DEV pair/stability evidence",
+    "sequence": [
+      {
+        "cache_eligibility_fingerprint": null,
+        "characters": 442,
+        "cohort": {
+          "dataset_sha256": "UNKNOWN",
+          "dataset_split": "dev",
+          "evaluator_sha256": "UNKNOWN",
+          "judge_sha256": "UNKNOWN",
+          "model_version": "UNKNOWN",
+          "price_basis": "UNKNOWN",
+          "provider": "UNKNOWN",
+          "scorer_sha256": "UNKNOWN",
+          "tokenizer": "UNKNOWN"
+        },
+        "evidence_kind": "HISTORICAL",
+        "heading_count": 0,
+        "metrics": {
+          "avg_eval_input_tokens": {
+            "provenance": "not observed",
+            "status": "UNKNOWN",
+            "value": null
+          },
+          "avg_eval_output_tokens": {
+            "provenance": "not observed",
+            "status": "UNKNOWN",
+            "value": null
+          },
+          "avg_eval_tool_call_tokens": {
+            "provenance": "not observed",
+            "status": "UNKNOWN",
+            "value": null
+          },
+          "cost_usd_per_successful_task": {
+            "provenance": "not observed",
+            "status": "UNKNOWN",
+            "value": null
+          },
+          "input_tokens": {
+            "provenance": "not observed",
+            "status": "UNKNOWN",
+            "value": null
+          },
+          "latency_p50_ms": {
+            "provenance": "not observed",
+            "status": "UNKNOWN",
+            "value": null
+          },
+          "latency_p95_ms": {
+            "provenance": "not observed",
+            "status": "UNKNOWN",
+            "value": null
+          }
+        },
+        "nonempty_lines": 8,
+        "prompt_sha256": "00db51fc1a418ef904ad4398b1d1eb04ac7eb3f57344ac325da28df227dfe74d",
+        "prompt_version": "archived_predecessor",
+        "schema_version": 1,
+        "semantic_rule_count": {
+          "provenance": "not observed",
+          "status": "UNKNOWN",
+          "value": null
+        },
+        "utf8_bytes": 1270
+      },
+      {
+        "cache_eligibility_fingerprint": null,
+        "characters": 438,
+        "cohort": {
+          "dataset_sha256": "UNKNOWN",
+          "dataset_split": "dev",
+          "evaluator_sha256": "UNKNOWN",
+          "judge_sha256": "UNKNOWN",
+          "model_version": "UNKNOWN",
+          "price_basis": "UNKNOWN",
+          "provider": "UNKNOWN",
+          "scorer_sha256": "UNKNOWN",
+          "tokenizer": "UNKNOWN"
+        },
+        "evidence_kind": "HISTORICAL",
+        "heading_count": 0,
+        "metrics": {
+          "avg_eval_input_tokens": {
+            "provenance": "not observed",
+            "status": "UNKNOWN",
+            "value": null
+          },
+          "avg_eval_output_tokens": {
+            "provenance": "not observed",
+            "status": "UNKNOWN",
+            "value": null
+          },
+          "avg_eval_tool_call_tokens": {
+            "provenance": "not observed",
+            "status": "UNKNOWN",
+            "value": null
+          },
+          "cost_usd_per_successful_task": {
+            "provenance": "not observed",
+            "status": "UNKNOWN",
+            "value": null
+          },
+          "input_tokens": {
+            "provenance": "not observed",
+            "status": "UNKNOWN",
+            "value": null
+          },
+          "latency_p50_ms": {
+            "provenance": "not observed",
+            "status": "UNKNOWN",
+            "value": null
+          },
+          "latency_p95_ms": {
+            "provenance": "not observed",
+            "status": "UNKNOWN",
+            "value": null
+          }
+        },
+        "nonempty_lines": 8,
+        "prompt_sha256": "004e4d46a58fd02d7a4c112948fe7749720bb3c529c2083ec203ae1f364bd08f",
+        "prompt_version": "current_baseline",
+        "schema_version": 1,
+        "semantic_rule_count": {
+          "provenance": "not observed",
+          "status": "UNKNOWN",
+          "value": null
+        },
+        "utf8_bytes": 1282
+      }
+    ],
+    "source_manifest": {
+      "artifacts": [
+        {
+          "content_sha256_lf_utf8": "00db51fc1a418ef904ad4398b1d1eb04ac7eb3f57344ac325da28df227dfe74d",
+          "git_blob": "7ec6c443add25a2d10c57c6bb29b0cd408b7d98f",
+          "path": "prompts/archive/baseline_20260602_184534_scoreold.md",
+          "projection": "FULL_LF_UTF8",
+          "role": "archived_predecessor",
+          "source_sha256_lf_utf8": "00db51fc1a418ef904ad4398b1d1eb04ac7eb3f57344ac325da28df227dfe74d"
+        },
+        {
+          "content_sha256_lf_utf8": "004e4d46a58fd02d7a4c112948fe7749720bb3c529c2083ec203ae1f364bd08f",
+          "git_blob": "4db91ac8cb44c4f4fe8e49c3fcf0993b6ffeb02b",
+          "path": "prompts/baseline.md",
+          "projection": "FULL_LF_UTF8",
+          "role": "current_baseline",
+          "source_sha256_lf_utf8": "004e4d46a58fd02d7a4c112948fe7749720bb3c529c2083ec203ae1f364bd08f"
+        },
+        {
+          "content_sha256_lf_utf8": "261f4fd9af60800d9d1b805207115ec338d1661cab555424e37fbbf6899dfaec",
+          "git_blob": "d804307ff7838110182fc5b428ca85bade1eb3b2",
+          "path": "prompts/baseline.meta.json",
+          "projection": "FULL_LF_UTF8",
+          "role": "baseline_metadata",
+          "source_sha256_lf_utf8": "261f4fd9af60800d9d1b805207115ec338d1661cab555424e37fbbf6899dfaec"
+        },
+        {
+          "content_sha256_lf_utf8": "939dfc7beef5ee14009f0950720d97a3b46955799b72017d293a6b55253ca3ac",
+          "git_blob": "985f619be615a799ff227c0f604b6a598a8fef51",
+          "path": "runs/20260602_184026/summary.json",
+          "projection": "FULL_LF_UTF8",
+          "role": "dev_summary",
+          "source_sha256_lf_utf8": "939dfc7beef5ee14009f0950720d97a3b46955799b72017d293a6b55253ca3ac"
+        },
+        {
+          "content_sha256_lf_utf8": "87e5d55f2c921a4cf50f80c94a2b28671d31e9a2842662ab42dca896b1c4324d",
+          "git_blob": "5ef0e704b39079e8841ebee74519354c4cd79869",
+          "path": "evolution_log.jsonl",
+          "projection": "JSONL_ROWS_WHERE_PROMOTED_IS_TRUE",
+          "role": "evolution_log",
+          "source_sha256_lf_utf8": "a838918a5d8e35ad134964ac3f2e69aec050efc1f979a65bc28e27d6dbb6bc18"
+        }
+      ],
+      "base_commit": "fe806b285fce0deb5ff13f28acef3e4ed93ec413",
+      "provenance": "Frozen from existing tracked base Git objects. Full text for four artifacts; exact original JSONL lines with promoted:true for the log. Archive timestamp and one log row bind the current DEV run. Not a complete champion history or quality-equivalence certificate.",
+      "schema_version": 1
+    },
+    "unbound_promoted_rows_excluded": 6,
+    "utf8_bytes_delta": 12
+  },
+  "known_equivalent": {
+    "active": false,
+    "baseline_sha256": "f6ffcaa92a9da0da8328c38155adb59672b3e45e66d4e9f1ed5d7ed09e89d04e",
+    "candidate_sha256": "daff62723250245d8e5f3c591ce1091d1a4242ca35d109e374feab08bd9c0601",
+    "decision": "COMPACT_CANDIDATE",
+    "policy": {
+      "absolute_chars": 900,
+      "max_token_growth": 0.1
+    },
+    "promotion_allowed": false,
+    "reason": "chosen synthetic quality/safety equivalent or better, all comparable dimensions no worse",
+    "schema_version": 1
+  },
+  "limits": [
+    "No human quality labels or live/provider conformance",
+    "Toy token counts are not model/provider tokens",
+    "No champion writes, mutation feedback or holdout item reads",
+    "Only exact-duplicate/spacing compaction; arbitrary semantic rewrites unsupported"
+  ],
+  "promotion_allowed": false,
+  "quality_cost_tradeoff": {
+    "active": false,
+    "baseline_sha256": "f6ffcaa92a9da0da8328c38155adb59672b3e45e66d4e9f1ed5d7ed09e89d04e",
+    "candidate_sha256": "daff62723250245d8e5f3c591ce1091d1a4242ca35d109e374feab08bd9c0601",
+    "decision": "TRADEOFF_REVIEW",
+    "policy": {
+      "absolute_chars": 900,
+      "max_token_growth": 0.1
+    },
+    "promotion_allowed": false,
+    "reason": "quality or some dimensions improve while another worsens",
+    "schema_version": 1
+  },
+  "ratchet": [
+    {
+      "absolute_plus_relative_decision": {
+        "active": false,
+        "baseline_sha256": "e6f406f061372af5b16fe668fdbf22f0043cc79b36d30f7d1cd7eae024076794",
+        "candidate_sha256": "04c6bcafea18fef14452cf8ed1eb0aa41bb5be9638acdd3bb670c0a823f742cc",
+        "decision": "TRADEOFF_REVIEW",
+        "policy": {
+          "absolute_chars": 900,
+          "max_token_growth": 0.1
+        },
+        "promotion_allowed": false,
+        "reason": "quality or some dimensions improve while another worsens",
+        "schema_version": 1
+      },
+      "after_tokens": 109,
+      "before_tokens": 100,
+      "relative_only_reference_accepts": true
+    },
+    {
+      "absolute_plus_relative_decision": {
+        "active": false,
+        "baseline_sha256": "04c6bcafea18fef14452cf8ed1eb0aa41bb5be9638acdd3bb670c0a823f742cc",
+        "candidate_sha256": "aa51dc39e2154767126b78fecb7d9aabfd03314a68489cc68495813143494a23",
+        "decision": "TRADEOFF_REVIEW",
+        "policy": {
+          "absolute_chars": 900,
+          "max_token_growth": 0.1
+        },
+        "promotion_allowed": false,
+        "reason": "quality or some dimensions improve while another worsens",
+        "schema_version": 1
+      },
+      "after_tokens": 118,
+      "before_tokens": 109,
+      "relative_only_reference_accepts": true
+    },
+    {
+      "absolute_plus_relative_decision": {
+        "active": false,
+        "baseline_sha256": "aa51dc39e2154767126b78fecb7d9aabfd03314a68489cc68495813143494a23",
+        "candidate_sha256": "428092ddf9e4b4c32d4ad842fc5de7ad74430c6df527de5810feeadf9ece655a",
+        "decision": "TRADEOFF_REVIEW",
+        "policy": {
+          "absolute_chars": 900,
+          "max_token_growth": 0.1
+        },
+        "promotion_allowed": false,
+        "reason": "quality or some dimensions improve while another worsens",
+        "schema_version": 1
+      },
+      "after_tokens": 128,
+      "before_tokens": 118,
+      "relative_only_reference_accepts": true
+    },
+    {
+      "absolute_plus_relative_decision": {
+        "active": false,
+        "baseline_sha256": "428092ddf9e4b4c32d4ad842fc5de7ad74430c6df527de5810feeadf9ece655a",
+        "candidate_sha256": "1fd450fc58d13172183a60478946c998bcd0bb2350e8208be5de9fd0a0e4f706",
+        "decision": "TRADEOFF_REVIEW",
+        "policy": {
+          "absolute_chars": 900,
+          "max_token_growth": 0.1
+        },
+        "promotion_allowed": false,
+        "reason": "quality or some dimensions improve while another worsens",
+        "schema_version": 1
+      },
+      "after_tokens": 139,
+      "before_tokens": 128,
+      "relative_only_reference_accepts": true
+    },
+    {
+      "absolute_plus_relative_decision": {
+        "active": false,
+        "baseline_sha256": "1fd450fc58d13172183a60478946c998bcd0bb2350e8208be5de9fd0a0e4f706",
+        "candidate_sha256": "5a8a6b2c76627844668b38d6804182af48731e32d756230ca93a95421152800f",
+        "decision": "TRADEOFF_REVIEW",
+        "policy": {
+          "absolute_chars": 900,
+          "max_token_growth": 0.1
+        },
+        "promotion_allowed": false,
+        "reason": "quality or some dimensions improve while another worsens",
+        "schema_version": 1
+      },
+      "after_tokens": 151,
+      "before_tokens": 139,
+      "relative_only_reference_accepts": true
+    },
+    {
+      "absolute_plus_relative_decision": {
+        "active": false,
+        "baseline_sha256": "5a8a6b2c76627844668b38d6804182af48731e32d756230ca93a95421152800f",
+        "candidate_sha256": "36b6194a511e9b415ee6c862b2a3e0ee6fcf9700efcc7cbb5cb97096e9c55e32",
+        "decision": "TRADEOFF_REVIEW",
+        "policy": {
+          "absolute_chars": 900,
+          "max_token_growth": 0.1
+        },
+        "promotion_allowed": false,
+        "reason": "quality or some dimensions improve while another worsens",
+        "schema_version": 1
+      },
+      "after_tokens": 164,
+      "before_tokens": 151,
+      "relative_only_reference_accepts": true
+    },
+    {
+      "absolute_plus_relative_decision": {
+        "active": false,
+        "baseline_sha256": "36b6194a511e9b415ee6c862b2a3e0ee6fcf9700efcc7cbb5cb97096e9c55e32",
+        "candidate_sha256": "b5050b8f2cc4375cc4d451bc906cc66ea1b9ed6bc521d5d2d2e4c03d5c521b5e",
+        "decision": "TRADEOFF_REVIEW",
+        "policy": {
+          "absolute_chars": 900,
+          "max_token_growth": 0.1
+        },
+        "promotion_allowed": false,
+        "reason": "quality or some dimensions improve while another worsens",
+        "schema_version": 1
+      },
+      "after_tokens": 178,
+      "before_tokens": 164,
+      "relative_only_reference_accepts": true
+    },
+    {
+      "absolute_plus_relative_decision": {
+        "active": false,
+        "baseline_sha256": "b5050b8f2cc4375cc4d451bc906cc66ea1b9ed6bc521d5d2d2e4c03d5c521b5e",
+        "candidate_sha256": "9f746dfd77e52f77c4c9f00fbec2fad901939875b65b34d6b9c4fa17f075785e",
+        "decision": "REJECT",
+        "policy": {
+          "absolute_chars": 900,
+          "max_token_growth": 0.1
+        },
+        "promotion_allowed": false,
+        "reason": "illustrative absolute text budget exceeded",
+        "schema_version": 1
+      },
+      "after_tokens": 194,
+      "before_tokens": 178,
+      "relative_only_reference_accepts": true
+    },
+    {
+      "absolute_plus_relative_decision": {
+        "active": false,
+        "baseline_sha256": "9f746dfd77e52f77c4c9f00fbec2fad901939875b65b34d6b9c4fa17f075785e",
+        "candidate_sha256": "b3ac3cc9caad4dc9da96717fdb7d2e6a84709c3263a564b95d97695b93711b7a",
+        "decision": "REJECT",
+        "policy": {
+          "absolute_chars": 900,
+          "max_token_growth": 0.1
+        },
+        "promotion_allowed": false,
+        "reason": "illustrative absolute text budget exceeded",
+        "schema_version": 1
+      },
+      "after_tokens": 211,
+      "before_tokens": 194,
+      "relative_only_reference_accepts": true
+    },
+    {
+      "absolute_plus_relative_decision": {
+        "active": false,
+        "baseline_sha256": "b3ac3cc9caad4dc9da96717fdb7d2e6a84709c3263a564b95d97695b93711b7a",
+        "candidate_sha256": "8b7f271b4198205352dd94aca49ec671a717756df7d6486ec2347a52af398db3",
+        "decision": "REJECT",
+        "policy": {
+          "absolute_chars": 900,
+          "max_token_growth": 0.1
+        },
+        "promotion_allowed": false,
+        "reason": "illustrative absolute text budget exceeded",
+        "schema_version": 1
+      },
+      "after_tokens": 229,
+      "before_tokens": 211,
+      "relative_only_reference_accepts": true
+    },
+    {
+      "absolute_plus_relative_decision": {
+        "active": false,
+        "baseline_sha256": "8b7f271b4198205352dd94aca49ec671a717756df7d6486ec2347a52af398db3",
+        "candidate_sha256": "3d2aed4a08361cf913f51f6adf6462929a44f4c315e17402b4067cd2e2f22d24",
+        "decision": "REJECT",
+        "policy": {
+          "absolute_chars": 900,
+          "max_token_growth": 0.1
+        },
+        "promotion_allowed": false,
+        "reason": "illustrative absolute text budget exceeded",
+        "schema_version": 1
+      },
+      "after_tokens": 249,
+      "before_tokens": 229,
+      "relative_only_reference_accepts": true
+    },
+    {
+      "absolute_plus_relative_decision": {
+        "active": false,
+        "baseline_sha256": "3d2aed4a08361cf913f51f6adf6462929a44f4c315e17402b4067cd2e2f22d24",
+        "candidate_sha256": "cc89bf4c78be8eeba318e17a6529037027658f3889b0ae154716e5e9820948ac",
+        "decision": "REJECT",
+        "policy": {
+          "absolute_chars": 900,
+          "max_token_growth": 0.1
+        },
+        "promotion_allowed": false,
+        "reason": "illustrative absolute text budget exceeded",
+        "schema_version": 1
+      },
+      "after_tokens": 271,
+      "before_tokens": 249,
+      "relative_only_reference_accepts": true
+    }
+  ],
+  "remaining_gates": [
+    "#3 real repeated DEV stability/equivalence adapter",
+    "#4 complete required CI/evidence",
+    "Gatekeeper/Smoke/Dev/bounded final Holdout for each real candidate",
+    "authorized measured provider cost/latency canary"
+  ],
+  "safety_regression": {
+    "active": false,
+    "baseline_sha256": "f6ffcaa92a9da0da8328c38155adb59672b3e45e66d4e9f1ed5d7ed09e89d04e",
+    "candidate_sha256": "daff62723250245d8e5f3c591ce1091d1a4242ca35d109e374feab08bd9c0601",
+    "decision": "REJECT",
+    "policy": {
+      "absolute_chars": 900,
+      "max_token_growth": 0.1
+    },
+    "promotion_allowed": false,
+    "reason": "quality, safety, type or existing hard gate regressed",
+    "schema_version": 1
+  },
+  "schema_version": 1,
+  "source_sha256_lf_utf8": "c466dc76eab8816ddf95320f3dd2556d8f53e7f64582f464e2579d7315ae7e9f",
+  "synthetic_duplicate_compaction_patch": {
+    "active": false,
+    "baseline_sha256": "f583d08af094d4c084384128136d0261cd1142c4ad9b991e882c7593eec03a1c",
+    "candidate_sha256": "5dc5a73400f805b939064230dfb7ac32fc586c0ae41a9f7d115188193e41b5f6",
+    "candidate_text": "你是一位專精臺灣國家考試（高考、特考）申論題寫作與閱卷的專家。收到題目後，產出高分答案，嚴守以下架構：\n\n一、前言破題：點出核心概念與爭點，簡要定義，鎖定答題方向。\n二、主體：使用層級標題（如一、(一)、1.）呈現，每個標題對應一個明確的採分點，內容須完整展開，援引精確法條、學說或實務見解，杜絕捏造。\n三、結論回扣：綜合前文，重申爭點並呼應題目。\n\n特別強化以下兩種題型：\n\n【比較題型之比較基準】在比較前，先確立比較基準，如主體、構成要件、效力範圍、適用程序等；依基準逐項比對相似點與差異，可使用結構化表格或分段敘述，最後以條理清晰的結論凸顯深度與邏輯性。\n\n【法律案例題之三段論法與法源涵攝】採三段論法：①抽出法律規範（大前提），標明具體法條、授權命令或司法實務，並說明要件及解釋；②將題目事實對應要件（小前提），逐項比對；③得出法律效果（結論）。全程引用具體法源，確保推論嚴謹、層次分明。\n\n全程以專業法理與技術名詞構句，標題即答案，不得摻雜說明或提問，直接輸出正文。\n\n以清楚標題整理答案。",
+    "diff": "--- baseline\n+++ candidate\n@@ -12,6 +12,4 @@\n \n 全程以專業法理與技術名詞構句，標題即答案，不得摻雜說明或提問，直接輸出正文。\n \n-以清楚標題整理答案。\n-\n 以清楚標題整理答案。",
+    "operations": [
+      {
+        "ids": [
+          "duplicate-a",
+          "duplicate-b"
+        ],
+        "kind": "MERGE"
+      }
+    ],
+    "promotion_allowed": false,
+    "protected": {
+      "protected-current-core": "004e4d46a58fd02d7a4c112948fe7749720bb3c529c2083ec203ae1f364bd08f"
+    },
+    "remaining_sections": [
+      "protected-current-core",
+      "duplicate-a"
+    ],
+    "required_gates": [
+      "Gatekeeper",
+      "Smoke",
+      "Dev",
+      "Holdout"
+    ],
+    "schema_version": 1,
+    "semantic_review_required": true
+  },
+  "tokenizer_drift": {
+    "active": false,
+    "baseline_sha256": "f6ffcaa92a9da0da8328c38155adb59672b3e45e66d4e9f1ed5d7ed09e89d04e",
+    "candidate_sha256": "daff62723250245d8e5f3c591ce1091d1a4242ca35d109e374feab08bd9c0601",
+    "decision": "BLOCKED_EVIDENCE_DRIFT",
+    "policy": {
+      "absolute_chars": 900,
+      "max_token_growth": 0.1
+    },
+    "promotion_allowed": false,
+    "reason": "prompt/cohort/cache identity differs",
+    "schema_version": 1
+  },
+  "unknown_operational_cost": {
+    "active": false,
+    "baseline_sha256": "f6ffcaa92a9da0da8328c38155adb59672b3e45e66d4e9f1ed5d7ed09e89d04e",
+    "candidate_sha256": "daff62723250245d8e5f3c591ce1091d1a4242ca35d109e374feab08bd9c0601",
+    "decision": "INCONCLUSIVE",
+    "policy": {
+      "absolute_chars": 900,
+      "max_token_growth": 0.1
+    },
+    "promotion_allowed": false,
+    "reason": "incomparable or unknown cost_usd_per_successful_task",
+    "schema_version": 1
+  }
+}

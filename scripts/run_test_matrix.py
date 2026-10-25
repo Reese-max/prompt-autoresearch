@@ -113,6 +113,12 @@ def _preflight_exit_code(result):
 
 
 def _run_command(command, **kwargs):
+    # Only this physical runner appends to its receipt. Child pytest processes
+    # exercise mocked OS/version reporters and must not inherit that output path.
+    # Copy explicit environments too; an empty mapping must remain empty.
+    child_env = os.environ if kwargs.get("env") is None else kwargs["env"]
+    kwargs["env"] = {key: value for key, value in child_env.items()
+                     if key.upper() not in ("CI_MATRIX_REPORT_PATH", b"CI_MATRIX_REPORT_PATH")}
     try:
         return subprocess.run(command, **kwargs)
     except OSError as exc:
