@@ -4,8 +4,10 @@
 evidence contract. It does not replace production selection, change a champion,
 run a model, establish human quality labels, or authorize a release. Every result
 has `active: false` and `promotion_allowed: false`, including
-`COMPACT_CANDIDATE`. Issues #3 and #4 and the existing complete candidate gates
-remain prerequisites for production integration.
+`COMPACT_CANDIDATE`. The original #3 research and #4 best-version repair are
+closed and merged. This prototype preserves those existing contracts. A new
+integration still needs its own exact-head required CI evidence and the unchanged
+complete candidate gates.
 
 ## What current source actually says
 
@@ -33,6 +35,28 @@ launcher. It reads its source and one versioned frozen historical fixture.
 The committed `complexity-pareto-report-v1.json` is reproducible with
 `python -m research.complexity_pareto`; JSON contains no timestamps or random
 sampling. The tests prohibit sockets and check deterministic, read-only replay.
+
+## Combined candidate provenance
+
+The mathematical module, its tests, frozen five-artifact history fixture and
+golden JSON report remain byte-identical to research candidate
+`4bc38ffc58a7cd9397d1c061fb3ddcdca3d114da`. The combined candidate also repairs
+child report-path inheritance in `scripts/run_test_matrix.py`, with dedicated
+isolation tests and [report-ownership documentation](../matrix-report-child-isolation.md).
+Of the 2,417 files already tracked on the original master base, 2,416 keep their
+original blobs; the matrix runner is the sole exception. Optimizer/prompt
+selection, fixed evaluation data, provider code and historical artifacts are
+unchanged. This is a scoped preservation claim, not a claim that every original
+file is unchanged.
+
+The report's source hash identifies the mathematical module only; it does not
+attest the combined tree or its CI execution. New execution evidence must bind
+the exact combined head/tree and commands separately. The report's references to
+#3/#4 in `remaining_gates` describe future integration evidence for those merged
+contracts, not unresolved or reopened issues. A standalone native runner must
+retain its actual M1–M6 and ALL records without mocked child rows. Local Linux
+evidence does not establish the other eight native CI cells, their hosted
+required aggregate, model stability, or provider cost/latency.
 
 ## Versioned evidence, without converting unknown into zero
 
@@ -89,12 +113,14 @@ removing the real prompt's anti-fabrication clause or expert role makes the
 shorter candidate fail its existing hard rules and remain rejected.
 
 The quality interface binds both prompt hashes and the full DEV cohort. It
-accepts no item-level or holdout outcomes. A future #3 adapter must consume
-repeated/stability evidence and its uncertainty, rather than treating a single
+accepts no item-level or holdout outcomes. An adapter for the merged #3 research
+receipt would still need to consume repeated/stability evidence and its
+uncertainty, rather than treating a single
 score or this harness's chosen labels as stable equivalence. That adapter is not
 implemented here; there is no new noise estimator. Every real candidate still
 needs Gatekeeper, Smoke, DEV and a bounded final Holdout, without feeding Holdout
-item outcomes into mutation. Required CI evidence from #4 stays mandatory.
+item outcomes into mutation. Fresh exact-head evidence for the CI contract
+restored in merged #4 stays mandatory.
 
 ## Conservative compaction lane
 
@@ -152,8 +178,9 @@ There is no verified stability/equivalence pair, so the historical conclusion is
 
 Keep the existing rules and the documented 10% guard. The synthetic counterexample
 supports researching an explicit long-term budget and Pareto review, but does
-not calibrate a replacement threshold. Before FEATURE adoption: complete #3's
-real repeated DEV evidence adapter and #4's required CI contract; obtain an
+not calibrate a replacement threshold. Before FEATURE adoption: integrate the
+merged #3 receipt only with real repeated DEV evidence and obtain fresh exact-head
+passing CI for the existing contract restored by #4; obtain an
 explicitly authorized bounded provider canary with matching cohorts and measured
 cost/latency; and run each genuine compaction through the unchanged complete
 gates. This offline prerequisite grants no provider or release authority.
