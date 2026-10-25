@@ -1,6 +1,7 @@
 """Finite synthetic truth and immutable historical replay; never provider calls."""
 
 import json
+import os
 import socket
 import subprocess
 import sys
@@ -324,3 +325,20 @@ def test_cli_outputs_only_inactive_research_receipt():
     assert payload["tokenizer_drift"]["decision"] == "BLOCKED_EVIDENCE_DRIFT"
     assert payload["unknown_operational_cost"]["decision"] == "INCONCLUSIVE"
     assert payload == json.loads((ROOT / "docs/research/complexity-pareto-report-v1.json").read_text(encoding="utf-8"))
+
+
+@pytest.mark.parametrize("inherited_encoding", ["cp1252", "gbk", "ascii", "utf-8"])
+def test_cli_emits_lossless_utf8_json_with_legacy_stdout_encoding(inherited_encoding):
+    child_env = {**os.environ, "PYTHONIOENCODING": inherited_encoding}
+    result = subprocess.run(
+        [sys.executable, "-m", "research.complexity_pareto"], cwd=ROOT,
+        env=child_env, capture_output=True, timeout=10,
+    )
+    assert result.returncode == 0, result.stderr.decode("utf-8", errors="replace")
+    text = result.stdout.decode("utf-8")
+    expected = (ROOT / "docs/research/complexity-pareto-report-v1.json").read_text(encoding="utf-8")
+    assert result.stdout == expected.encode("utf-8")
+    payload = json.loads(text)
+    assert "杜絕捏造" in payload["synthetic_duplicate_compaction_patch"]["candidate_text"]
+    assert "\ufffd" not in text
+    assert payload["active"] is False and payload["promotion_allowed"] is False

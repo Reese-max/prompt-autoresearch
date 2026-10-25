@@ -473,7 +473,7 @@
     "schema_version": 1
   },
   "schema_version": 1,
-  "source_sha256_lf_utf8": "26990748fd4054d34a5f16ad2e8c7d4226362f68d4394b1787039357347e52da",
+  "source_sha256_lf_utf8": "c466dc76eab8816ddf95320f3dd2556d8f53e7f64582f464e2579d7315ae7e9f",
   "synthetic_duplicate_compaction_patch": {
     "active": false,
     "baseline_sha256": "f583d08af094d4c084384128136d0261cd1142c4ad9b991e882c7593eec03a1c",

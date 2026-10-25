@@ -38,9 +38,12 @@ sampling. The tests prohibit sockets and check deterministic, read-only replay.
 
 ## Combined candidate provenance
 
-The mathematical module, its tests, frozen five-artifact history fixture and
-golden JSON report remain byte-identical to research candidate
-`4bc38ffc58a7cd9397d1c061fb3ddcdca3d114da`. The combined candidate also repairs
+The mathematical logic and frozen five-artifact history fixture are preserved
+from research candidate `4bc38ffc58a7cd9397d1c061fb3ddcdca3d114da`. The CLI now
+explicitly emits strict UTF-8 JSON with LF newlines, including when its inherited
+pipe encoding is cp1252, GBK or ASCII. Actual child-process regressions retain all
+Unicode without replacement. The golden JSON changes only its module-source
+hash; every other field and historical input hash is unchanged. The candidate also repairs
 child report-path inheritance in `scripts/run_test_matrix.py`, with dedicated
 isolation tests and [report-ownership documentation](../matrix-report-child-isolation.md).
 Of the 2,417 files already tracked on the original master base, 2,416 keep their

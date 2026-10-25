@@ -12,6 +12,7 @@ import hashlib
 import json
 import math
 import re
+import sys
 from pathlib import Path
 
 
@@ -387,6 +388,9 @@ def experiment(root: Path) -> dict:
 
 
 def main(argv=None):
+    # Machine JSON must keep its Unicode and LF encoding through legacy pipes.
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8", errors="strict", newline="\n")
     parser = argparse.ArgumentParser(description=__doc__)
     parser.parse_args(argv)
     print(json.dumps(experiment(Path(__file__).resolve().parents[1]), ensure_ascii=False, indent=2, sort_keys=True))
